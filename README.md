@@ -23,6 +23,9 @@ e registrar os dados; o sistema cuida do resto.
 | Todo dia às 8h (pg_cron) | O banco **escreve as mensagens do dia** (aniversários, reativação de leads parados) na Central de Mensagens — envio com 1 clique |
 | Planilha importada | Dados históricos entram **sem** disparar tarefas/formulários (flag `importado`), mas com comissão calculada e funil correto |
 | A qualquer momento | O sistema **pontua cada lead** (score de prioridade: etapa + urgência + valor potencial + reunião marcada) e sugere a **Próxima Melhor Ação** — o "Foco de Hoje" do dashboard e a faixa no perfil do cliente |
+| Reunião marcada para amanhã | Entra na Central de Mensagens um **lembrete de confirmação** pronto |
+| Proposta apresentada | Cria sozinho a tarefa de **follow-up em 3 dias** |
+| Cliente com apólice ativa sem contato há X dias | Aparece em **"Clientes que precisam de atenção"** no pós-venda (retenção) |
 
 ## 🧩 Módulos
 
@@ -76,6 +79,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 3. [`supabase/migrations/003_metas_mensagens_relatorios.sql`](supabase/migrations/003_metas_mensagens_relatorios.sql)
 4. [`supabase/migrations/004_codigos_e_inteligencia.sql`](supabase/migrations/004_codigos_e_inteligencia.sql)
 5. [`supabase/migrations/005_documentos.sql`](supabase/migrations/005_documentos.sql)
+6. [`supabase/migrations/006_crm_interacoes_carteira.sql`](supabase/migrations/006_crm_interacoes_carteira.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -145,6 +149,10 @@ npm run dev
 - [x] Busca global no topo (clientes e assessores por nome/código/telefone; atalho "/")
 - [x] Documentos e anexos por cliente (Storage do Supabase)
 - [x] Pronto para deploy na Vercel (`vercel.json` + guia em DEPLOY.md)
+- [x] Registro de interações + "último contato" por cliente (CRM)
+- [x] Mensagens automáticas editáveis + lembrete de reunião + follow-up de proposta
+- [x] Pós-venda robusto: receita recorrente, carteira por seguradora, retenção
+- [x] Backup/exportação de clientes e apólices em CSV
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
 - [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)

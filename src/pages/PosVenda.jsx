@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Cake, MessageCircle, ShieldCheck } from 'lucide-react'
+import { Cake, MessageCircle, ShieldCheck, Wallet, TrendingUp, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { brl, dataBR, whatsapp } from '../lib/format'
-import { PageHeader, Card, Badge, Spinner, EmptyState } from '../components/ui'
+import { brl, brlCompacto, dataBR, whatsapp } from '../lib/format'
+import { PageHeader, Card, Badge, Spinner, EmptyState, StatTile } from '../components/ui'
+import { CHART } from '../lib/constants'
 
 export default function PosVenda() {
   const [apolices, setApolices] = useState(null)
   const [regua, setRegua] = useState([])
+  const [carteira, setCarteira] = useState({})
+  const [porSeg, setPorSeg] = useState([])
+  const [semContato, setSemContato] = useState([])
 
   useEffect(() => {
     Promise.all([
@@ -16,18 +20,94 @@ export default function PosVenda() {
         .eq('status', 'ativa')
         .order('data_vigencia', { ascending: false }),
       supabase.from('vw_regua_relacionamento').select('*').lte('dias_restantes', 45),
-    ]).then(([a, r]) => {
+      supabase.from('vw_carteira').select('*').single(),
+      supabase.from('vw_carteira_seguradora').select('*'),
+      supabase.from('vw_clientes_sem_contato').select('*').limit(10),
+    ]).then(([a, r, c, s, sc]) => {
       setApolices(a.data ?? [])
       setRegua(r.data ?? [])
+      setCarteira(c.data ?? {})
+      setPorSeg(s.data ?? [])
+      setSemContato(sc.data ?? [])
     })
   }, [])
 
   if (!apolices) return <Spinner />
 
+  const maxSeg = Math.max(...porSeg.map((s) => Number(s.premio_mensal)), 1)
+
   return (
     <div>
       <PageHeader titulo="Pós-Venda"
         subtitulo="Carteira ativa e régua de relacionamento — os alertas aparecem sozinhos" />
+
+      {/* Saúde da carteira */}
+      <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <StatTile rotulo="Receita mensal recorrente" valor={brl(carteira.receita_mensal_recorrente ?? 0)}
+          detalhe={`${carteira.apolices_ativas ?? 0} apólices ativas`} icone={Wallet} corIcone="text-emerald-600 bg-emerald-50" />
+        <StatTile rotulo="Receita anualizada" valor={brlCompacto(carteira.receita_anualizada ?? 0)}
+          icone={TrendingUp} corIcone="text-blue-600 bg-blue-50" />
+        <StatTile rotulo="Capital total protegido" valor={brlCompacto(carteira.capital_total ?? 0)}
+          icone={ShieldCheck} corIcone="text-violet-600 bg-violet-50" />
+        <StatTile rotulo="Ticket médio" valor={brl(carteira.ticket_medio ?? 0)}
+          detalhe="prêmio mensal por apólice" icone={TrendingUp} corIcone="text-amber-600 bg-amber-50" />
+      </div>
+
+      {/* Distribuição por seguradora + clientes esquecidos */}
+      <div className="mb-6 grid gap-6 xl:grid-cols-2">
+        <Card className="p-5">
+          <h2 className="mb-4 font-semibold text-slate-900">Carteira por seguradora</h2>
+          {porSeg.length === 0
+            ? <p className="text-sm text-slate-400">Sem apólices ativas ainda.</p>
+            : (
+              <div className="space-y-2">
+                {porSeg.map((s) => (
+                  <div key={s.nome} className="flex items-center gap-3">
+                    <span className="w-40 shrink-0 truncate text-right text-xs text-slate-500" title={s.nome}>{s.nome}</span>
+                    <div className="h-6 flex-1 rounded-r-md bg-slate-50">
+                      <div className="flex h-6 items-center justify-end rounded-r-md pr-2"
+                        style={{ width: `${Math.max((Number(s.premio_mensal) / maxSeg) * 100, 12)}%`, background: CHART.serie1 }}>
+                        <span className="text-xs font-semibold text-white">{brlCompacto(s.premio_mensal)}</span>
+                      </div>
+                    </div>
+                    <span className="w-10 shrink-0 text-xs text-slate-400">{s.apolices}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+        </Card>
+
+        <Card className="p-5">
+          <h2 className="mb-1 flex items-center gap-2 font-semibold text-slate-900">
+            <AlertCircle size={17} className="text-amber-500" /> Clientes que precisam de atenção
+          </h2>
+          <p className="mb-4 text-xs text-slate-400">Com apólice ativa e sem contato há muito tempo (retenção)</p>
+          {semContato.length === 0
+            ? <p className="text-sm text-slate-400">Nenhum cliente esquecido. 👏</p>
+            : (
+              <ul className="space-y-2">
+                {semContato.map((c) => (
+                  <li key={c.id} className="flex items-center gap-3 rounded-lg border border-slate-100 p-2.5">
+                    <div className="min-w-0 flex-1">
+                      <Link to={`/clientes/${c.id}`} className="block truncate text-sm font-medium text-slate-800 hover:underline">
+                        {c.nome}
+                      </Link>
+                      <p className="text-xs text-slate-400">
+                        {c.dias_sem_contato == null ? 'sem contato registrado' : `há ${c.dias_sem_contato} dias sem contato`}
+                      </p>
+                    </div>
+                    {whatsapp(c.telefone) && (
+                      <a href={whatsapp(c.telefone, `Olá ${c.nome.split(' ')[0]}! Tudo bem? Passando para saber como você está e se está tudo certo com sua proteção. Abraço, Natália.`)}
+                        target="_blank" rel="noreferrer" className="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50" title="WhatsApp">
+                        <MessageCircle size={16} />
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+        </Card>
+      </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
         {/* Régua de relacionamento */}

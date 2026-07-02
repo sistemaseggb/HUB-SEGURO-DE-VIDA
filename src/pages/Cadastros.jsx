@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react'
-import { Plus, Percent, Save } from 'lucide-react'
+import { Plus, Percent, Save, MessageSquareText } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
-  PageHeader, Card, Button, Input, Campo, Modal, Spinner, Badge,
+  PageHeader, Card, Button, Input, Textarea, Campo, Modal, Spinner, Badge,
 } from '../components/ui'
 
 export default function Cadastros() {
   return (
     <div>
       <PageHeader titulo="Cadastros"
-        subtitulo="Assessores, seguradoras e a regra de divisão de comissão" />
+        subtitulo="Assessores, seguradoras, comissão, metas e mensagens automáticas" />
       <div className="grid gap-6 xl:grid-cols-2">
-        <PainelAssessores />
+        <div className="space-y-6">
+          <PainelAssessores />
+          <PainelMensagens />
+        </div>
         <div className="space-y-6">
           <PainelSeguradoras />
           <PainelSplit />
@@ -193,6 +196,7 @@ function PainelSplit() {
       meta_premio_mensal: cfg.meta_premio_mensal || 0,
       meta_reunioes_mensal: cfg.meta_reunioes_mensal || 0,
       meta_apolices_mensal: cfg.meta_apolices_mensal || 0,
+      dias_sem_contato_alerta: cfg.dias_sem_contato_alerta || 90,
     }).eq('id', 1)
     setMsg(error ? `Erro: ${error.message}` : 'Salvo! Vale para as próximas vendas.')
   }
@@ -220,12 +224,15 @@ function PainelSplit() {
         {soma !== 100 && (
           <p className="text-sm text-amber-600">A soma precisa dar 100% (atual: {soma}%).</p>
         )}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <Campo label="Alerta amarelo (dias parado)">
             <Input type="number" min="1" value={cfg.dias_alerta_amarelo} onChange={set('dias_alerta_amarelo')} />
           </Campo>
           <Campo label="Alerta vermelho (dias parado)">
             <Input type="number" min="1" value={cfg.dias_alerta_vermelho} onChange={set('dias_alerta_vermelho')} />
+          </Campo>
+          <Campo label="Sem contato (dias)" dica="Alerta de retenção">
+            <Input type="number" min="1" value={cfg.dias_sem_contato_alerta ?? 90} onChange={set('dias_sem_contato_alerta')} />
           </Campo>
         </div>
         <div className="grid grid-cols-3 gap-3">
@@ -241,6 +248,57 @@ function PainelSplit() {
         </div>
         <div className="flex items-center gap-3">
           <Button type="submit" disabled={soma !== 100}><Save size={15} /> Salvar configurações</Button>
+          {msg && <span className="text-sm text-slate-500">{msg}</span>}
+        </div>
+      </form>
+    </Card>
+  )
+}
+
+function PainelMensagens() {
+  const [cfg, setCfg] = useState(null)
+  const [msg, setMsg] = useState(null)
+
+  useEffect(() => {
+    supabase.from('configuracoes')
+      .select('msg_aniversario, msg_aniversario_apolice, msg_lead_parado, msg_reuniao')
+      .single().then(({ data }) => setCfg(data))
+  }, [])
+
+  if (!cfg) return <Card className="p-5"><Spinner /></Card>
+  const set = (k) => (e) => setCfg({ ...cfg, [k]: e.target.value })
+
+  async function salvar(e) {
+    e.preventDefault()
+    setMsg(null)
+    const { error } = await supabase.from('configuracoes').update(cfg).eq('id', 1)
+    setMsg(error ? `Erro: ${error.message}` : 'Mensagens salvas!')
+  }
+
+  const CAMPOS = [
+    { k: 'msg_aniversario', label: 'Aniversário do cliente 🎂' },
+    { k: 'msg_aniversario_apolice', label: 'Aniversário da apólice 📄' },
+    { k: 'msg_lead_parado', label: 'Reativação de lead parado 🔥' },
+    { k: 'msg_reuniao', label: 'Confirmação de reunião 📅' },
+  ]
+
+  return (
+    <Card className="p-5">
+      <h2 className="mb-1 flex items-center gap-2 font-semibold text-slate-900">
+        <MessageSquareText size={17} className="text-blue-600" /> Mensagens automáticas
+      </h2>
+      <p className="mb-4 text-xs text-slate-400">
+        Textos que o sistema gera sozinho. Use <code className="rounded bg-slate-100 px-1">{'{nome}'}</code> para o
+        primeiro nome do cliente e <code className="rounded bg-slate-100 px-1">{'{quando}'}</code> (só na reunião) para a data/hora.
+      </p>
+      <form onSubmit={salvar} className="space-y-3">
+        {CAMPOS.map(({ k, label }) => (
+          <Campo key={k} label={label}>
+            <Textarea rows={2} value={cfg[k] ?? ''} onChange={set(k)} />
+          </Campo>
+        ))}
+        <div className="flex items-center gap-3">
+          <Button type="submit"><Save size={15} /> Salvar mensagens</Button>
           {msg && <span className="text-sm text-slate-500">{msg}</span>}
         </div>
       </form>

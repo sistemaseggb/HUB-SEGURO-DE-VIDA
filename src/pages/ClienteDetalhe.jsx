@@ -11,7 +11,7 @@ import {
   Button, Card, Input, Select, Textarea, Campo, Modal, Badge, Spinner,
 } from '../components/ui'
 
-const ABAS = ['Planejamento', 'Reuniões', 'Apólices', 'Documentos', 'Formulário', 'Tarefas', 'Histórico']
+const ABAS = ['Planejamento', 'Interações', 'Reuniões', 'Apólices', 'Documentos', 'Formulário', 'Tarefas', 'Histórico']
 
 export default function ClienteDetalhe() {
   const { id } = useParams()
@@ -19,14 +19,17 @@ export default function ClienteDetalhe() {
   const [aba, setAba] = useState('Planejamento')
 
   const [prioridade, setPrioridade] = useState(null)
+  const [contato, setContato] = useState(null)
 
   const carregar = useCallback(async () => {
-    const [c, pr] = await Promise.all([
+    const [c, pr, ct] = await Promise.all([
       supabase.from('clientes').select('*, assessores(nome, telefone)').eq('id', id).single(),
       supabase.from('vw_prioridades_classificadas').select('proxima_acao, temperatura, score').eq('id', id).maybeSingle(),
+      supabase.from('vw_clientes_contato').select('dias_sem_contato, ultimo_contato').eq('id', id).maybeSingle(),
     ])
     setCliente(c.data)
     setPrioridade(pr.data)
+    setContato(ct.data)
   }, [id])
 
   useEffect(() => { carregar() }, [carregar])
@@ -53,6 +56,11 @@ export default function ClienteDetalhe() {
             <p className="text-sm text-slate-500">
               Assessor: {cliente.assessores?.nome ?? '—'}
               {cliente.data_nascimento && ` · Nascimento: ${dataBR(cliente.data_nascimento)}`}
+              {contato && (
+                <> · Último contato: {contato.dias_sem_contato == null
+                  ? 'nunca registrado'
+                  : contato.dias_sem_contato === 0 ? 'hoje' : `há ${contato.dias_sem_contato} dia(s)`}</>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -107,6 +115,7 @@ export default function ClienteDetalhe() {
       </div>
 
       {aba === 'Planejamento' && <AbaPlanejamento idCliente={id} />}
+      {aba === 'Interações' && <AbaInteracoes idCliente={id} onMudanca={carregar} />}
       {aba === 'Reuniões' && <AbaReunioes idCliente={id} onMudanca={carregar} />}
       {aba === 'Apólices' && <AbaApolices idCliente={id} onMudanca={carregar} />}
       {aba === 'Documentos' && <AbaDocumentos idCliente={id} />}
@@ -243,6 +252,78 @@ function AbaPlanejamento({ idCliente }) {
           )}
         </div>
       </form>
+    </Card>
+  )
+}
+
+// ─── INTERAÇÕES: linha do tempo de contatos com o cliente ────────────────────
+const TIPO_INTERACAO = [
+  { id: 'ligacao', label: '📞 Ligação' },
+  { id: 'whatsapp', label: '💬 WhatsApp' },
+  { id: 'email', label: '✉️ E-mail' },
+  { id: 'reuniao', label: '🤝 Reunião/Encontro' },
+  { id: 'nota', label: '📝 Nota' },
+]
+
+function AbaInteracoes({ idCliente, onMudanca }) {
+  const [itens, setItens] = useState(null)
+  const [tipo, setTipo] = useState('ligacao')
+  const [descricao, setDescricao] = useState('')
+  const [salvando, setSalvando] = useState(false)
+
+  const carregar = useCallback(() =>
+    supabase.from('interacoes').select('*').eq('id_cliente', idCliente)
+      .order('data', { ascending: false })
+      .then(({ data }) => setItens(data ?? [])), [idCliente])
+
+  useEffect(() => { carregar() }, [carregar])
+
+  async function registrar(e) {
+    e.preventDefault()
+    if (!descricao.trim()) return
+    setSalvando(true)
+    await supabase.from('interacoes').insert({ id_cliente: idCliente, tipo, descricao: descricao.trim() })
+    setDescricao('')
+    setSalvando(false)
+    carregar()
+    onMudanca?.()
+  }
+
+  if (!itens) return <Spinner />
+  const label = (t) => TIPO_INTERACAO.find((x) => x.id === t)?.label ?? t
+
+  return (
+    <Card className="p-5">
+      <form onSubmit={registrar} className="mb-5 flex flex-wrap items-end gap-2">
+        <div className="w-40">
+          <Campo label="Tipo de contato">
+            <Select value={tipo} onChange={(e) => setTipo(e.target.value)}>
+              {TIPO_INTERACAO.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </Select>
+          </Campo>
+        </div>
+        <div className="min-w-0 flex-1">
+          <Campo label="O que aconteceu?">
+            <Input value={descricao} onChange={(e) => setDescricao(e.target.value)}
+              placeholder="Ex.: cliente pediu para retornar após o dia 15..." />
+          </Campo>
+        </div>
+        <Button type="submit" disabled={salvando}>Registrar</Button>
+      </form>
+
+      {itens.length === 0
+        ? <p className="py-4 text-center text-sm text-slate-400">Nenhum contato registrado ainda.</p>
+        : (
+          <ol className="relative ml-3 space-y-4 border-l-2 border-slate-100 pl-5">
+            {itens.map((i) => (
+              <li key={i.id} className="relative">
+                <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
+                <p className="text-sm text-slate-800">{label(i.tipo)} — {i.descricao}</p>
+                <p className="text-xs text-slate-400">{dataHoraBR(i.data)}</p>
+              </li>
+            ))}
+          </ol>
+        )}
     </Card>
   )
 }

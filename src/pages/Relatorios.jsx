@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, TrendingDown, Timer, Wallet } from 'lucide-react'
+import { Download, TrendingDown, Timer, Wallet, Database } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { brl, mesBR } from '../lib/format'
+import { brl, mesBR, dataBR } from '../lib/format'
 import { etapaLabel, CHART } from '../lib/constants'
 import { baixarCSV } from '../lib/csv'
 import { PageHeader, Card, Button, Spinner, Input, Campo } from '../components/ui'
@@ -40,6 +40,30 @@ export default function Relatorios() {
   const totalPagar = doMes.reduce((s, c) => s + Number(c.comissao_a_pagar), 0)
   const maxMotivo = Math.max(...motivos.map((m) => m.total), 1)
 
+  async function exportarClientes() {
+    const { data } = await supabase
+      .from('clientes')
+      .select('codigo, nome, telefone, email, data_nascimento, status_funil, perfil_necessidade, assessores(nome)')
+      .order('nome')
+    baixarCSV('clientes.csv',
+      ['Código', 'Nome', 'Telefone', 'Email', 'Nascimento', 'Etapa', 'Assessor', 'Perfil'],
+      (data ?? []).map((c) => [c.codigo, c.nome, c.telefone, c.email,
+        c.data_nascimento ? dataBR(c.data_nascimento) : '', etapaLabel(c.status_funil),
+        c.assessores?.nome ?? '', c.perfil_necessidade]))
+  }
+
+  async function exportarApolices() {
+    const { data } = await supabase
+      .from('apolices')
+      .select('numero_apolice, valor_premio_mensal, capital_segurado, comissao_gerada, data_vigencia, status, clientes(nome, codigo), seguradoras(nome)')
+      .order('data_vigencia', { ascending: false })
+    baixarCSV('apolices.csv',
+      ['Nº Apólice', 'Cliente', 'Cód. Cliente', 'Seguradora', 'Prêmio mensal', 'Capital', 'Comissão', 'Vigência', 'Status'],
+      (data ?? []).map((a) => [a.numero_apolice, a.clientes?.nome ?? '', a.clientes?.codigo ?? '',
+        a.seguradoras?.nome ?? '', a.valor_premio_mensal, a.capital_segurado, a.comissao_gerada,
+        a.data_vigencia ? dataBR(a.data_vigencia) : '', a.status]))
+  }
+
   if (!comissoes) return <Spinner />
 
   return (
@@ -53,6 +77,22 @@ export default function Relatorios() {
       </PageHeader>
 
       <div className="grid gap-6 xl:grid-cols-2">
+        {/* Backup / exportação de dados */}
+        <Card className="p-5 xl:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+                <Database size={17} className="text-slate-600" /> Backup dos dados
+              </h2>
+              <p className="text-xs text-slate-400">Baixe uma cópia completa em CSV (abre no Excel) — faça isso de tempos em tempos.</p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={exportarClientes}><Download size={15} /> Exportar clientes</Button>
+              <Button variant="secondary" onClick={exportarApolices}><Download size={15} /> Exportar apólices</Button>
+            </div>
+          </div>
+        </Card>
+
         {/* Fechamento de comissões por assessor */}
         <Card className="xl:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
