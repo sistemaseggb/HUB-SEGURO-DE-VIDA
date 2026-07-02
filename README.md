@@ -160,6 +160,9 @@ npm run dev
 - [x] Responsivo no celular (menu-gaveta, tabelas roláveis, layout adaptável)
 - [x] Guia de "Primeiros passos" no dashboard (some quando o setup termina)
 - [x] Saudação inteligente por horário (bom dia/boa tarde/boa noite)
+- [x] App instalável no celular (PWA: ícone, tela cheia)
+- [x] Edição e exclusão de assessores, seguradoras e clientes
+- [x] Resumo dos últimos 7 dias no dashboard
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
 - [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)

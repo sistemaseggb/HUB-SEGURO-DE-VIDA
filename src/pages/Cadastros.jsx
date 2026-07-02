@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Percent, Save, MessageSquareText } from 'lucide-react'
+import { Plus, Percent, Save, MessageSquareText, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   PageHeader, Card, Button, Input, Textarea, Campo, Modal, Spinner, Badge,
@@ -25,10 +25,13 @@ export default function Cadastros() {
   )
 }
 
+const ASSESSOR_VAZIO = { nome: '', codigo: '', telefone: '', email: '' }
+
 function PainelAssessores() {
   const [lista, setLista] = useState(null)
   const [modal, setModal] = useState(false)
-  const [form, setForm] = useState({ nome: '', codigo: '', telefone: '', email: '' })
+  const [form, setForm] = useState(ASSESSOR_VAZIO)
+  const [editando, setEditando] = useState(null) // id em edição, ou null (novo)
   const [erro, setErro] = useState(null)
 
   const carregar = () =>
@@ -36,19 +39,34 @@ function PainelAssessores() {
 
   useEffect(() => { carregar() }, [])
 
+  function abrirNovo() { setEditando(null); setForm(ASSESSOR_VAZIO); setErro(null); setModal(true) }
+  function abrirEdicao(a) {
+    setEditando(a.id)
+    setForm({ nome: a.nome, codigo: a.codigo ?? '', telefone: a.telefone ?? '', email: a.email ?? '' })
+    setErro(null); setModal(true)
+  }
+
   async function salvar(e) {
     e.preventDefault()
     setErro(null)
-    const { error } = await supabase.from('assessores')
-      .insert({ ...form, codigo: form.codigo || null, telefone: form.telefone || null, email: form.email || null })
+    const payload = { ...form, codigo: form.codigo || null, telefone: form.telefone || null, email: form.email || null }
+    const { error } = editando
+      ? await supabase.from('assessores').update(payload).eq('id', editando)
+      : await supabase.from('assessores').insert(payload)
     if (error) return setErro(error.message)
     setModal(false)
-    setForm({ nome: '', codigo: '', telefone: '', email: '' })
     carregar()
   }
 
   async function alternarAtivo(a) {
     await supabase.from('assessores').update({ ativo: !a.ativo }).eq('id', a.id)
+    carregar()
+  }
+
+  async function excluir(a) {
+    if (!window.confirm(`Excluir o assessor "${a.nome}"? (Só é possível se ele não tiver clientes vinculados.)`)) return
+    const { error } = await supabase.from('assessores').delete().eq('id', a.id)
+    if (error) window.alert('Não foi possível excluir: este assessor tem clientes vinculados. Marque como inativo.')
     carregar()
   }
 
@@ -58,26 +76,32 @@ function PainelAssessores() {
     <Card className="p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-semibold text-slate-900">Assessores ({lista.filter((a) => a.ativo).length} ativos)</h2>
-        <Button onClick={() => setModal(true)}><Plus size={15} /> Novo</Button>
+        <Button onClick={abrirNovo}><Plus size={15} /> Novo</Button>
       </div>
       <ul className="divide-y divide-slate-100">
         {lista.map((a) => (
-          <li key={a.id} className="flex items-center gap-3 py-3">
+          <li key={a.id} className="flex items-center gap-2 py-3">
             <div className="min-w-0 flex-1">
               <Link to={`/assessores/${a.id}`} className="text-sm font-medium text-slate-800 hover:text-blue-700 hover:underline">
                 {a.nome} {a.codigo && <span className="font-mono text-xs text-slate-400">· {a.codigo}</span>}
               </Link>
               <p className="truncate text-xs text-slate-400">{[a.telefone, a.email].filter(Boolean).join(' · ') || '—'}</p>
             </div>
-            <button onClick={() => alternarAtivo(a)} title="Clique para alternar">
+            <button onClick={() => alternarAtivo(a)} title="Clique para alternar ativo/inativo">
               <Badge tom={a.ativo ? 'green' : 'slate'}>{a.ativo ? 'ativo' : 'inativo'}</Badge>
+            </button>
+            <button onClick={() => abrirEdicao(a)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600" title="Editar">
+              <Pencil size={15} />
+            </button>
+            <button onClick={() => excluir(a)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir">
+              <Trash2 size={15} />
             </button>
           </li>
         ))}
         {lista.length === 0 && <p className="py-4 text-sm text-slate-400">Cadastre os assessores do escritório.</p>}
       </ul>
 
-      <Modal aberto={modal} titulo="Novo assessor" onFechar={() => setModal(false)}>
+      <Modal aberto={modal} titulo={editando ? 'Editar assessor' : 'Novo assessor'} onFechar={() => setModal(false)}>
         <form onSubmit={salvar} className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
@@ -108,10 +132,13 @@ function PainelAssessores() {
   )
 }
 
+const SEGURADORA_VAZIA = { nome: '', comissao_padrao_percentual: '' }
+
 function PainelSeguradoras() {
   const [lista, setLista] = useState(null)
   const [modal, setModal] = useState(false)
-  const [form, setForm] = useState({ nome: '', comissao_padrao_percentual: '' })
+  const [form, setForm] = useState(SEGURADORA_VAZIA)
+  const [editando, setEditando] = useState(null)
   const [erro, setErro] = useState(null)
 
   const carregar = () =>
@@ -119,13 +146,28 @@ function PainelSeguradoras() {
 
   useEffect(() => { carregar() }, [])
 
+  function abrirNovo() { setEditando(null); setForm(SEGURADORA_VAZIA); setErro(null); setModal(true) }
+  function abrirEdicao(s) {
+    setEditando(s.id)
+    setForm({ nome: s.nome, comissao_padrao_percentual: s.comissao_padrao_percentual })
+    setErro(null); setModal(true)
+  }
+
   async function salvar(e) {
     e.preventDefault()
     setErro(null)
-    const { error } = await supabase.from('seguradoras').insert(form)
+    const { error } = editando
+      ? await supabase.from('seguradoras').update(form).eq('id', editando)
+      : await supabase.from('seguradoras').insert(form)
     if (error) return setErro(error.message)
     setModal(false)
-    setForm({ nome: '', comissao_padrao_percentual: '' })
+    carregar()
+  }
+
+  async function excluir(s) {
+    if (!window.confirm(`Excluir a seguradora "${s.nome}"? (Só é possível se não houver apólices dela.)`)) return
+    const { error } = await supabase.from('seguradoras').delete().eq('id', s.id)
+    if (error) window.alert('Não foi possível excluir: existem apólices desta seguradora.')
     carregar()
   }
 
@@ -135,13 +177,19 @@ function PainelSeguradoras() {
     <Card className="p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-semibold text-slate-900">Seguradoras</h2>
-        <Button onClick={() => setModal(true)}><Plus size={15} /> Nova</Button>
+        <Button onClick={abrirNovo}><Plus size={15} /> Nova</Button>
       </div>
       <ul className="divide-y divide-slate-100">
         {lista.map((s) => (
-          <li key={s.id} className="flex items-center justify-between py-3">
-            <p className="text-sm font-medium text-slate-800">{s.nome}</p>
-            <Badge tom="blue"><Percent size={11} /> comissão padrão {s.comissao_padrao_percentual}%</Badge>
+          <li key={s.id} className="flex items-center gap-2 py-3">
+            <p className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">{s.nome}</p>
+            <Badge tom="blue"><Percent size={11} /> {s.comissao_padrao_percentual}%</Badge>
+            <button onClick={() => abrirEdicao(s)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600" title="Editar">
+              <Pencil size={15} />
+            </button>
+            <button onClick={() => excluir(s)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir">
+              <Trash2 size={15} />
+            </button>
           </li>
         ))}
         {lista.length === 0 && (
@@ -151,7 +199,7 @@ function PainelSeguradoras() {
         )}
       </ul>
 
-      <Modal aberto={modal} titulo="Nova seguradora" onFechar={() => setModal(false)}>
+      <Modal aberto={modal} titulo={editando ? 'Editar seguradora' : 'Nova seguradora'} onFechar={() => setModal(false)}>
         <form onSubmit={salvar} className="space-y-4">
           <Campo label="Nome" obrigatorio>
             <Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} required autoFocus />

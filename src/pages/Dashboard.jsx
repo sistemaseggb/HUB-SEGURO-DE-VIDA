@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   CalendarCheck, Wallet, FileSignature, TrendingUp, CheckCircle2,
   MessageCircle, AlertTriangle, Trophy, Cake, Target, Percent, Timer, ShieldCheck, Flame, Rocket,
+  CalendarClock,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, mesBR, dataBR, whatsapp } from '../lib/format'
@@ -161,6 +162,55 @@ function BarraMeta({ rotulo, atual, meta, formato = (v) => v }) {
   )
 }
 
+// Resumo dos últimos 7 dias — ritmo semanal do negócio (contagens leves)
+function ResumoSemana() {
+  const [d, setD] = useState(null)
+
+  useEffect(() => {
+    const desde = new Date(Date.now() - 7 * 86400000).toISOString()
+    Promise.all([
+      supabase.from('clientes').select('id', { count: 'exact', head: true }).gte('created_at', desde),
+      supabase.from('reunioes').select('id', { count: 'exact', head: true }).eq('status', 'realizada').gte('data_hora', desde),
+      supabase.from('apolices').select('valor_premio_mensal').gte('created_at', desde),
+      supabase.from('interacoes').select('id', { count: 'exact', head: true }).gte('data', desde),
+    ]).then(([nl, rr, ap, it]) => setD({
+      novosLeads: nl.count ?? 0,
+      reunioes: rr.count ?? 0,
+      vendas: (ap.data ?? []).length,
+      premio: (ap.data ?? []).reduce((s, a) => s + Number(a.valor_premio_mensal || 0), 0),
+      interacoes: it.count ?? 0,
+    }))
+  }, [])
+
+  if (!d) return null
+  const vazia = d.novosLeads + d.reunioes + d.vendas + d.interacoes === 0
+  if (vazia) return null
+
+  const itens = [
+    { rotulo: 'Novos leads', valor: d.novosLeads },
+    { rotulo: 'Reuniões feitas', valor: d.reunioes },
+    { rotulo: 'Vendas', valor: d.vendas },
+    { rotulo: 'Prêmio vendido', valor: brlCompacto(d.premio) },
+    { rotulo: 'Contatos registrados', valor: d.interacoes },
+  ]
+
+  return (
+    <Card className="mb-6 p-5">
+      <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-900">
+        <CalendarClock size={18} className="text-blue-600" /> Resumo dos últimos 7 dias
+      </h2>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        {itens.map((i) => (
+          <div key={i.rotulo}>
+            <p className="text-2xl font-bold text-slate-900">{i.valor}</p>
+            <p className="text-xs text-slate-500">{i.rotulo}</p>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
 // Saudação conforme o horário
 function saudacao() {
   const h = new Date().getHours()
@@ -315,6 +365,7 @@ export default function Dashboard() {
       </div>
 
       <PrimeirosPassos />
+      <ResumoSemana />
 
 
       {/* KPIs do mês */}

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, MessageCircle, Presentation, Copy, Check,
-  CalendarPlus, FileSignature, ClipboardList, Zap, Upload, FileText, Download, Trash2,
+  CalendarPlus, FileSignature, ClipboardList, Zap, Upload, FileText, Download, Trash2, Pencil,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ETAPAS, etapaLabel, STATUS_REUNIAO, TIPO_TAREFA_ICONE } from '../lib/constants'
@@ -18,8 +18,13 @@ export default function ClienteDetalhe() {
   const [cliente, setCliente] = useState(null)
   const [aba, setAba] = useState('Planejamento')
 
+  const navigate = useNavigate()
   const [prioridade, setPrioridade] = useState(null)
   const [contato, setContato] = useState(null)
+  const [editar, setEditar] = useState(false)
+  const [assessores, setAssessores] = useState([])
+  const [formEdit, setFormEdit] = useState(null)
+  const [erroEdit, setErroEdit] = useState(null)
 
   const carregar = useCallback(async () => {
     const [c, pr, ct] = await Promise.all([
@@ -33,6 +38,41 @@ export default function ClienteDetalhe() {
   }, [id])
 
   useEffect(() => { carregar() }, [carregar])
+
+  function abrirEdicao() {
+    setFormEdit({
+      nome: cliente.nome ?? '', codigo: cliente.codigo ?? '', telefone: cliente.telefone ?? '',
+      email: cliente.email ?? '', data_nascimento: cliente.data_nascimento ?? '',
+      id_assessor: cliente.id_assessor ?? '', perfil_necessidade: cliente.perfil_necessidade ?? '',
+    })
+    setErroEdit(null)
+    setEditar(true)
+    if (assessores.length === 0) {
+      supabase.from('assessores').select('id, nome').eq('ativo', true).order('nome')
+        .then(({ data }) => setAssessores(data ?? []))
+    }
+  }
+
+  async function salvarEdicao(e) {
+    e.preventDefault()
+    setErroEdit(null)
+    const payload = {
+      ...formEdit,
+      codigo: formEdit.codigo || null, telefone: formEdit.telefone || null,
+      email: formEdit.email || null, data_nascimento: formEdit.data_nascimento || null,
+    }
+    const { error } = await supabase.from('clientes').update(payload).eq('id', id)
+    if (error) return setErroEdit(error.message)
+    setEditar(false)
+    carregar()
+  }
+
+  async function excluirCliente() {
+    if (!window.confirm(`Excluir ${cliente.nome} e TODOS os seus dados (reuniões, apólices, documentos, tarefas)? Esta ação não pode ser desfeita.`)) return
+    const { error } = await supabase.from('clientes').delete().eq('id', id)
+    if (error) return window.alert(`Erro ao excluir: ${error.message}`)
+    navigate('/clientes')
+  }
 
   if (!cliente) return <Spinner />
 
@@ -82,6 +122,9 @@ export default function ClienteDetalhe() {
             <Link to={`/proposta/${id}`}>
               <Button variant="secondary"><Presentation size={16} /> Gerar proposta</Button>
             </Link>
+            <button onClick={abrirEdicao} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-blue-600" title="Editar cliente">
+              <Pencil size={17} />
+            </button>
           </div>
         </div>
         {cliente.perfil_necessidade && (
@@ -102,11 +145,59 @@ export default function ClienteDetalhe() {
         )}
       </Card>
 
+      {/* Modal de edição do cliente */}
+      <Modal aberto={editar} titulo="Editar cliente" onFechar={() => setEditar(false)}>
+        {formEdit && (
+          <form onSubmit={salvarEdicao} className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <Campo label="Nome completo" obrigatorio>
+                  <Input value={formEdit.nome} onChange={(e) => setFormEdit({ ...formEdit, nome: e.target.value })} required autoFocus />
+                </Campo>
+              </div>
+              <Campo label="Código">
+                <Input value={formEdit.codigo} onChange={(e) => setFormEdit({ ...formEdit, codigo: e.target.value })} placeholder="CLI-000" />
+              </Campo>
+            </div>
+            <Campo label="Assessor" obrigatorio>
+              <Select value={formEdit.id_assessor} onChange={(e) => setFormEdit({ ...formEdit, id_assessor: e.target.value })} required>
+                <option value="">Selecione...</option>
+                {assessores.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
+              </Select>
+            </Campo>
+            <div className="grid grid-cols-2 gap-3">
+              <Campo label="Telefone (WhatsApp)">
+                <Input value={formEdit.telefone} onChange={(e) => setFormEdit({ ...formEdit, telefone: e.target.value })} />
+              </Campo>
+              <Campo label="Data de nascimento">
+                <Input type="date" value={formEdit.data_nascimento} onChange={(e) => setFormEdit({ ...formEdit, data_nascimento: e.target.value })} />
+              </Campo>
+            </div>
+            <Campo label="E-mail">
+              <Input type="email" value={formEdit.email} onChange={(e) => setFormEdit({ ...formEdit, email: e.target.value })} />
+            </Campo>
+            <Campo label="Perfil / necessidade">
+              <Textarea value={formEdit.perfil_necessidade} onChange={(e) => setFormEdit({ ...formEdit, perfil_necessidade: e.target.value })} />
+            </Campo>
+            {erroEdit && <p className="text-sm text-red-600">{erroEdit}</p>}
+            <div className="flex items-center justify-between gap-2">
+              <Button type="button" variant="danger" onClick={excluirCliente}>
+                <Trash2 size={15} /> Excluir cliente
+              </Button>
+              <div className="flex gap-2">
+                <Button type="button" variant="secondary" onClick={() => setEditar(false)}>Cancelar</Button>
+                <Button type="submit">Salvar</Button>
+              </div>
+            </div>
+          </form>
+        )}
+      </Modal>
+
       {/* Abas */}
-      <div className="mb-4 flex gap-1 border-b border-slate-200">
+      <div className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200">
         {ABAS.map((a) => (
           <button key={a} onClick={() => setAba(a)}
-            className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
               aba === a ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}>
             {a}
