@@ -380,6 +380,13 @@ function AbaInteracoes({ idCliente, onMudanca }) {
     onMudanca?.()
   }
 
+  async function excluir(i) {
+    if (!window.confirm('Excluir este registro de contato?')) return
+    await supabase.from('interacoes').delete().eq('id', i.id)
+    carregar()
+    onMudanca?.()
+  }
+
   if (!itens) return <Spinner />
   const label = (t) => TIPO_INTERACAO.find((x) => x.id === t)?.label ?? t
 
@@ -407,10 +414,17 @@ function AbaInteracoes({ idCliente, onMudanca }) {
         : (
           <ol className="relative ml-3 space-y-4 border-l-2 border-slate-100 pl-5">
             {itens.map((i) => (
-              <li key={i.id} className="relative">
+              <li key={i.id} className="group relative">
                 <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
-                <p className="text-sm text-slate-800">{label(i.tipo)} — {i.descricao}</p>
-                <p className="text-xs text-slate-400">{dataHoraBR(i.data)}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm text-slate-800">{label(i.tipo)} — {i.descricao}</p>
+                    <p className="text-xs text-slate-400">{dataHoraBR(i.data)}</p>
+                  </div>
+                  <button onClick={() => excluir(i)} className="rounded p-1 text-slate-300 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100" title="Excluir">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </li>
             ))}
           </ol>
@@ -444,6 +458,12 @@ function AbaReunioes({ idCliente, onMudanca }) {
     carregar(); onMudanca()
   }
 
+  async function excluir(r) {
+    if (!window.confirm('Excluir esta reunião?')) return
+    await supabase.from('reunioes').delete().eq('id', r.id)
+    carregar(); onMudanca()
+  }
+
   if (!reunioes) return <Spinner />
 
   return (
@@ -467,6 +487,9 @@ function AbaReunioes({ idCliente, onMudanca }) {
                   {STATUS_REUNIAO.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                 </Select>
                 <span className="min-w-0 flex-1 truncate text-sm text-slate-500">{r.notas}</span>
+                <button onClick={() => excluir(r)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir reunião">
+                  <Trash2 size={15} />
+                </button>
               </li>
             ))}
           </ul>
@@ -492,14 +515,17 @@ function AbaReunioes({ idCliente, onMudanca }) {
 }
 
 // ─── APÓLICES: cadastrar a venda dispara toda a esteira de pós-venda ─────────
+const APOLICE_VAZIA = {
+  id_seguradora: '', numero_apolice: '', valor_premio_mensal: '',
+  capital_segurado: '', percentual_comissao: '', data_vigencia: '',
+}
+
 function AbaApolices({ idCliente, onMudanca }) {
   const [apolices, setApolices] = useState(null)
   const [seguradoras, setSeguradoras] = useState([])
   const [modal, setModal] = useState(false)
-  const [form, setForm] = useState({
-    id_seguradora: '', numero_apolice: '', valor_premio_mensal: '',
-    capital_segurado: '', percentual_comissao: '', data_vigencia: '',
-  })
+  const [editando, setEditando] = useState(null)
+  const [form, setForm] = useState(APOLICE_VAZIA)
 
   const carregar = useCallback(() =>
     supabase.from('apolices').select('*, seguradoras(nome)').eq('id_cliente', idCliente)
@@ -512,18 +538,37 @@ function AbaApolices({ idCliente, onMudanca }) {
       .then(({ data }) => setSeguradoras(data ?? []))
   }, [carregar])
 
-  async function vender(e) {
+  function abrirNova() { setEditando(null); setForm(APOLICE_VAZIA); setModal(true) }
+  function abrirEdicao(a) {
+    setEditando(a.id)
+    setForm({
+      id_seguradora: a.id_seguradora, numero_apolice: a.numero_apolice ?? '',
+      valor_premio_mensal: a.valor_premio_mensal, capital_segurado: a.capital_segurado,
+      percentual_comissao: a.percentual_comissao ?? '', data_vigencia: a.data_vigencia,
+    })
+    setModal(true)
+  }
+
+  async function salvar(e) {
     e.preventDefault()
-    await supabase.from('apolices').insert({
-      id_cliente: idCliente,
+    const payload = {
       id_seguradora: form.id_seguradora,
       numero_apolice: form.numero_apolice || null,
       valor_premio_mensal: form.valor_premio_mensal,
       capital_segurado: form.capital_segurado,
       percentual_comissao: form.percentual_comissao || null,
       data_vigencia: form.data_vigencia,
-    })
+    }
+    // Na edição NÃO reenviamos id_cliente (evita re-disparar a esteira de pós-venda)
+    if (editando) await supabase.from('apolices').update(payload).eq('id', editando)
+    else await supabase.from('apolices').insert({ ...payload, id_cliente: idCliente })
     setModal(false)
+    carregar(); onMudanca()
+  }
+
+  async function excluir(a) {
+    if (!window.confirm(`Excluir a apólice de ${a.seguradoras?.nome ?? 'seguradora'} (${brl(a.valor_premio_mensal)}/mês)?`)) return
+    await supabase.from('apolices').delete().eq('id', a.id)
     carregar(); onMudanca()
   }
 
@@ -536,13 +581,13 @@ function AbaApolices({ idCliente, onMudanca }) {
           Ao cadastrar a venda, o sistema fecha o cliente no funil, calcula a divisão
           da comissão, gera o formulário de onboarding e agenda o pós-venda. Zero trabalho manual.
         </p>
-        <Button onClick={() => setModal(true)}><FileSignature size={16} /> Registrar venda</Button>
+        <Button onClick={abrirNova}><FileSignature size={16} /> Registrar venda</Button>
       </div>
 
       {apolices.length === 0
         ? <p className="py-6 text-center text-sm text-slate-400">Nenhuma apólice ainda.</p>
         : (
-          <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm">
+          <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
                 <th className="py-2 pr-3 font-medium">Seguradora</th>
@@ -550,7 +595,8 @@ function AbaApolices({ idCliente, onMudanca }) {
                 <th className="py-2 pr-3 font-medium">Capital</th>
                 <th className="py-2 pr-3 font-medium">Comissão total</th>
                 <th className="py-2 pr-3 font-medium">Natália / Assessor / Escritório</th>
-                <th className="py-2 font-medium">Vigência</th>
+                <th className="py-2 pr-3 font-medium">Vigência</th>
+                <th className="py-2 font-medium"></th>
               </tr>
             </thead>
             <tbody>
@@ -563,15 +609,25 @@ function AbaApolices({ idCliente, onMudanca }) {
                   <td className="py-3 pr-3 text-slate-500">
                     {brl(a.comissao_natalia)} / {brl(a.comissao_assessor)} / {brl(a.comissao_escritorio)}
                   </td>
-                  <td className="py-3">{dataBR(a.data_vigencia)}</td>
+                  <td className="py-3 pr-3">{dataBR(a.data_vigencia)}</td>
+                  <td className="py-3">
+                    <div className="flex gap-1">
+                      <button onClick={() => abrirEdicao(a)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600" title="Editar">
+                        <Pencil size={15} />
+                      </button>
+                      <button onClick={() => excluir(a)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir">
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table></div>
         )}
 
-      <Modal aberto={modal} titulo="Registrar venda 🎉" onFechar={() => setModal(false)}>
-        <form onSubmit={vender} className="space-y-4">
+      <Modal aberto={modal} titulo={editando ? 'Editar apólice' : 'Registrar venda 🎉'} onFechar={() => setModal(false)}>
+        <form onSubmit={salvar} className="space-y-4">
           <Campo label="Seguradora" obrigatorio>
             <Select value={form.id_seguradora} required
               onChange={(e) => setForm({ ...form, id_seguradora: e.target.value })}>
@@ -604,7 +660,7 @@ function AbaApolices({ idCliente, onMudanca }) {
           </Campo>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
-            <Button type="submit" variant="success">Confirmar venda</Button>
+            <Button type="submit" variant="success">{editando ? 'Salvar alterações' : 'Confirmar venda'}</Button>
           </div>
         </form>
       </Modal>

@@ -162,6 +162,7 @@ npm run dev
 - [x] Saudação inteligente por horário (bom dia/boa tarde/boa noite)
 - [x] App instalável no celular (PWA: ícone, tela cheia)
 - [x] Edição e exclusão de assessores, seguradoras e clientes
+- [x] Edição e exclusão de apólices, reuniões e interações
 - [x] Resumo dos últimos 7 dias no dashboard
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
