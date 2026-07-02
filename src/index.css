@@ -1,10 +1,95 @@
 @import "tailwindcss";
 
-/* Tema base do Hub — ajustes globais ficam aqui (Tailwind v4) */
+/* ============================================================================
+   HUB SEGURO DE VIDA — Sistema de Design
+   Tipografia: Inter (texto) + Lexend (títulos/números). Cores: azul confiança
+   com toque premium (âmbar). Superfícies quentes e sombras suaves.
+   ============================================================================ */
+
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Lexend Variable", "Inter Variable", ui-sans-serif, sans-serif;
+
+  /* Marca — azul (confiança) */
+  --color-brand-50:  #eef4ff;
+  --color-brand-100: #dae6ff;
+  --color-brand-200: #bcd2ff;
+  --color-brand-300: #8eb5ff;
+  --color-brand-400: #598cfb;
+  --color-brand-500: #3366f0;
+  --color-brand-600: #2049dc;
+  --color-brand-700: #1c3ab8;
+  --color-brand-800: #1d3494;
+  --color-brand-900: #1d3175;
+
+  /* Alinha a paleta "blue" do Tailwind à marca — dá coesão a todas as telas
+     que já usam blue-600/blue-50 etc. sem precisar reescrevê-las. */
+  --color-blue-50:  #eef4ff;
+  --color-blue-100: #dae6ff;
+  --color-blue-200: #bcd2ff;
+  --color-blue-300: #8eb5ff;
+  --color-blue-400: #598cfb;
+  --color-blue-500: #3366f0;
+  --color-blue-600: #2049dc;
+  --color-blue-700: #1c3ab8;
+  --color-blue-800: #1d3494;
+  --color-blue-900: #1d3175;
+
+  /* Acento — âmbar/dourado (premium, usado com parcimônia) */
+  --color-gold-400: #f6b93b;
+  --color-gold-500: #eaa119;
+  --color-gold-600: #cf8410;
+
+  /* Superfícies quentes */
+  --color-canvas: #f6f7fb;
+  --color-surface: #ffffff;
 }
 
-body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    background-color: var(--color-canvas);
+    color: #1a2233;
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /* Números grandes ficam elegantes com a Lexend */
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  /* Seleção de texto na cor da marca */
+  ::selection { background: color-mix(in srgb, var(--color-brand-500) 22%, transparent); }
+
+  /* Scrollbars discretas */
+  * { scrollbar-width: thin; scrollbar-color: #cbd2e0 transparent; }
+  *::-webkit-scrollbar { width: 9px; height: 9px; }
+  *::-webkit-scrollbar-thumb { background: #cbd2e0; border-radius: 9999px; border: 2px solid transparent; background-clip: content-box; }
+  *::-webkit-scrollbar-thumb:hover { background: #aeb7c9; background-clip: content-box; }
+
+  /* Foco visível e consistente em tudo que é interativo */
+  a:focus-visible, button:focus-visible, input:focus-visible,
+  select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+}
+
+@layer utilities {
+  /* Sombra suave padrão dos cartões */
+  .shadow-card { box-shadow: 0 1px 2px rgba(16,24,40,0.04), 0 1px 3px rgba(16,24,40,0.06); }
+  .shadow-card-hover { box-shadow: 0 4px 12px rgba(16,24,40,0.08), 0 2px 4px rgba(16,24,40,0.05); }
+  .shadow-pop { box-shadow: 0 10px 30px rgba(16,24,40,0.12), 0 4px 8px rgba(16,24,40,0.06); }
+
+  /* Animação de entrada dos modais/toasts */
+  @keyframes surgir { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .animar-surgir { animation: surgir 0.18s ease-out; }
 }

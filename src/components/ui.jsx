@@ -2,7 +2,7 @@ import { X } from 'lucide-react'
 
 export function Card({ children, className = '' }) {
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}>
+    <div className={`rounded-2xl border border-slate-200/70 bg-white shadow-card ${className}`}>
       {children}
     </div>
   )
@@ -12,25 +12,26 @@ export function PageHeader({ titulo, subtitulo, children }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">{titulo}</h1>
+        <h1 className="text-[1.7rem] font-semibold tracking-tight text-slate-900">{titulo}</h1>
         {subtitulo && <p className="mt-1 text-sm text-slate-500">{subtitulo}</p>}
       </div>
-      {children && <div className="flex gap-2">{children}</div>}
+      {children && <div className="flex flex-wrap gap-2">{children}</div>}
     </div>
   )
 }
 
 export function Button({ children, variant = 'primary', className = '', ...props }) {
   const estilos = {
-    primary: 'bg-blue-600 text-white hover:bg-blue-700',
-    secondary: 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
+    primary: 'bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800',
+    secondary: 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-400',
     ghost: 'text-slate-600 hover:bg-slate-100',
-    danger: 'bg-red-600 text-white hover:bg-red-700',
-    success: 'bg-emerald-600 text-white hover:bg-emerald-700',
+    danger: 'bg-red-600 text-white shadow-sm hover:bg-red-700',
+    success: 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700',
+    gold: 'bg-gold-500 text-white shadow-sm hover:bg-gold-600',
   }
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${estilos[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50 ${estilos[variant]} ${className}`}
       {...props}
     >
       {children}
@@ -41,7 +42,7 @@ export function Button({ children, variant = 'primary', className = '', ...props
 export function Campo({ label, children, obrigatorio, dica }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-slate-700">
+      <span className="mb-1.5 block text-sm font-medium text-slate-700">
         {label} {obrigatorio && <span className="text-red-500">*</span>}
       </span>
       {children}
@@ -51,15 +52,15 @@ export function Campo({ label, children, obrigatorio, dica }) {
 }
 
 const inputBase =
-  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100'
+  'w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/12'
 
 export function Input(props) {
   return <input className={inputBase} {...props} />
 }
 
-export function Select({ children, ...props }) {
+export function Select({ children, className = '', ...props }) {
   return (
-    <select className={inputBase} {...props}>
+    <select className={`${inputBase} cursor-pointer ${className}`} {...props}>
       {children}
     </select>
   )
@@ -73,17 +74,17 @@ export function Modal({ aberto, titulo, onFechar, children, largura = 'max-w-lg'
   if (!aberto) return null
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 pt-16"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 pt-16 backdrop-blur-sm"
       onMouseDown={(e) => e.target === e.currentTarget && onFechar()}
     >
-      <div className={`w-full ${largura} rounded-xl bg-white shadow-xl`}>
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+      <div className={`animar-surgir w-full ${largura} rounded-2xl bg-white shadow-pop`}>
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <h2 className="text-lg font-semibold text-slate-900">{titulo}</h2>
-          <button onClick={onFechar} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+          <button onClick={onFechar} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700">
             <X size={18} />
           </button>
         </div>
-        <div className="px-5 py-4">{children}</div>
+        <div className="px-6 py-5">{children}</div>
       </div>
     </div>
   )
@@ -91,14 +92,15 @@ export function Modal({ aberto, titulo, onFechar, children, largura = 'max-w-lg'
 
 export function Badge({ children, tom = 'slate' }) {
   const tons = {
-    slate: 'bg-slate-100 text-slate-700',
-    blue: 'bg-blue-50 text-blue-700',
-    green: 'bg-emerald-50 text-emerald-700',
-    yellow: 'bg-amber-50 text-amber-700',
-    red: 'bg-red-50 text-red-700',
+    slate: 'bg-slate-100 text-slate-600 ring-slate-200',
+    blue: 'bg-brand-50 text-brand-700 ring-brand-100',
+    green: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    yellow: 'bg-amber-50 text-amber-700 ring-amber-100',
+    red: 'bg-red-50 text-red-700 ring-red-100',
+    gold: 'bg-gold-400/15 text-gold-600 ring-gold-400/20',
   }
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${tons[tom]}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${tons[tom]}`}>
       {children}
     </span>
   )
@@ -106,38 +108,42 @@ export function Badge({ children, tom = 'slate' }) {
 
 export function EmptyState({ icone: Icone, titulo, texto, children }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
-      {Icone && <Icone size={36} className="text-slate-300" />}
-      <p className="font-medium text-slate-600">{titulo}</p>
+    <div className="flex flex-col items-center justify-center gap-2 px-6 py-14 text-center">
+      {Icone && (
+        <div className="mb-1 rounded-2xl bg-slate-100 p-3.5 text-slate-400">
+          <Icone size={26} />
+        </div>
+      )}
+      <p className="font-semibold text-slate-700">{titulo}</p>
       {texto && <p className="max-w-sm text-sm text-slate-400">{texto}</p>}
-      {children}
+      {children && <div className="mt-2">{children}</div>}
     </div>
   )
 }
 
-export function StatTile({ rotulo, valor, detalhe, icone: Icone, corIcone = 'text-blue-600 bg-blue-50' }) {
+export function StatTile({ rotulo, valor, detalhe, icone: Icone, corIcone = 'text-brand-600 bg-brand-50' }) {
   return (
-    <Card className="p-5">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm text-slate-500">{rotulo}</p>
-          <p className="mt-1 text-2xl font-bold text-slate-900">{valor}</p>
-          {detalhe && <p className="mt-1 text-xs text-slate-400">{detalhe}</p>}
+    <div className="group rounded-2xl border border-slate-200/70 bg-white p-5 shadow-card transition-shadow hover:shadow-card-hover">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm text-slate-500">{rotulo}</p>
+          <p className="mt-1.5 font-display text-[1.7rem] font-semibold leading-none tracking-tight text-slate-900 tabular">{valor}</p>
+          {detalhe && <p className="mt-2 text-xs text-slate-400">{detalhe}</p>}
         </div>
         {Icone && (
-          <div className={`rounded-lg p-2.5 ${corIcone}`}>
+          <div className={`shrink-0 rounded-xl p-2.5 ${corIcone}`}>
             <Icone size={20} />
           </div>
         )}
       </div>
-    </Card>
+    </div>
   )
 }
 
 export function Spinner() {
   return (
     <div className="flex justify-center py-16">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-blue-600" />
+      <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-200 border-t-brand-600" />
     </div>
   )
 }
