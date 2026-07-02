@@ -157,6 +157,7 @@ npm run dev
 - [x] Assessor 360 (página do assessor com leads, conversão e comissão)
 - [x] Gráfico de conversão mensal (leads criados × fechados)
 - [x] Detector de clientes duplicados (aviso na tela de Clientes)
+- [x] Responsivo no celular (menu-gaveta, tabelas roláveis, layout adaptável)
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
 - [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)

@@ -96,7 +96,7 @@ export default function Clientes() {
           <EmptyState icone={Users} titulo="Nenhum cliente encontrado"
             texto="Cadastre o primeiro lead — o vínculo com o assessor é obrigatório para a divisão de comissão." />
         ) : (
-          <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400">
                 <th className="px-4 py-3 font-medium">Código</th>
@@ -127,7 +127,7 @@ export default function Clientes() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </Card>
 

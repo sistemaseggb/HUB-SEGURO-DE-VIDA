@@ -114,7 +114,7 @@ export default function Relatorios() {
           {doMes.length === 0
             ? <p className="px-5 py-8 text-center text-sm text-slate-400">Nenhuma venda no mês selecionado.</p>
             : (
-              <table className="w-full text-left text-sm">
+              <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
                     <th className="px-5 py-3 font-medium">Assessor</th>
@@ -147,7 +147,7 @@ export default function Relatorios() {
                     </tr>
                   )}
                 </tbody>
-              </table>
+              </table></div>
             )}
         </Card>
 
@@ -187,7 +187,7 @@ export default function Relatorios() {
           {tempos.length === 0
             ? <p className="text-sm text-slate-400">Ainda sem movimentações suficientes.</p>
             : (
-              <table className="w-full text-left text-sm">
+              <div className="overflow-x-auto"><table className="w-full min-w-[420px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
                     <th className="py-2 font-medium">Etapa</th>
@@ -204,7 +204,7 @@ export default function Relatorios() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             )}
         </Card>
       </div>

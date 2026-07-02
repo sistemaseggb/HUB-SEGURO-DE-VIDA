@@ -451,7 +451,7 @@ function AbaApolices({ idCliente, onMudanca }) {
       {apolices.length === 0
         ? <p className="py-6 text-center text-sm text-slate-400">Nenhuma apólice ainda.</p>
         : (
-          <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
                 <th className="py-2 pr-3 font-medium">Seguradora</th>
@@ -476,7 +476,7 @@ function AbaApolices({ idCliente, onMudanca }) {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
 
       <Modal aberto={modal} titulo="Registrar venda 🎉" onFechar={() => setModal(false)}>

@@ -74,7 +74,7 @@ export default function AssessorDetalhe() {
           ? <EmptyState icone={Users} titulo="Nenhum cliente ainda"
               texto="Quando este assessor trouxer leads, eles aparecem aqui." />
           : (
-            <table className="w-full text-left text-sm">
+            <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
                   <th className="px-5 py-3 font-medium">Código</th>
@@ -101,7 +101,7 @@ export default function AssessorDetalhe() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
       </Card>
     </div>

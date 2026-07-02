@@ -161,7 +161,7 @@ export default function PosVenda() {
             ? <EmptyState icone={ShieldCheck} titulo="Nenhuma apólice ativa"
                 texto="As vendas registradas nos clientes aparecem aqui automaticamente." />
             : (
-              <table className="w-full text-left text-sm">
+              <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
                     <th className="px-5 py-3 font-medium">Cliente</th>
@@ -187,7 +187,7 @@ export default function PosVenda() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             )}
         </Card>
       </div>
