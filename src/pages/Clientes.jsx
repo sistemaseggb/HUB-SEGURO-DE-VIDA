@@ -8,7 +8,7 @@ import {
   PageHeader, Button, Card, Input, Select, Textarea, Campo, Modal, Badge, Spinner, EmptyState,
 } from '../components/ui'
 
-const NOVO = { nome: '', telefone: '', email: '', data_nascimento: '', id_assessor: '', perfil_necessidade: '' }
+const NOVO = { nome: '', codigo: '', telefone: '', email: '', data_nascimento: '', id_assessor: '', perfil_necessidade: '' }
 
 export default function Clientes() {
   const navigate = useNavigate()
@@ -35,7 +35,9 @@ export default function Clientes() {
     const q = busca.trim().toLowerCase()
     if (!q) return clientes ?? []
     return (clientes ?? []).filter(
-      (c) => c.nome.toLowerCase().includes(q) || (c.assessores?.nome ?? '').toLowerCase().includes(q)
+      (c) => c.nome.toLowerCase().includes(q)
+        || (c.codigo ?? '').toLowerCase().includes(q)
+        || (c.assessores?.nome ?? '').toLowerCase().includes(q)
     )
   }, [clientes, busca])
 
@@ -43,7 +45,7 @@ export default function Clientes() {
     e.preventDefault()
     setErro(null)
     setSalvando(true)
-    const payload = { ...form, data_nascimento: form.data_nascimento || null, email: form.email || null }
+    const payload = { ...form, data_nascimento: form.data_nascimento || null, email: form.email || null, codigo: form.codigo || null }
     const { data, error } = await supabase.from('clientes').insert(payload).select('id').single()
     setSalvando(false)
     if (error) return setErro(error.message)
@@ -79,6 +81,7 @@ export default function Clientes() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400">
+                <th className="px-4 py-3 font-medium">Código</th>
                 <th className="px-4 py-3 font-medium">Cliente</th>
                 <th className="px-4 py-3 font-medium">Assessor</th>
                 <th className="px-4 py-3 font-medium">Etapa</th>
@@ -89,6 +92,7 @@ export default function Clientes() {
             <tbody>
               {filtrados.map((c) => (
                 <tr key={c.id} className="border-b border-slate-50 hover:bg-slate-50">
+                  <td className="px-4 py-3 font-mono text-xs text-slate-400">{c.codigo ?? '—'}</td>
                   <td className="px-4 py-3">
                     <Link to={`/clientes/${c.id}`} className="font-medium text-slate-900 hover:text-blue-700 hover:underline">
                       {c.nome}
@@ -111,9 +115,16 @@ export default function Clientes() {
 
       <Modal aberto={modal} titulo="Novo lead" onFechar={() => setModal(false)}>
         <form onSubmit={salvar} className="space-y-4">
-          <Campo label="Nome completo" obrigatorio>
-            <Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} required autoFocus />
-          </Campo>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <Campo label="Nome completo" obrigatorio>
+                <Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} required autoFocus />
+              </Campo>
+            </div>
+            <Campo label="Código" dica="Do escritório">
+              <Input value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} placeholder="CLI-000" />
+            </Campo>
+          </div>
           <Campo label="Assessor que indicou" obrigatorio dica="Obrigatório — define a divisão de comissão">
             <Select value={form.id_assessor} onChange={(e) => setForm({ ...form, id_assessor: e.target.value })} required>
               <option value="">Selecione...</option>

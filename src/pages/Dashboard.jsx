@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   CalendarCheck, Wallet, FileSignature, TrendingUp, CheckCircle2,
-  MessageCircle, AlertTriangle, Trophy, Cake, Target, Percent, Timer, ShieldCheck,
+  MessageCircle, AlertTriangle, Trophy, Cake, Target, Percent, Timer, ShieldCheck, Flame,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, mesBR, dataBR, whatsapp } from '../lib/format'
@@ -120,9 +120,10 @@ export default function Dashboard() {
   const [funil, setFunil] = useState([])
   const [kpis, setKpis] = useState({})
   const [metas, setMetas] = useState({})
+  const [foco, setFoco] = useState([])
 
   async function carregar() {
-    const [c, d, r, ce, f, k, cfg] = await Promise.all([
+    const [c, d, r, ce, f, k, cfg, pr] = await Promise.all([
       supabase.from('vw_comissoes_mensal').select('*').limit(6),
       supabase.from('vw_dashboard_mensal').select('*').limit(6),
       supabase.from('vw_ranking_assessores').select('*').limit(5),
@@ -130,6 +131,7 @@ export default function Dashboard() {
       supabase.from('vw_funil_contagem').select('*'),
       supabase.from('vw_kpis_gerais').select('*').single(),
       supabase.from('configuracoes').select('meta_premio_mensal, meta_reunioes_mensal, meta_apolices_mensal').single(),
+      supabase.from('vw_prioridades_classificadas').select('*').limit(6),
     ])
     setComissoes(c.data ?? [])
     setDashboard(d.data ?? [])
@@ -138,6 +140,7 @@ export default function Dashboard() {
     setFunil(f.data ?? [])
     setKpis(k.data ?? {})
     setMetas(cfg.data ?? {})
+    setFoco(pr.data ?? [])
     setCarregando(false)
   }
 
@@ -226,6 +229,43 @@ export default function Dashboard() {
                 atual={Number(mesAtual.dash.apolices_vendidas ?? 0)}
                 meta={Number(metas.meta_apolices_mensal)} />
             )}
+          </div>
+        </Card>
+      )}
+
+      {/* Foco de Hoje — priorização inteligente */}
+      {foco.length > 0 && (
+        <Card className="mb-6 p-5">
+          <h2 className="mb-1 flex items-center gap-2 font-semibold text-slate-900">
+            <Flame size={18} className="text-orange-500" /> Foco de Hoje
+          </h2>
+          <p className="mb-4 text-xs text-slate-400">
+            Leads ordenados pela prioridade que o sistema calcula sozinho — com a próxima ação sugerida
+          </p>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {foco.map((c) => (
+              <div key={c.id} className="rounded-lg border border-slate-200 p-3">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <Link to={`/clientes/${c.id}`} className="truncate font-medium text-slate-800 hover:text-blue-700 hover:underline">
+                    {c.nome}
+                  </Link>
+                  <Badge tom={c.temperatura === 'quente' ? 'red' : c.temperatura === 'morno' ? 'yellow' : 'slate'}>
+                    {c.temperatura === 'quente' ? '🔥' : c.temperatura === 'morno' ? '🌤' : '❄️'} {c.score}
+                  </Badge>
+                </div>
+                <p className="mb-2 text-sm text-blue-700">→ {c.proxima_acao}</p>
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <span>{etapaLabel(c.status_funil)}</span>
+                  {c.dias_na_etapa > 0 && <span>· {c.dias_na_etapa}d parado</span>}
+                  {whatsapp(c.telefone) && (
+                    <a href={whatsapp(c.telefone)} target="_blank" rel="noreferrer"
+                      className="ml-auto rounded p-1 text-emerald-600 hover:bg-emerald-50" title="WhatsApp">
+                      <MessageCircle size={15} />
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </Card>
       )}

@@ -14,24 +14,27 @@ const MODELOS = {
   clientes: {
     rotulo: 'Clientes / Leads',
     colunas: {
-      nome:       { apelidos: ['nome', 'cliente'], obrigatorio: true },
-      assessor:   { apelidos: ['assessor', 'indicou', 'consultor'], obrigatorio: true },
-      telefone:   { apelidos: ['telefone', 'celular', 'whatsapp', 'fone'] },
-      email:      { apelidos: ['email', 'e-mail'] },
-      nascimento: { apelidos: ['nascimento', 'aniversario', 'datanasc'] },
-      etapa:      { apelidos: ['etapa', 'status', 'funil', 'fase'] },
-      perfil:     { apelidos: ['perfil', 'necessidade', 'observac', 'obs'] },
+      nome:        { apelidos: ['nome', 'cliente', 'segurado'], obrigatorio: true },
+      codigo:      { apelidos: ['codigocliente', 'codcliente', 'codigo', 'cod'] },
+      assessor:    { apelidos: ['assessor', 'indicou', 'consultor'], obrigatorio: true },
+      cod_assessor:{ apelidos: ['codigoassessor', 'codassessor'] },
+      telefone:    { apelidos: ['telefone', 'celular', 'whatsapp', 'fone'] },
+      email:       { apelidos: ['email', 'e-mail'] },
+      nascimento:  { apelidos: ['nascimento', 'aniversario', 'datanasc'] },
+      etapa:       { apelidos: ['etapa', 'status', 'funil', 'fase'] },
+      perfil:      { apelidos: ['perfil', 'necessidade', 'observac', 'obs'] },
     },
     exemplo: [
-      ['Nome', 'Telefone', 'Email', 'Nascimento', 'Assessor', 'Etapa', 'Perfil'],
-      ['Maria Souza', '(41) 99999-0000', 'maria@email.com', '15/07/1985', 'João Pedro', 'Fechado', 'Médica, 2 filhos'],
+      ['Código', 'Nome', 'Telefone', 'Email', 'Nascimento', 'Código Assessor', 'Assessor', 'Etapa', 'Perfil'],
+      ['CLI-1001', 'Maria Souza', '(41) 99999-0000', 'maria@email.com', '15/07/1985', 'ASS-01', 'João Pedro', 'Fechado', 'Médica, 2 filhos'],
     ],
   },
   apolices: {
     rotulo: 'Apólices (vendas já feitas)',
     colunas: {
-      cliente:    { apelidos: ['cliente', 'nome', 'segurado'], obrigatorio: true },
-      seguradora: { apelidos: ['seguradora', 'cia', 'companhia'], obrigatorio: true },
+      cliente:     { apelidos: ['cliente', 'nome', 'segurado'], obrigatorio: true },
+      cod_cliente: { apelidos: ['codigocliente', 'codcliente', 'codigo', 'cod'] },
+      seguradora:  { apelidos: ['seguradora', 'cia', 'companhia'], obrigatorio: true },
       premio:     { apelidos: ['premio', 'mensalidade', 'valor'], obrigatorio: true },
       capital:    { apelidos: ['capital', 'cobertura', 'importancia'], obrigatorio: true },
       vigencia:   { apelidos: ['vigencia', 'inicio', 'emissao', 'data'], obrigatorio: true },
@@ -214,18 +217,34 @@ async function importarClientes({ linhas, mapa }) {
   const erros = []
   const criados = []
 
-  // assessores existentes + criação dos que faltam (por nome)
-  const { data: assessores } = await supabase.from('assessores').select('id, nome')
+  // assessores existentes (indexados por nome E por código)
+  const { data: assessores } = await supabase.from('assessores').select('id, nome, codigo')
   const porNome = new Map((assessores ?? []).map((a) => [normalizar(a.nome), a.id]))
+  const porCod = new Map((assessores ?? []).filter((a) => a.codigo).map((a) => [normalizar(a.codigo), a.id]))
 
-  const nomesNovos = [...new Set(
-    linhas.map((l) => (l[mapa.assessor] ?? '').trim()).filter((n) => n && !porNome.has(normalizar(n)))
-  )]
-  if (nomesNovos.length) {
+  const acharAssessor = (l) => {
+    const cod = mapa.cod_assessor !== undefined ? normalizar(l[mapa.cod_assessor]) : ''
+    if (cod && porCod.has(cod)) return porCod.get(cod)
+    return porNome.get(normalizar((l[mapa.assessor] ?? '').trim()))
+  }
+
+  // cria assessores que faltam (por nome, já com código se a planilha tiver)
+  const faltantes = new Map()
+  linhas.forEach((l) => {
+    const nome = (l[mapa.assessor] ?? '').trim()
+    if (nome && acharAssessor(l) === undefined) {
+      const cod = mapa.cod_assessor !== undefined ? (l[mapa.cod_assessor] || null) : null
+      faltantes.set(normalizar(nome), { nome, codigo: cod })
+    }
+  })
+  if (faltantes.size) {
     const { data: novos, error } = await supabase.from('assessores')
-      .insert(nomesNovos.map((nome) => ({ nome }))).select('id, nome')
+      .insert([...faltantes.values()]).select('id, nome, codigo')
     if (error) return { ok: 0, erros: [`Falha ao criar assessores: ${error.message}`], criados }
-    for (const a of novos) porNome.set(normalizar(a.nome), a.id)
+    for (const a of novos) {
+      porNome.set(normalizar(a.nome), a.id)
+      if (a.codigo) porCod.set(normalizar(a.codigo), a.id)
+    }
     criados.push(`${novos.length} assessor(es)`)
   }
 
@@ -237,12 +256,14 @@ async function importarClientes({ linhas, mapa }) {
   linhas.forEach((l, i) => {
     const nome = (l[mapa.nome] ?? '').trim()
     const assessor = (l[mapa.assessor] ?? '').trim()
+    const idAssessor = acharAssessor(l)
     if (!nome) return erros.push(`Linha ${i + 2}: sem nome`)
-    if (!porNome.has(normalizar(assessor))) return erros.push(`Linha ${i + 2} (${nome}): assessor "${assessor}" inválido`)
+    if (idAssessor === undefined) return erros.push(`Linha ${i + 2} (${nome}): assessor "${assessor}" inválido`)
     const etapaBruta = mapa.etapa !== undefined ? normalizar(l[mapa.etapa]) : ''
     registros.push({
       nome,
-      id_assessor: porNome.get(normalizar(assessor)),
+      codigo: mapa.codigo !== undefined ? l[mapa.codigo] || null : null,
+      id_assessor: idAssessor,
       telefone: mapa.telefone !== undefined ? l[mapa.telefone] || null : null,
       email: mapa.email !== undefined ? l[mapa.email] || null : null,
       data_nascimento: mapa.nascimento !== undefined ? paraDataISO(l[mapa.nascimento]) : null,
@@ -268,10 +289,11 @@ async function importarApolices({ linhas, mapa }) {
   const criados = []
 
   const [{ data: clientes }, { data: seguradoras }] = await Promise.all([
-    supabase.from('clientes').select('id, nome'),
+    supabase.from('clientes').select('id, nome, codigo'),
     supabase.from('seguradoras').select('id, nome'),
   ])
   const clientePorNome = new Map((clientes ?? []).map((c) => [normalizar(c.nome), c.id]))
+  const clientePorCod = new Map((clientes ?? []).filter((c) => c.codigo).map((c) => [normalizar(c.codigo), c.id]))
   const segPorNome = new Map((seguradoras ?? []).map((s) => [normalizar(s.nome), s.id]))
 
   // cria seguradoras que não existem (comissão 0% — ajustar depois em Cadastros)
@@ -289,7 +311,8 @@ async function importarApolices({ linhas, mapa }) {
   const registros = []
   linhas.forEach((l, i) => {
     const nomeCliente = (l[mapa.cliente] ?? '').trim()
-    const idCliente = clientePorNome.get(normalizar(nomeCliente))
+    const codCliente = mapa.cod_cliente !== undefined ? normalizar(l[mapa.cod_cliente]) : ''
+    const idCliente = (codCliente && clientePorCod.get(codCliente)) || clientePorNome.get(normalizar(nomeCliente))
     if (!idCliente) return erros.push(`Linha ${i + 2}: cliente "${nomeCliente}" não encontrado — importe os clientes primeiro`)
     const premio = paraNumero(l[mapa.premio])
     const capital = paraNumero(l[mapa.capital])

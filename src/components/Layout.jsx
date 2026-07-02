@@ -5,6 +5,7 @@ import {
   BarChart3, Upload,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import BuscaGlobal from './BuscaGlobal'
 
 const MENU = [
   { para: '/', rotulo: 'Dashboard', icone: LayoutDashboard, fim: true },
@@ -59,9 +60,14 @@ export default function Layout() {
         </button>
       </aside>
 
-      <main className="ml-56 flex-1 p-6 lg:p-8">
-        <Outlet />
-      </main>
+      <div className="ml-56 flex-1">
+        <header className="sticky top-0 z-30 flex items-center gap-4 border-b border-slate-200 bg-white/90 px-6 py-3 backdrop-blur lg:px-8">
+          <BuscaGlobal />
+        </header>
+        <main className="p-6 lg:p-8">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

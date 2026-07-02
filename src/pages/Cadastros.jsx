@@ -24,7 +24,7 @@ export default function Cadastros() {
 function PainelAssessores() {
   const [lista, setLista] = useState(null)
   const [modal, setModal] = useState(false)
-  const [form, setForm] = useState({ nome: '', telefone: '', email: '' })
+  const [form, setForm] = useState({ nome: '', codigo: '', telefone: '', email: '' })
   const [erro, setErro] = useState(null)
 
   const carregar = () =>
@@ -36,10 +36,10 @@ function PainelAssessores() {
     e.preventDefault()
     setErro(null)
     const { error } = await supabase.from('assessores')
-      .insert({ ...form, telefone: form.telefone || null, email: form.email || null })
+      .insert({ ...form, codigo: form.codigo || null, telefone: form.telefone || null, email: form.email || null })
     if (error) return setErro(error.message)
     setModal(false)
-    setForm({ nome: '', telefone: '', email: '' })
+    setForm({ nome: '', codigo: '', telefone: '', email: '' })
     carregar()
   }
 
@@ -60,7 +60,9 @@ function PainelAssessores() {
         {lista.map((a) => (
           <li key={a.id} className="flex items-center gap-3 py-3">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-slate-800">{a.nome}</p>
+              <p className="text-sm font-medium text-slate-800">
+                {a.nome} {a.codigo && <span className="font-mono text-xs text-slate-400">· {a.codigo}</span>}
+              </p>
               <p className="truncate text-xs text-slate-400">{[a.telefone, a.email].filter(Boolean).join(' · ') || '—'}</p>
             </div>
             <button onClick={() => alternarAtivo(a)} title="Clique para alternar">
@@ -73,9 +75,16 @@ function PainelAssessores() {
 
       <Modal aberto={modal} titulo="Novo assessor" onFechar={() => setModal(false)}>
         <form onSubmit={salvar} className="space-y-4">
-          <Campo label="Nome" obrigatorio>
-            <Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} required autoFocus />
-          </Campo>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <Campo label="Nome" obrigatorio>
+                <Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} required autoFocus />
+              </Campo>
+            </div>
+            <Campo label="Código" dica="Do escritório">
+              <Input value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} placeholder="ASS-000" />
+            </Campo>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Campo label="Telefone">
               <Input value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} />

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, MessageCircle, Presentation, Copy, Check,
-  CalendarPlus, FileSignature, ClipboardList,
+  CalendarPlus, FileSignature, ClipboardList, Zap,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ETAPAS, etapaLabel, STATUS_REUNIAO, TIPO_TAREFA_ICONE } from '../lib/constants'
@@ -18,13 +18,15 @@ export default function ClienteDetalhe() {
   const [cliente, setCliente] = useState(null)
   const [aba, setAba] = useState('Planejamento')
 
+  const [prioridade, setPrioridade] = useState(null)
+
   const carregar = useCallback(async () => {
-    const { data } = await supabase
-      .from('clientes')
-      .select('*, assessores(nome, telefone)')
-      .eq('id', id)
-      .single()
-    setCliente(data)
+    const [c, pr] = await Promise.all([
+      supabase.from('clientes').select('*, assessores(nome, telefone)').eq('id', id).single(),
+      supabase.from('vw_prioridades_classificadas').select('proxima_acao, temperatura, score').eq('id', id).maybeSingle(),
+    ])
+    setCliente(c.data)
+    setPrioridade(pr.data)
   }, [id])
 
   useEffect(() => { carregar() }, [carregar])
@@ -44,7 +46,10 @@ export default function ClienteDetalhe() {
             {iniciais(cliente.nome)}
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-bold text-slate-900">{cliente.nome}</h1>
+            <h1 className="text-xl font-bold text-slate-900">
+              {cliente.nome}
+              {cliente.codigo && <span className="ml-2 font-mono text-sm font-normal text-slate-400">{cliente.codigo}</span>}
+            </h1>
             <p className="text-sm text-slate-500">
               Assessor: {cliente.assessores?.nome ?? '—'}
               {cliente.data_nascimento && ` · Nascimento: ${dataBR(cliente.data_nascimento)}`}
@@ -73,6 +78,19 @@ export default function ClienteDetalhe() {
         </div>
         {cliente.perfil_necessidade && (
           <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{cliente.perfil_necessidade}</p>
+        )}
+        {prioridade && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 p-3">
+            <Zap size={16} className="shrink-0 text-blue-600" />
+            <span className="text-sm text-slate-700">
+              <strong>Próxima ação:</strong> {prioridade.proxima_acao}
+            </span>
+            <span className="ml-auto">
+              <Badge tom={prioridade.temperatura === 'quente' ? 'red' : prioridade.temperatura === 'morno' ? 'yellow' : 'slate'}>
+                {prioridade.temperatura === 'quente' ? '🔥 quente' : prioridade.temperatura === 'morno' ? 'morno' : 'frio'}
+              </Badge>
+            </span>
+          </div>
         )}
       </Card>
 

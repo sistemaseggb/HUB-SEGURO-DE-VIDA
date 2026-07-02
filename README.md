@@ -22,6 +22,7 @@ e registrar os dados; o sistema cuida do resto.
 | Aniversário (cliente ou apólice) se aproxima | Aparece na Régua de Relacionamento e na Central do Dia, com botão de WhatsApp com mensagem pronta |
 | Todo dia às 8h (pg_cron) | O banco **escreve as mensagens do dia** (aniversários, reativação de leads parados) na Central de Mensagens — envio com 1 clique |
 | Planilha importada | Dados históricos entram **sem** disparar tarefas/formulários (flag `importado`), mas com comissão calculada e funil correto |
+| A qualquer momento | O sistema **pontua cada lead** (score de prioridade: etapa + urgência + valor potencial + reunião marcada) e sugere a **Próxima Melhor Ação** — o "Foco de Hoje" do dashboard e a faixa no perfil do cliente |
 
 ## 🧩 Módulos
 
@@ -72,6 +73,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 1. [`supabase/migrations/001_schema_inicial.sql`](supabase/migrations/001_schema_inicial.sql)
 2. [`supabase/migrations/002_automacao_e_planejamento.sql`](supabase/migrations/002_automacao_e_planejamento.sql)
 3. [`supabase/migrations/003_metas_mensagens_relatorios.sql`](supabase/migrations/003_metas_mensagens_relatorios.sql)
+4. [`supabase/migrations/004_codigos_e_inteligencia.sql`](supabase/migrations/004_codigos_e_inteligencia.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -136,6 +138,9 @@ npm run dev
 - [x] Relatórios: comissões por assessor (CSV), motivos de perda, gargalos do funil
 - [x] Importador de planilhas (clientes e apólices, sem disparar automações)
 - [x] Lista inicial de seguradoras (percentuais aproximados — ajustar em Cadastros)
+- [x] Códigos do escritório em clientes e assessores (cadastro, busca, importação)
+- [x] Motor de priorização inteligente (score + Próxima Melhor Ação) no dashboard e no cliente
+- [x] Busca global no topo (clientes e assessores por nome/código/telefone; atalho "/")
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
 - [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)
