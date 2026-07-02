@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Upload, CheckCircle2, AlertTriangle, Download } from 'lucide-react'
+import { Upload, CheckCircle2, AlertTriangle, Download, Landmark } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { parseCSV, acharColuna, normalizar, paraDataISO, paraNumero, baixarCSV } from '../lib/csv'
+import { detectarPlanilha, normalizarComissoes } from '../lib/planilhasComissao'
 import { ETAPAS } from '../lib/constants'
-import { PageHeader, Card, Button, Textarea, Campo, Spinner, ComoFunciona } from '../components/ui'
+import { PageHeader, Card, Button, Textarea, Campo, Input, Spinner, ComoFunciona, Badge } from '../components/ui'
 
 // Importador de planilhas: cole o conteúdo (ou envie um .csv) e o sistema
 // reconhece as colunas sozinho, mostra a prévia e importa em lote.
@@ -56,6 +57,10 @@ export default function Importar() {
   const [resultado, setResultado] = useState(null)
 
   const modelo = MODELOS[modo]
+
+  if (modo === 'comissoes') {
+    return <ImportarComissoes onVoltar={(m) => setModo(m)} />
+  }
 
   function analisar(csvTexto) {
     setResultado(null)
@@ -111,6 +116,10 @@ export default function Importar() {
               {m.rotulo}
             </button>
           ))}
+          <button onClick={() => setModo('comissoes')}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+            Comissões (planilhas das seguradoras)
+          </button>
           <div className="flex-1" />
           <Button variant="ghost" onClick={() => baixarCSV(`modelo-${modo}.csv`, modelo.exemplo[0], [modelo.exemplo[1]])}>
             <Download size={15} /> Baixar planilha modelo
@@ -217,6 +226,227 @@ export default function Importar() {
       </Card>
     </div>
   )
+}
+
+// ─── Importação de COMISSÕES (planilhas mensais das seguradoras) ────────────
+// Detecta sozinho o formato (Azos/Icatu/MAG oficiais ou a planilha interna
+// com Produção/Cód. assessor), normaliza valores e competência e grava em
+// comissoes_importadas. Reimportar o mesmo mês substitui os dados antigos.
+function ImportarComissoes({ onVoltar }) {
+  const [texto, setTexto] = useState('')
+  const [deteccao, setDeteccao] = useState(null) // { perfil, cabecalho, linhas }
+  const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7))
+  const [seguradora, setSeguradora] = useState('')
+  const [importando, setImportando] = useState(false)
+  const [resultado, setResultado] = useState(null)
+
+  function analisar(t) {
+    setResultado(null)
+    const d = detectarPlanilha(t)
+    setDeteccao(d)
+    if (d?.perfil.seguradora) setSeguradora(d.perfil.seguradora)
+  }
+
+  const seguradoraFixa = Boolean(deteccao?.perfil.seguradora)
+  const { registros, avisos } = deteccao
+    ? normalizarComissoes(deteccao, {
+        competenciaPadrao: competencia ? `${competencia}-01` : null,
+        seguradora: seguradora.trim() || 'Seguradora',
+      })
+    : { registros: [], avisos: [] }
+  const total = registros.reduce((s, r) => s + r.valor, 0)
+  const porProducao = registros.reduce((acc, r) => {
+    const k = r.producao || 'A classificar'
+    acc[k] = (acc[k] ?? 0) + r.valor
+    return acc
+  }, {})
+  const brl = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+  async function importar() {
+    setImportando(true)
+    setResultado(await importarComissoes(registros))
+    setImportando(false)
+  }
+
+  return (
+    <div>
+      <PageHeader titulo="Importar Planilhas"
+        subtitulo="Comissões: cole a planilha da seguradora e o sistema reconhece o formato sozinho" />
+
+      <ComoFunciona id="importar-comissoes">
+        Abra a planilha do mês (da seguradora ou a sua interna), selecione as células <strong>com o cabeçalho</strong>,
+        copie e cole abaixo. O sistema reconhece sozinho se é Azos, Icatu, MAG ou a planilha interna com
+        <strong> Produção (Nati/Bruno)</strong> — nada do Bruno é excluído, só separado. Estornos entram como valor
+        negativo. Importar o mesmo mês de novo <strong>substitui</strong> os dados anteriores (pode repetir sem medo).
+        Os totais aparecem em <strong>Relatórios</strong>.
+      </ComoFunciona>
+
+      <Card className="p-5">
+        <div className="mb-4 flex gap-2">
+          <button onClick={() => onVoltar('clientes')}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+            Clientes / Leads
+          </button>
+          <button onClick={() => onVoltar('apolices')}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+            Apólices (vendas já feitas)
+          </button>
+          <button className="rounded-lg border border-blue-600 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700">
+            Comissões (planilhas das seguradoras)
+          </button>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="md:col-span-2">
+            <Campo label="Cole aqui as células da planilha (com a linha de cabeçalho)"
+              dica="Funciona com as planilhas oficiais (Azos, Icatu, MAG) e com as internas mensais.">
+              <Textarea rows={8} value={texto}
+                onChange={(e) => { setTexto(e.target.value); analisar(e.target.value) }}
+                placeholder={'Nome do Segurado\tCódigo assessor\tProdução\tParcela\tComissão Bruta\n...'} />
+            </Campo>
+            <Campo label="...ou envie o arquivo .csv (ex.: relatório da MAG)">
+              <input type="file" accept=".csv,.txt"
+                onChange={(e) => {
+                  const arquivo = e.target.files?.[0]
+                  if (!arquivo) return
+                  const leitor = new FileReader()
+                  leitor.onload = () => { setTexto(leitor.result); analisar(leitor.result) }
+                  leitor.readAsText(arquivo, 'utf-8')
+                }}
+                className="w-full rounded-lg border border-dashed border-slate-300 p-3 text-sm text-slate-500" />
+            </Campo>
+          </div>
+          <div className="space-y-3">
+            <Campo label="Mês de competência" obrigatorio
+              dica="Usado quando a planilha não traz o mês (Icatu/Omint internas).">
+              <Input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} />
+            </Campo>
+            <Campo label="Seguradora" obrigatorio={!seguradoraFixa}
+              dica={seguradoraFixa ? 'Identificada pelo formato da planilha.' : 'Ex.: Azos, Icatu, MAG, Omint...'}>
+              <Input value={seguradora} disabled={seguradoraFixa}
+                onChange={(e) => setSeguradora(e.target.value)} placeholder="Nome da seguradora" />
+            </Campo>
+          </div>
+        </div>
+
+        {texto.trim() && !deteccao && (
+          <p className="mt-4 flex items-center gap-2 text-sm text-red-600">
+            <AlertTriangle size={15} />
+            Formato não reconhecido. Confira se a <strong>linha de cabeçalho</strong> veio junto na colagem.
+          </p>
+        )}
+
+        {deteccao && (
+          <div className="mt-5 border-t border-slate-100 pt-5">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <Badge tom="green"><Landmark size={12} /> {deteccao.perfil.rotulo}</Badge>
+              <Badge>{registros.length} lançamento(s)</Badge>
+              <Badge tom="blue">Total {brl(total)}</Badge>
+              {Object.entries(porProducao).map(([p, v]) => (
+                <Badge key={p} tom={p === 'A classificar' ? 'yellow' : 'slate'}>{p}: {brl(v)}</Badge>
+              ))}
+            </div>
+
+            {avisos.length > 0 && (
+              <ul className="mb-3 list-inside list-disc text-xs text-amber-700">
+                {avisos.map((a, i) => <li key={i}>{a}</li>)}
+              </ul>
+            )}
+
+            <div className="overflow-x-auto rounded-lg border border-slate-100">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500">
+                    {['Cliente', 'Competência', 'Produção', 'Cód. assessor', 'Parcela', 'Receita', 'Valor'].map((h) => (
+                      <th key={h} className="px-3 py-2 font-medium">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {registros.slice(0, 5).map((r, i) => (
+                    <tr key={i} className="border-t border-slate-100">
+                      <td className="px-3 py-2 text-slate-700">{r.cliente_nome}</td>
+                      <td className="px-3 py-2">{r.competencia ?? '—'}</td>
+                      <td className="px-3 py-2">{r.producao ?? '—'}</td>
+                      <td className="px-3 py-2">{r.codigo_assessor ?? '—'}</td>
+                      <td className="px-3 py-2">{r.parcela ?? '—'}</td>
+                      <td className="px-3 py-2">{r.tipo_receita}</td>
+                      <td className={`px-3 py-2 font-medium ${r.valor < 0 ? 'text-red-600' : 'text-slate-800'}`}>{brl(r.valor)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4">
+              <Button onClick={importar}
+                disabled={importando || registros.length === 0 || !seguradora.trim() || registros.some((r) => !r.competencia)}>
+                <Upload size={15} /> {importando ? 'Importando...' : `Importar ${registros.length} lançamento(s)`}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {importando && <Spinner />}
+
+        {resultado && (
+          <div className="mt-5 rounded-lg border border-slate-100 bg-slate-50 p-4">
+            <p className="flex items-center gap-2 font-medium text-slate-800">
+              <CheckCircle2 size={17} className="text-emerald-600" />
+              {resultado.ok} lançamento(s) importado(s)
+              {resultado.substituidos > 0 && ` · ${resultado.substituidos} antigo(s) do mesmo mês substituído(s)`}
+            </p>
+            {resultado.erros.length > 0 && (
+              <ul className="mt-2 list-inside list-disc text-xs text-red-600">
+                {resultado.erros.map((e, i) => <li key={i}>{e}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+async function importarComissoes(registros) {
+  const erros = []
+
+  // vincula assessor (por código) e cliente (por código ou nome) quando existem
+  const [{ data: assessores }, { data: clientes }] = await Promise.all([
+    supabase.from('assessores').select('id, codigo'),
+    supabase.from('clientes').select('id, nome, codigo'),
+  ])
+  const assessorPorCod = new Map((assessores ?? []).filter((a) => a.codigo).map((a) => [normalizar(a.codigo), a.id]))
+  const clientePorCod = new Map((clientes ?? []).filter((c) => c.codigo).map((c) => [normalizar(c.codigo), c.id]))
+  const clientePorNome = new Map((clientes ?? []).map((c) => [normalizar(c.nome), c.id]))
+
+  const linhas = registros.map((r) => ({
+    ...r,
+    id_assessor: (r.codigo_assessor && assessorPorCod.get(normalizar(r.codigo_assessor))) ?? null,
+    id_cliente: (r.codigo_cliente && clientePorCod.get(normalizar(r.codigo_cliente)))
+      ?? clientePorNome.get(normalizar(r.cliente_nome)) ?? null,
+    origem: 'importador',
+  }))
+
+  // substitui o que já existia para as mesmas competência+seguradora
+  const pares = [...new Set(linhas.map((l) => `${l.competencia}|${l.seguradora}`))]
+  let substituidos = 0
+  for (const par of pares) {
+    const [comp, seg] = par.split('|')
+    const { count, error } = await supabase.from('comissoes_importadas')
+      .delete({ count: 'exact' }).eq('competencia', comp).eq('seguradora', seg)
+    if (error) return { ok: 0, substituidos: 0, erros: [`Falha ao limpar dados antigos: ${error.message}`] }
+    substituidos += count ?? 0
+  }
+
+  let ok = 0
+  for (let i = 0; i < linhas.length; i += 200) {
+    const lote = linhas.slice(i, i + 200)
+    const { error, data } = await supabase.from('comissoes_importadas').insert(lote).select('id')
+    if (error) erros.push(`Lote ${i / 200 + 1}: ${error.message}`)
+    else ok += data.length
+  }
+  return { ok, substituidos, erros }
 }
 
 // ─── Importação de CLIENTES ──────────────────────────────────────────────────

@@ -293,9 +293,10 @@ export default function Dashboard() {
   const [metas, setMetas] = useState({})
   const [foco, setFoco] = useState([])
   const [conversao, setConversao] = useState([])
+  const [recebidas, setRecebidas] = useState([])
 
   async function carregar() {
-    const [c, d, r, ce, f, k, cfg, pr, cv] = await Promise.all([
+    const [c, d, r, ce, f, k, cfg, pr, cv, ri] = await Promise.all([
       supabase.from('vw_comissoes_mensal').select('*').limit(6),
       supabase.from('vw_dashboard_mensal').select('*').limit(6),
       supabase.from('vw_ranking_assessores').select('*').limit(5),
@@ -305,6 +306,7 @@ export default function Dashboard() {
       supabase.from('configuracoes').select('meta_premio_mensal, meta_reunioes_mensal, meta_apolices_mensal').single(),
       supabase.from('vw_prioridades_classificadas').select('*').limit(6),
       supabase.from('vw_conversao_mensal').select('*').limit(6),
+      supabase.from('vw_comissoes_importadas_resumo').select('*'),
     ])
     setComissoes(c.data ?? [])
     setDashboard(d.data ?? [])
@@ -315,6 +317,7 @@ export default function Dashboard() {
     setMetas(cfg.data ?? {})
     setFoco(pr.data ?? [])
     setConversao(cv.data ?? [])
+    setRecebidas(ri.data ?? [])
     setCarregando(false)
   }
 
@@ -344,6 +347,28 @@ export default function Dashboard() {
     })),
     [conversao]
   )
+
+  // Comissões importadas das seguradoras: evolução por mês + mês de referência
+  // (o mês atual, ou o último importado enquanto o atual não chega)
+  const recebidasMes = useMemo(() => {
+    const porMes = new Map()
+    for (const r of recebidas) {
+      const m = String(r.competencia).slice(0, 7)
+      const acc = porMes.get(m) ?? { total: 0, nati: 0, bruno: 0 }
+      acc.total += Number(r.total)
+      if (r.producao === 'Nati') acc.nati += Number(r.total)
+      if (r.producao === 'Bruno') acc.bruno += Number(r.total)
+      porMes.set(m, acc)
+    }
+    const meses = [...porMes.keys()].sort()
+    const atual = new Date().toISOString().slice(0, 7)
+    const ref = porMes.has(atual) ? atual : meses[meses.length - 1]
+    return {
+      ref,
+      doMes: porMes.get(ref) ?? { total: 0, nati: 0, bruno: 0 },
+      evolucao: meses.slice(-6).map((m) => ({ rotulo: mesBR(`${m}-01`), valor: porMes.get(m).total })),
+    }
+  }, [recebidas])
 
   if (carregando) return <Spinner />
 
@@ -519,6 +544,32 @@ export default function Dashboard() {
           {evolucao.length === 0
             ? <p className="py-8 text-center text-sm text-slate-400">Cadastre a primeira venda para ver o gráfico.</p>
             : <GraficoBarras dados={evolucao} />}
+        </Card>
+
+        {/* Comissões recebidas das seguradoras (planilhas importadas) */}
+        <Card className="p-5 xl:col-span-2">
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-semibold text-slate-900">
+              Comissão recebida das seguradoras{recebidasMes.ref ? ` — ${mesBR(`${recebidasMes.ref}-01`)}` : ''}
+            </h2>
+            {recebidasMes.ref && (
+              <div className="flex gap-2 text-xs">
+                <Badge tom="green">Natália: {brl(recebidasMes.doMes.nati)}</Badge>
+                <Badge>Bruno: {brl(recebidasMes.doMes.bruno)}</Badge>
+                <Badge tom="blue">Total: {brl(recebidasMes.doMes.total)}</Badge>
+              </div>
+            )}
+          </div>
+          <p className="mb-4 text-xs text-slate-400">
+            Extrato real importado das planilhas mensais —{' '}
+            <Link to="/importar" className="text-blue-600 hover:underline">lance a planilha do mês em Importar → Comissões</Link>
+            {' '}· detalhes em <Link to="/relatorios" className="text-blue-600 hover:underline">Relatórios</Link>
+          </p>
+          {recebidasMes.evolucao.length === 0
+            ? <p className="py-8 text-center text-sm text-slate-400">
+                Nenhuma planilha de comissão importada ainda. Comece em Importar → Comissões.
+              </p>
+            : <GraficoBarras dados={recebidasMes.evolucao} formatoValor={brl} />}
         </Card>
 
         {/* Conversão: leads x fechados */}

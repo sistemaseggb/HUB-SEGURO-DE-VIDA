@@ -22,6 +22,7 @@ e registrar os dados; o sistema cuida do resto.
 | Aniversário (cliente ou apólice) se aproxima | Aparece na Régua de Relacionamento e na Central do Dia, com botão de WhatsApp com mensagem pronta |
 | Todo dia às 8h (pg_cron) | O banco **escreve as mensagens do dia** (aniversários, reativação de leads parados) na Central de Mensagens — envio com 1 clique |
 | Planilha importada | Dados históricos entram **sem** disparar tarefas/formulários (flag `importado`), mas com comissão calculada e funil correto |
+| Planilha de comissão do mês importada | Dashboard ganha o card "Comissão recebida das seguradoras" (Natália × Bruno + evolução) e os Relatórios fecham o mês por seguradora/assessor — reimportar o mesmo mês substitui, sem duplicar |
 | A qualquer momento | O sistema **pontua cada lead** (score de prioridade: etapa + urgência + valor potencial + reunião marcada) e sugere a **Próxima Melhor Ação** — o "Foco de Hoje" do dashboard e a faixa no perfil do cliente |
 | Reunião marcada para amanhã | Entra na Central de Mensagens um **lembrete de confirmação** pronto |
 | Proposta apresentada | Cria sozinho a tarefa de **follow-up em 3 dias** |
@@ -82,6 +83,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 6. [`supabase/migrations/006_crm_interacoes_carteira.sql`](supabase/migrations/006_crm_interacoes_carteira.sql)
 7. [`supabase/migrations/007_assessor_conversao_duplicados.sql`](supabase/migrations/007_assessor_conversao_duplicados.sql)
 8. [`supabase/migrations/008_integracao_outlook.sql`](supabase/migrations/008_integracao_outlook.sql)
+9. [`supabase/migrations/009_comissoes_importadas.sql`](supabase/migrations/009_comissoes_importadas.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -170,6 +172,10 @@ npm run dev
 - [x] Feedback visual (toasts) nas ações de salvar/excluir/enviar
 - [x] Integração com a agenda do Outlook (Microsoft Graph, mão única) — guia
       em [`docs/INTEGRACAO_OUTLOOK.md`](docs/INTEGRACAO_OUTLOOK.md)
+- [x] Importador de comissões das seguradoras (Azos, Icatu, MAG, Omint —
+      formatos oficiais e internos reconhecidos sozinhos; mapa em
+      [`docs/PLANILHAS_COMISSAO.md`](docs/PLANILHAS_COMISSAO.md)) + relatório
+      "Comissões recebidas" com separação Natália × Bruno e exportação CSV
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
 - [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)
