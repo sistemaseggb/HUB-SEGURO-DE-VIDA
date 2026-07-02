@@ -37,7 +37,7 @@ const MODELOS = {
       cod_cliente: { apelidos: ['codigocliente', 'codcliente', 'codigo', 'cod'] },
       seguradora:  { apelidos: ['seguradora', 'cia', 'companhia'], obrigatorio: true },
       premio:     { apelidos: ['premio', 'mensalidade', 'valor'], obrigatorio: true },
-      capital:    { apelidos: ['capital', 'cobertura', 'importancia'], obrigatorio: true },
+      capital:    { apelidos: ['capital', 'cobertura', 'importancia'] },
       vigencia:   { apelidos: ['vigencia', 'inicio', 'emissao', 'data'], obrigatorio: true },
       percentual: { apelidos: ['percentual', 'comissao', '%'] },
       numero:     { apelidos: ['numero', 'apolice', 'contrato'] },
@@ -248,6 +248,7 @@ function ImportarComissoes({ onVoltar }) {
   }
 
   const seguradoraFixa = Boolean(deteccao?.perfil.seguradora)
+  const porLinha = Boolean(deteccao?.perfil.porLinha) // mês/seguradora vêm do arquivo
   const { registros, avisos } = deteccao
     ? normalizarComissoes(deteccao, {
         competenciaPadrao: competencia ? `${competencia}-01` : null,
@@ -317,15 +318,24 @@ function ImportarComissoes({ onVoltar }) {
             </Campo>
           </div>
           <div className="space-y-3">
-            <Campo label="Mês de competência" obrigatorio
-              dica="Usado quando a planilha não traz o mês (Icatu/Omint internas).">
-              <Input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} />
-            </Campo>
-            <Campo label="Seguradora" obrigatorio={!seguradoraFixa}
-              dica={seguradoraFixa ? 'Identificada pelo formato da planilha.' : 'Ex.: Azos, Icatu, MAG, Omint...'}>
-              <Input value={seguradora} disabled={seguradoraFixa}
-                onChange={(e) => setSeguradora(e.target.value)} placeholder="Nome da seguradora" />
-            </Campo>
+            {porLinha ? (
+              <p className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-xs text-emerald-800">
+                Arquivo consolidado do Hub: o <strong>mês</strong> e a <strong>seguradora</strong> vêm
+                de cada linha do próprio arquivo — nada a preencher aqui.
+              </p>
+            ) : (
+              <>
+                <Campo label="Mês de competência" obrigatorio
+                  dica="Usado quando a planilha não traz o mês (Icatu/Omint internas).">
+                  <Input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} />
+                </Campo>
+                <Campo label="Seguradora" obrigatorio={!seguradoraFixa}
+                  dica={seguradoraFixa ? 'Identificada pelo formato da planilha.' : 'Ex.: Azos, Icatu, MAG, Omint...'}>
+                  <Input value={seguradora} disabled={seguradoraFixa}
+                    onChange={(e) => setSeguradora(e.target.value)} placeholder="Nome da seguradora" />
+                </Campo>
+              </>
+            )}
           </div>
         </div>
 
@@ -357,7 +367,7 @@ function ImportarComissoes({ onVoltar }) {
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500">
-                    {['Cliente', 'Competência', 'Produção', 'Cód. assessor', 'Parcela', 'Receita', 'Valor'].map((h) => (
+                    {['Cliente', 'Seguradora', 'Competência', 'Produção', 'Cód. assessor', 'Parcela', 'Receita', 'Valor'].map((h) => (
                       <th key={h} className="px-3 py-2 font-medium">{h}</th>
                     ))}
                   </tr>
@@ -366,6 +376,7 @@ function ImportarComissoes({ onVoltar }) {
                   {registros.slice(0, 5).map((r, i) => (
                     <tr key={i} className="border-t border-slate-100">
                       <td className="px-3 py-2 text-slate-700">{r.cliente_nome}</td>
+                      <td className="px-3 py-2">{r.seguradora}</td>
                       <td className="px-3 py-2">{r.competencia ?? '—'}</td>
                       <td className="px-3 py-2">{r.producao ?? '—'}</td>
                       <td className="px-3 py-2">{r.codigo_assessor ?? '—'}</td>
@@ -380,7 +391,9 @@ function ImportarComissoes({ onVoltar }) {
 
             <div className="mt-4">
               <Button onClick={importar}
-                disabled={importando || registros.length === 0 || !seguradora.trim() || registros.some((r) => !r.competencia)}>
+                disabled={importando || registros.length === 0
+                  || (!porLinha && !seguradora.trim())
+                  || registros.some((r) => !r.competencia)}>
                 <Upload size={15} /> {importando ? 'Importando...' : `Importar ${registros.length} lançamento(s)`}
               </Button>
             </div>
@@ -552,15 +565,17 @@ async function importarApolices({ linhas, mapa }) {
     const idCliente = (codCliente && clientePorCod.get(codCliente)) || clientePorNome.get(normalizar(nomeCliente))
     if (!idCliente) return erros.push(`Linha ${i + 2}: cliente "${nomeCliente}" não encontrado — importe os clientes primeiro`)
     const premio = paraNumero(l[mapa.premio])
-    const capital = paraNumero(l[mapa.capital])
+    // capital é opcional: planilhas históricas (como a geral) não trazem —
+    // entra 0 e pode ser completado depois na apólice do cliente
+    const capital = mapa.capital !== undefined ? paraNumero(l[mapa.capital]) : null
     const vigencia = paraDataISO(l[mapa.vigencia])
-    if (premio == null || capital == null || !vigencia)
-      return erros.push(`Linha ${i + 2} (${nomeCliente}): prêmio, capital ou vigência inválidos`)
+    if (premio == null || !vigencia)
+      return erros.push(`Linha ${i + 2} (${nomeCliente}): prêmio ou vigência inválidos`)
     registros.push({
       id_cliente: idCliente,
       id_seguradora: segPorNome.get(normalizar(l[mapa.seguradora])),
       valor_premio_mensal: premio,
-      capital_segurado: capital,
+      capital_segurado: capital ?? 0,
       data_vigencia: vigencia,
       percentual_comissao: mapa.percentual !== undefined ? paraNumero(l[mapa.percentual]) : null,
       numero_apolice: mapa.numero !== undefined ? l[mapa.numero] || null : null,

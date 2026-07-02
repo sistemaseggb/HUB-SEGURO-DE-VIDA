@@ -24,7 +24,7 @@ export const limparCodigo = (v) => String(v ?? '').trim().replace(/\.0$/, '')
 
 const limparNome = (v) => String(v ?? '').replace(/\s+/g, ' ').trim()
 
-// "202605" ou "05/2026" ou "01/05/2026" → "2026-05-01" (null se não der)
+// "202605", "05/2026", "01/05/2026" ou "2026-05" → "2026-05-01" (null se não der)
 export function paraCompetencia(v) {
   const s = String(v ?? '').trim().replace(/\.0$/, '')
   let m = s.match(/^(\d{4})(\d{2})$/)                 // 202605
@@ -33,6 +33,8 @@ export function paraCompetencia(v) {
   if (m) return `${m[2]}-${m[1].padStart(2, '0')}-01`
   m = s.match(/^\d{1,2}\/(\d{1,2})\/(\d{4})/)         // 01/05/2026
   if (m) return `${m[2]}-${m[1].padStart(2, '0')}-01`
+  m = s.match(/^(\d{4})-(\d{1,2})(-\d{1,2})?$/)       // 2026-05 / 2026-05-01
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-01`
   return null
 }
 
@@ -40,6 +42,44 @@ export function paraCompetencia(v) {
 // A detecção usa "assinaturas": nomes de coluna que só existem naquele formato.
 // A ordem importa — os perfis mais específicos vêm primeiro.
 const PERFIS = [
+  {
+    // Formato consolidado do próprio Hub: aceita vários meses e várias
+    // seguradoras num arquivo só (usado para carga histórica e para colar
+    // de volta um "Detalhado" exportado). Mês e seguradora vêm por linha.
+    id: 'hub_consolidado',
+    rotulo: 'Hub — consolidado (vários meses e seguradoras)',
+    seguradora: null,
+    porLinha: true, // seguradora e competência vêm do próprio arquivo
+    assinatura: ['tipodereceita', 'seguradora'],
+    colunas: {
+      competencia: ['competencia'],
+      seguradora: ['seguradora'],
+      segmento: ['segmento'],
+      cliente: ['cliente'],
+      codigoCliente: ['codcliente', 'codigodocliente'],
+      codigoAssessor: ['codassessor', 'codigoassessor'],
+      producao: ['producao'],
+      parcela: ['parcela'],
+      tipoReceita: ['tipodereceita'],
+      valor: ['valor'],
+    },
+    linha(g) {
+      const receita = normalizar(g('tipoReceita'))
+      return {
+        cliente_nome: String(g('cliente') ?? '').replace(/\s+/g, ' ').trim(),
+        codigo_cliente: limparCodigo(g('codigoCliente')) || null,
+        codigo_assessor: limparCodigo(g('codigoAssessor')) || null,
+        producao: String(g('producao') ?? '').trim() || null,
+        parcela: parseInt(limparCodigo(g('parcela'))) || null,
+        competencia: paraCompetencia(g('competencia')),
+        seguradora: String(g('seguradora') ?? '').trim(),
+        segmento: String(g('segmento') ?? '').trim() || 'individual',
+        tipo_receita: receita.includes('campanha') ? 'campanha'
+          : receita.includes('nova') ? 'venda_nova' : 'recorrente',
+        valor: paraValor(g('valor')),
+      }
+    },
+  },
   {
     id: 'mag_oficial',
     rotulo: 'MAG — relatório oficial (Relação de Comissões)',
@@ -231,6 +271,10 @@ export function normalizarComissoes({ perfil, cabecalho, linhas }, { competencia
     if (!r) return // linha de total/rodapé — ignorada de propósito
     if (!r.cliente_nome || r.valor == null) {
       if (l.some((c) => c !== '')) avisos.push(`Linha ${n + 2} ignorada (sem cliente ou valor)`)
+      return
+    }
+    if (perfil.porLinha && !r.seguradora) {
+      avisos.push(`Linha ${n + 2} ignorada (sem seguradora)`)
       return
     }
     registros.push({
