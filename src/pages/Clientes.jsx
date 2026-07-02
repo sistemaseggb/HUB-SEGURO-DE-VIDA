@@ -102,8 +102,10 @@ export default function Clientes() {
         </div>
 
         {filtrados.length === 0 ? (
-          <EmptyState icone={Users} titulo="Nenhum cliente encontrado"
-            texto="Cadastre o primeiro lead — o vínculo com o assessor é obrigatório para a divisão de comissão." />
+          <EmptyState icone={Users} titulo={busca ? 'Nenhum resultado' : 'Nenhum cliente ainda'}
+            texto={busca ? `Nada encontrado para "${busca}".` : 'Cadastre o primeiro lead — o vínculo com o assessor é obrigatório para a divisão de comissão.'}>
+            {!busca && <Button onClick={() => setModal(true)}><Plus size={16} /> Cadastrar primeiro lead</Button>}
+          </EmptyState>
         ) : (
           <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm">
             <thead>
