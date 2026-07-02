@@ -1,0 +1,155 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { CalendarPlus, MessageCircle, CalendarClock } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { STATUS_REUNIAO, etapaLabel } from '../lib/constants'
+import { whatsapp } from '../lib/format'
+import {
+  PageHeader, Card, Button, Select, Input, Textarea, Campo, Modal, Spinner, EmptyState,
+} from '../components/ui'
+
+// Agenda: tudo que está marcado, agrupado por dia, com ação rápida de status.
+export default function Agenda() {
+  const [reunioes, setReunioes] = useState(null)
+  const [clientes, setClientes] = useState([])
+  const [modal, setModal] = useState(false)
+  const [form, setForm] = useState({ id_cliente: '', data_hora: '', notas: '' })
+
+  const carregar = useCallback(async () => {
+    const desde = new Date(Date.now() - 30 * 86400000).toISOString()
+    const [r, c] = await Promise.all([
+      supabase.from('vw_agenda_reunioes').select('*').gte('data_hora', desde).order('data_hora'),
+      supabase.from('clientes').select('id, nome').order('nome'),
+    ])
+    setReunioes(r.data ?? [])
+    setClientes(c.data ?? [])
+  }, [])
+
+  useEffect(() => { carregar() }, [carregar])
+
+  async function agendar(e) {
+    e.preventDefault()
+    await supabase.from('reunioes').insert({
+      id_cliente: form.id_cliente, data_hora: form.data_hora, notas: form.notas || null,
+    })
+    setModal(false)
+    setForm({ id_cliente: '', data_hora: '', notas: '' })
+    carregar()
+  }
+
+  async function mudarStatus(r, status) {
+    await supabase.from('reunioes').update({ status }).eq('id', r.id)
+    carregar()
+  }
+
+  const grupos = useMemo(() => {
+    if (!reunioes) return []
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
+    const porDia = new Map()
+    for (const r of reunioes) {
+      const d = new Date(r.data_hora); d.setHours(0, 0, 0, 0)
+      const passada = d < hoje && r.status === 'agendada'
+      const chave = passada ? 'ATRASADAS' : d.toISOString().slice(0, 10)
+      if (!porDia.has(chave)) porDia.set(chave, [])
+      porDia.get(chave).push(r)
+    }
+    return [...porDia.entries()].sort(([a], [b]) =>
+      a === 'ATRASADAS' ? -1 : b === 'ATRASADAS' ? 1 : a.localeCompare(b))
+  }, [reunioes])
+
+  if (!reunioes) return <Spinner />
+
+  const rotuloDia = (chave) => {
+    if (chave === 'ATRASADAS') return '⚠️ Aguardando atualização (data já passou)'
+    const hoje = new Date().toISOString().slice(0, 10)
+    const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+    if (chave === hoje) return 'Hoje'
+    if (chave === amanha) return 'Amanhã'
+    const [y, m, d] = chave.split('-')
+    return new Date(Number(y), Number(m) - 1, Number(d))
+      .toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
+  }
+
+  return (
+    <div>
+      <PageHeader titulo="Agenda de Reuniões"
+        subtitulo="Marcar como realizada avança o cliente no funil e cria a tarefa do estudo — sozinho">
+        <Button onClick={() => setModal(true)}><CalendarPlus size={16} /> Agendar reunião</Button>
+      </PageHeader>
+
+      {grupos.length === 0 && (
+        <Card>
+          <EmptyState icone={CalendarClock} titulo="Agenda vazia"
+            texto="Agende a primeira reunião — o cliente avança no funil automaticamente." />
+        </Card>
+      )}
+
+      <div className="space-y-6">
+        {grupos.map(([chave, itens]) => (
+          <div key={chave}>
+            <h2 className={`mb-2 text-sm font-semibold uppercase tracking-wide ${
+              chave === 'ATRASADAS' ? 'text-red-600' : 'text-slate-400'}`}>
+              {rotuloDia(chave)}
+            </h2>
+            <Card>
+              <ul className="divide-y divide-slate-100">
+                {itens.map((r) => (
+                  <li key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                    <span className="w-14 text-lg font-bold text-slate-800">
+                      {new Date(r.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <Link to={`/clientes/${r.id_cliente}`}
+                        className="font-medium text-slate-900 hover:text-blue-700 hover:underline">
+                        {r.nome_cliente}
+                      </Link>
+                      <p className="truncate text-xs text-slate-400">
+                        {etapaLabel(r.status_funil)} · Assessor: {r.nome_assessor}
+                        {r.notas && ` · ${r.notas}`}
+                      </p>
+                    </div>
+                    <Select value={r.status} onChange={(e) => mudarStatus(r, e.target.value)} style={{ width: 'auto' }}>
+                      {STATUS_REUNIAO.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                    </Select>
+                    {whatsapp(r.telefone) && (
+                      <a target="_blank" rel="noreferrer"
+                        href={whatsapp(r.telefone,
+                          `Olá ${r.nome_cliente.split(' ')[0]}! Confirmando nossa reunião de ${new Date(r.data_hora).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}. Até lá! — Natália`)}
+                        className="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50"
+                        title="Confirmar por WhatsApp">
+                        <MessageCircle size={17} />
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </div>
+        ))}
+      </div>
+
+      <Modal aberto={modal} titulo="Agendar reunião" onFechar={() => setModal(false)}>
+        <form onSubmit={agendar} className="space-y-4">
+          <Campo label="Cliente" obrigatorio>
+            <Select value={form.id_cliente} required
+              onChange={(e) => setForm({ ...form, id_cliente: e.target.value })}>
+              <option value="">Selecione...</option>
+              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </Select>
+          </Campo>
+          <Campo label="Data e hora" obrigatorio>
+            <Input type="datetime-local" required value={form.data_hora}
+              onChange={(e) => setForm({ ...form, data_hora: e.target.value })} />
+          </Campo>
+          <Campo label="Pauta / notas">
+            <Textarea value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
+          </Campo>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
+            <Button type="submit">Agendar</Button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  )
+}

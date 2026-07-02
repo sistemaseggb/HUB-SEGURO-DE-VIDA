@@ -5,13 +5,13 @@ import {
   CalendarPlus, FileSignature, ClipboardList,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { ETAPAS, STATUS_REUNIAO, TIPO_TAREFA_ICONE } from '../lib/constants'
+import { ETAPAS, etapaLabel, STATUS_REUNIAO, TIPO_TAREFA_ICONE } from '../lib/constants'
 import { brl, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib/format'
 import {
   Button, Card, Input, Select, Textarea, Campo, Modal, Badge, Spinner,
 } from '../components/ui'
 
-const ABAS = ['Planejamento', 'Reuniões', 'Apólices', 'Formulário', 'Tarefas']
+const ABAS = ['Planejamento', 'Reuniões', 'Apólices', 'Formulário', 'Tarefas', 'Histórico']
 
 export default function ClienteDetalhe() {
   const { id } = useParams()
@@ -93,7 +93,48 @@ export default function ClienteDetalhe() {
       {aba === 'Apólices' && <AbaApolices idCliente={id} onMudanca={carregar} />}
       {aba === 'Formulário' && <AbaFormulario idCliente={id} cliente={cliente} />}
       {aba === 'Tarefas' && <AbaTarefas idCliente={id} />}
+      {aba === 'Histórico' && <AbaHistorico idCliente={id} cliente={cliente} />}
     </div>
+  )
+}
+
+// ─── HISTÓRICO: linha do tempo do funil (gravada automaticamente) ────────────
+function AbaHistorico({ idCliente, cliente }) {
+  const [eventos, setEventos] = useState(null)
+
+  useEffect(() => {
+    supabase.from('historico_funil').select('*').eq('id_cliente', idCliente)
+      .order('mudou_em', { ascending: false })
+      .then(({ data }) => setEventos(data ?? []))
+  }, [idCliente])
+
+  if (!eventos) return <Spinner />
+
+  return (
+    <Card className="p-5">
+      {cliente.motivo_perda && (
+        <p className="mb-4 rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">
+          Motivo da perda registrado: {cliente.motivo_perda}
+        </p>
+      )}
+      {eventos.length === 0
+        ? <p className="py-6 text-center text-sm text-slate-400">Sem movimentações registradas.</p>
+        : (
+          <ol className="relative ml-3 space-y-4 border-l-2 border-slate-100 pl-5">
+            {eventos.map((e) => (
+              <li key={e.id} className="relative">
+                <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full border-2 border-white bg-blue-500" />
+                <p className="text-sm text-slate-800">
+                  {e.etapa_anterior
+                    ? <>Moveu de <strong>{etapaLabel(e.etapa_anterior)}</strong> para <strong>{etapaLabel(e.etapa_nova)}</strong></>
+                    : <>Entrou no funil em <strong>{etapaLabel(e.etapa_nova)}</strong></>}
+                </p>
+                <p className="text-xs text-slate-400">{dataHoraBR(e.mudou_em)}</p>
+              </li>
+            ))}
+          </ol>
+        )}
+    </Card>
   )
 }
 

@@ -1,15 +1,20 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard, KanbanSquare, Users, HeartHandshake,
-  Settings, LogOut, ShieldCheck,
+  Settings, LogOut, ShieldCheck, CalendarDays, MessageSquareText,
+  BarChart3, Upload,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const MENU = [
   { para: '/', rotulo: 'Dashboard', icone: LayoutDashboard, fim: true },
   { para: '/pipeline', rotulo: 'Pipeline', icone: KanbanSquare },
+  { para: '/agenda', rotulo: 'Agenda', icone: CalendarDays },
   { para: '/clientes', rotulo: 'Clientes', icone: Users },
   { para: '/pos-venda', rotulo: 'Pós-Venda', icone: HeartHandshake },
+  { para: '/mensagens', rotulo: 'Mensagens', icone: MessageSquareText },
+  { para: '/relatorios', rotulo: 'Relatórios', icone: BarChart3 },
+  { para: '/importar', rotulo: 'Importar', icone: Upload },
   { para: '/cadastros', rotulo: 'Cadastros', icone: Settings },
 ]
 

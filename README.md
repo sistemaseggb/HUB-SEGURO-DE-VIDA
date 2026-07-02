@@ -20,6 +20,8 @@ e registrar os dados; o sistema cuida do resto.
 | O cliente conclui o formulário | Cria a tarefa "conferir dados e emitir apólice" |
 | Cliente muda de etapa no Kanban | Zera o contador de dias parados e grava o histórico do funil |
 | Aniversário (cliente ou apólice) se aproxima | Aparece na Régua de Relacionamento e na Central do Dia, com botão de WhatsApp com mensagem pronta |
+| Todo dia às 8h (pg_cron) | O banco **escreve as mensagens do dia** (aniversários, reativação de leads parados) na Central de Mensagens — envio com 1 clique |
+| Planilha importada | Dados históricos entram **sem** disparar tarefas/formulários (flag `importado`), mas com comissão calculada e funil correto |
 
 ## 🧩 Módulos
 
@@ -38,8 +40,18 @@ e registrar os dados; o sistema cuida do resto.
   sem login, seguro por token via RPC. Campos configuráveis em
   `src/lib/formularioConfig.js`.
 - **Pós-Venda** — carteira de apólices ativas + Régua de Relacionamento.
-- **Cadastros** — assessores, seguradoras (com % de comissão padrão) e a regra
-  de divisão de comissão + limites de alerta do Kanban.
+- **Agenda** — reuniões agrupadas por dia (atrasadas em destaque), confirmação
+  por WhatsApp e mudança de status em 1 clique.
+- **Central de Mensagens** — fila abastecida automaticamente pelo banco
+  (aniversários de cliente/apólice e reativação de leads parados); cada
+  mensagem sai pronta, é enviada com 1 clique e marcada como tratada.
+- **Relatórios** — comissões a pagar por assessor (fechamento do mês, com
+  exportação CSV), motivos de perda e tempo médio por etapa do funil.
+- **Importar** — traga as planilhas históricas (clientes e apólices): colunas
+  detectadas automaticamente, prévia antes de importar, criação automática de
+  assessores/seguradoras que faltam e planilha modelo para download.
+- **Cadastros** — assessores, seguradoras (com % de comissão padrão), divisão
+  de comissão, limites de alerta do Kanban e **metas mensais**.
 
 ---
 
@@ -59,6 +71,12 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 
 1. [`supabase/migrations/001_schema_inicial.sql`](supabase/migrations/001_schema_inicial.sql)
 2. [`supabase/migrations/002_automacao_e_planejamento.sql`](supabase/migrations/002_automacao_e_planejamento.sql)
+3. [`supabase/migrations/003_metas_mensagens_relatorios.sql`](supabase/migrations/003_metas_mensagens_relatorios.sql)
+
+> Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
+> extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
+> pg_cron). Sem ela tudo funciona igual — só que pelo botão "Gerar mensagens
+> de hoje" na Central de Mensagens.
 
 ### 3. Criar o usuário de acesso (login)
 
@@ -112,7 +130,12 @@ npm run dev
 - [x] Módulo 4 — Dashboard gerencial com Top 5 e comissões divididas
 - [x] Extra — Login (Supabase Auth), Central do Dia, motor de automações,
       formulário de onboarding público, gerador de proposta
-- [ ] Importar planilhas de clientes/apólices existentes (aguardando arquivos)
-- [ ] Lista oficial de seguradoras (aguardando dados)
-- [ ] Alinhar o formulário com o oficial (gbplanejamento.netlify.app)
-- [ ] Envio automático de WhatsApp/e-mail (Edge Functions + pg_cron)
+- [x] Metas mensais com acompanhamento no dashboard
+- [x] Agenda de reuniões com confirmação por WhatsApp
+- [x] Central de Mensagens com geração diária automática (pg_cron)
+- [x] Relatórios: comissões por assessor (CSV), motivos de perda, gargalos do funil
+- [x] Importador de planilhas (clientes e apólices, sem disparar automações)
+- [x] Lista inicial de seguradoras (percentuais aproximados — ajustar em Cadastros)
+- [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
+- [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
+- [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)

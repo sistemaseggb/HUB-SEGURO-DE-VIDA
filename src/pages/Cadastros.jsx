@@ -181,6 +181,9 @@ function PainelSplit() {
       split_escritorio_pct: cfg.split_escritorio_pct,
       dias_alerta_amarelo: cfg.dias_alerta_amarelo,
       dias_alerta_vermelho: cfg.dias_alerta_vermelho,
+      meta_premio_mensal: cfg.meta_premio_mensal || 0,
+      meta_reunioes_mensal: cfg.meta_reunioes_mensal || 0,
+      meta_apolices_mensal: cfg.meta_apolices_mensal || 0,
     }).eq('id', 1)
     setMsg(error ? `Erro: ${error.message}` : 'Salvo! Vale para as próximas vendas.')
   }
@@ -214,6 +217,17 @@ function PainelSplit() {
           </Campo>
           <Campo label="Alerta vermelho (dias parado)">
             <Input type="number" min="1" value={cfg.dias_alerta_vermelho} onChange={set('dias_alerta_vermelho')} />
+          </Campo>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <Campo label="Meta: prêmio/mês (R$)" dica="0 = sem meta">
+            <Input type="number" step="0.01" min="0" value={cfg.meta_premio_mensal ?? 0} onChange={set('meta_premio_mensal')} />
+          </Campo>
+          <Campo label="Meta: reuniões/mês">
+            <Input type="number" min="0" value={cfg.meta_reunioes_mensal ?? 0} onChange={set('meta_reunioes_mensal')} />
+          </Campo>
+          <Campo label="Meta: apólices/mês">
+            <Input type="number" min="0" value={cfg.meta_apolices_mensal ?? 0} onChange={set('meta_apolices_mensal')} />
           </Campo>
         </div>
         <div className="flex items-center gap-3">

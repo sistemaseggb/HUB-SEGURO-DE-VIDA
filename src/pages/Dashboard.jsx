@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   CalendarCheck, Wallet, FileSignature, TrendingUp, CheckCircle2,
-  MessageCircle, AlertTriangle, Trophy, Cake,
+  MessageCircle, AlertTriangle, Trophy, Cake, Target, Percent, Timer, ShieldCheck,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, mesBR, dataBR, whatsapp } from '../lib/format'
@@ -90,6 +90,27 @@ function SplitComissao({ natalia, assessor, escritorio }) {
   )
 }
 
+// Barra de progresso da meta mensal
+function BarraMeta({ rotulo, atual, meta, formato = (v) => v }) {
+  const pct = Math.min((atual / meta) * 100, 100)
+  const bateu = atual >= meta
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="text-sm text-slate-600">{rotulo}</span>
+        <span className={`text-sm font-semibold ${bateu ? 'text-emerald-600' : 'text-slate-800'}`}>
+          {formato(atual)} / {formato(meta)} {bateu && '🎯'}
+        </span>
+      </div>
+      <div className="h-2.5 rounded-full bg-slate-100">
+        <div className={`h-2.5 rounded-full transition-all ${bateu ? 'bg-emerald-500' : 'bg-blue-600'}`}
+          style={{ width: `${pct}%` }} />
+      </div>
+      <p className="mt-1 text-xs text-slate-400">{Math.round(pct)}% da meta</p>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const [carregando, setCarregando] = useState(true)
   const [comissoes, setComissoes] = useState([])
@@ -97,20 +118,26 @@ export default function Dashboard() {
   const [ranking, setRanking] = useState([])
   const [central, setCentral] = useState([])
   const [funil, setFunil] = useState([])
+  const [kpis, setKpis] = useState({})
+  const [metas, setMetas] = useState({})
 
   async function carregar() {
-    const [c, d, r, ce, f] = await Promise.all([
+    const [c, d, r, ce, f, k, cfg] = await Promise.all([
       supabase.from('vw_comissoes_mensal').select('*').limit(6),
       supabase.from('vw_dashboard_mensal').select('*').limit(6),
       supabase.from('vw_ranking_assessores').select('*').limit(5),
       supabase.from('vw_central_dia').select('*').limit(20),
       supabase.from('vw_funil_contagem').select('*'),
+      supabase.from('vw_kpis_gerais').select('*').single(),
+      supabase.from('configuracoes').select('meta_premio_mensal, meta_reunioes_mensal, meta_apolices_mensal').single(),
     ])
     setComissoes(c.data ?? [])
     setDashboard(d.data ?? [])
     setRanking(r.data ?? [])
     setCentral(ce.data ?? [])
     setFunil(f.data ?? [])
+    setKpis(k.data ?? {})
+    setMetas(cfg.data ?? {})
     setCarregando(false)
   }
 
@@ -154,7 +181,7 @@ export default function Dashboard() {
       </div>
 
       {/* KPIs do mês */}
-      <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatTile rotulo="Reuniões realizadas no mês" valor={mesAtual.dash.reunioes_realizadas ?? 0}
           icone={CalendarCheck} />
         <StatTile rotulo="Apólices vendidas no mês" valor={mesAtual.dash.apolices_vendidas ?? 0}
@@ -164,6 +191,44 @@ export default function Dashboard() {
         <StatTile rotulo="Sua comissão do mês" valor={brl(mesAtual.com.comissao_natalia ?? 0)}
           detalhe="parte da Natália na divisão" icone={Wallet} corIcone="text-amber-600 bg-amber-50" />
       </div>
+
+      {/* KPIs históricos */}
+      <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <StatTile rotulo="Taxa de conversão geral" valor={`${kpis.taxa_conversao_pct ?? 0}%`}
+          detalhe="fechados ÷ (fechados + perdidos)" icone={Percent} corIcone="text-blue-600 bg-blue-50" />
+        <StatTile rotulo="Ticket médio (prêmio mensal)" valor={brl(kpis.ticket_medio_premio ?? 0)}
+          icone={TrendingUp} corIcone="text-emerald-600 bg-emerald-50" />
+        <StatTile rotulo="Dias médios até fechar" valor={kpis.dias_medios_ate_fechar ?? '—'}
+          detalhe="do cadastro do lead à venda" icone={Timer} corIcone="text-violet-600 bg-violet-50" />
+        <StatTile rotulo="Capital total da carteira" valor={brlCompacto(kpis.capital_total_carteira ?? 0)}
+          detalhe="soma das apólices ativas" icone={ShieldCheck} corIcone="text-amber-600 bg-amber-50" />
+      </div>
+
+      {/* Metas do mês */}
+      {(Number(metas.meta_premio_mensal) > 0 || Number(metas.meta_reunioes_mensal) > 0 || Number(metas.meta_apolices_mensal) > 0) && (
+        <Card className="mb-6 p-5">
+          <h2 className="mb-4 flex items-center gap-2 font-semibold text-slate-900">
+            <Target size={18} className="text-blue-600" /> Metas do mês
+          </h2>
+          <div className="grid gap-5 md:grid-cols-3">
+            {Number(metas.meta_premio_mensal) > 0 && (
+              <BarraMeta rotulo="Prêmio vendido"
+                atual={Number(mesAtual.dash.premio_mensal_vendido ?? 0)}
+                meta={Number(metas.meta_premio_mensal)} formato={brlCompacto} />
+            )}
+            {Number(metas.meta_reunioes_mensal) > 0 && (
+              <BarraMeta rotulo="Reuniões realizadas"
+                atual={Number(mesAtual.dash.reunioes_realizadas ?? 0)}
+                meta={Number(metas.meta_reunioes_mensal)} />
+            )}
+            {Number(metas.meta_apolices_mensal) > 0 && (
+              <BarraMeta rotulo="Apólices vendidas"
+                atual={Number(mesAtual.dash.apolices_vendidas ?? 0)}
+                meta={Number(metas.meta_apolices_mensal)} />
+            )}
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-3">
         {/* Central do dia */}
