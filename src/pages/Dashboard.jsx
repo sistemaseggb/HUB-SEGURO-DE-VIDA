@@ -1,0 +1,297 @@
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import {
+  CalendarCheck, Wallet, FileSignature, TrendingUp, CheckCircle2,
+  MessageCircle, AlertTriangle, Trophy, Cake,
+} from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { brl, brlCompacto, mesBR, dataBR, whatsapp } from '../lib/format'
+import { CHART, etapaLabel } from '../lib/constants'
+import { Card, StatTile, Spinner, Badge, EmptyState } from '../components/ui'
+
+// ─── Gráfico de barras (série única, tooltip por barra) ──────────────────────
+function GraficoBarras({ dados, formatoValor = brlCompacto }) {
+  const [hover, setHover] = useState(null)
+  const max = Math.max(...dados.map((d) => d.valor), 1)
+  const W = 560, H = 180, PAD = 8, EIXO = 22
+  const bw = Math.min(48, (W - PAD * 2) / dados.length - 8)
+
+  return (
+    <div className="relative">
+      <svg viewBox={`0 0 ${W} ${H + EIXO}`} className="w-full">
+        {[0.25, 0.5, 0.75, 1].map((f) => (
+          <line key={f} x1={PAD} x2={W - PAD} y1={H - H * f} y2={H - H * f}
+            stroke={CHART.grid} strokeWidth="1" />
+        ))}
+        <line x1={PAD} x2={W - PAD} y1={H} y2={H} stroke={CHART.eixo} strokeWidth="1" />
+        {dados.map((d, i) => {
+          const x = PAD + ((W - PAD * 2) / dados.length) * (i + 0.5) - bw / 2
+          const h = Math.max((d.valor / max) * (H - 12), d.valor > 0 ? 3 : 0)
+          return (
+            <g key={d.rotulo}>
+              {/* alvo de hover maior que a barra */}
+              <rect x={x - 6} y={0} width={bw + 12} height={H} fill="transparent"
+                onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} />
+              <rect x={x} y={H - h} width={bw} height={h} rx="4"
+                fill={CHART.serie1} opacity={hover === null || hover === i ? 1 : 0.45}
+                style={{ pointerEvents: 'none' }} />
+              {/* cantos inferiores retos (âncora na linha de base) */}
+              {h > 4 && <rect x={x} y={H - 4} width={bw} height={4} fill={CHART.serie1}
+                opacity={hover === null || hover === i ? 1 : 0.45} style={{ pointerEvents: 'none' }} />}
+              <text x={x + bw / 2} y={H + 15} textAnchor="middle" fontSize="11" fill={CHART.textoMudo}>
+                {d.rotulo}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+      {hover !== null && (
+        <div
+          className="pointer-events-none absolute -top-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs shadow-md"
+          style={{ left: `${((hover + 0.5) / dados.length) * 100}%`, transform: 'translateX(-50%)' }}
+        >
+          <span className="font-semibold text-slate-900">{formatoValor(dados[hover].valor)}</span>
+          <span className="ml-1 text-slate-400">{dados[hover].rotulo}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Barra empilhada da divisão de comissão (rótulos diretos: regra de alívio) ─
+function SplitComissao({ natalia, assessor, escritorio }) {
+  const total = natalia + assessor + escritorio
+  if (total <= 0) return <p className="text-sm text-slate-400">Sem vendas no período.</p>
+  const partes = [
+    { rotulo: 'Natália', valor: natalia, cor: CHART.serie1 },
+    { rotulo: 'Assessores', valor: assessor, cor: CHART.serie2 },
+    { rotulo: 'Escritório', valor: escritorio, cor: CHART.serie3 },
+  ]
+  return (
+    <div>
+      <div className="flex h-7 w-full overflow-hidden rounded-lg" style={{ gap: 2 }}>
+        {partes.map((p) => (
+          <div key={p.rotulo} style={{ width: `${(p.valor / total) * 100}%`, background: p.cor }}
+            className="min-w-[4px] rounded-sm" title={`${p.rotulo}: ${brl(p.valor)}`} />
+        ))}
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {partes.map((p) => (
+          <div key={p.rotulo} className="flex items-start gap-2">
+            <span className="mt-1 h-3 w-3 shrink-0 rounded-sm" style={{ background: p.cor }} />
+            <div>
+              <p className="text-xs text-slate-500">{p.rotulo}</p>
+              <p className="text-sm font-semibold text-slate-900">{brl(p.valor)}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export default function Dashboard() {
+  const [carregando, setCarregando] = useState(true)
+  const [comissoes, setComissoes] = useState([])
+  const [dashboard, setDashboard] = useState([])
+  const [ranking, setRanking] = useState([])
+  const [central, setCentral] = useState([])
+  const [funil, setFunil] = useState([])
+
+  async function carregar() {
+    const [c, d, r, ce, f] = await Promise.all([
+      supabase.from('vw_comissoes_mensal').select('*').limit(6),
+      supabase.from('vw_dashboard_mensal').select('*').limit(6),
+      supabase.from('vw_ranking_assessores').select('*').limit(5),
+      supabase.from('vw_central_dia').select('*').limit(20),
+      supabase.from('vw_funil_contagem').select('*'),
+    ])
+    setComissoes(c.data ?? [])
+    setDashboard(d.data ?? [])
+    setRanking(r.data ?? [])
+    setCentral(ce.data ?? [])
+    setFunil(f.data ?? [])
+    setCarregando(false)
+  }
+
+  useEffect(() => { carregar() }, [])
+
+  async function concluirTarefa(id) {
+    await supabase.from('tarefas').update({ concluida: true, concluida_em: new Date().toISOString() }).eq('id', id)
+    setCentral((c) => c.filter((i) => !(i.tipo === 'tarefa' && i.id_item === id)))
+  }
+
+  const mesAtual = useMemo(() => {
+    const chave = new Date().toISOString().slice(0, 7)
+    return {
+      dash: dashboard.find((d) => String(d.mes).startsWith(chave)) ?? {},
+      com: comissoes.find((d) => String(d.mes).startsWith(chave)) ?? {},
+    }
+  }, [dashboard, comissoes])
+
+  const evolucao = useMemo(
+    () => [...dashboard].reverse().map((d) => ({ rotulo: mesBR(d.mes), valor: Number(d.premio_mensal_vendido) })),
+    [dashboard]
+  )
+
+  if (carregando) return <Spinner />
+
+  const tarefas = central.filter((i) => i.tipo === 'tarefa')
+  const aniversarios = central.filter((i) => i.tipo === 'aniversario')
+  const parados = central.filter((i) => i.tipo === 'lead_parado')
+  const maxFunil = Math.max(...funil.map((f) => f.total), 1)
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-slate-900">
+          Bom dia, Natália! 👋
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+          {' · '}{tarefas.length} tarefa(s) na sua central do dia
+        </p>
+      </div>
+
+      {/* KPIs do mês */}
+      <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <StatTile rotulo="Reuniões realizadas no mês" valor={mesAtual.dash.reunioes_realizadas ?? 0}
+          icone={CalendarCheck} />
+        <StatTile rotulo="Apólices vendidas no mês" valor={mesAtual.dash.apolices_vendidas ?? 0}
+          icone={FileSignature} corIcone="text-emerald-600 bg-emerald-50" />
+        <StatTile rotulo="Prêmio mensal vendido" valor={brlCompacto(mesAtual.dash.premio_mensal_vendido ?? 0)}
+          icone={TrendingUp} corIcone="text-violet-600 bg-violet-50" />
+        <StatTile rotulo="Sua comissão do mês" valor={brl(mesAtual.com.comissao_natalia ?? 0)}
+          detalhe="parte da Natália na divisão" icone={Wallet} corIcone="text-amber-600 bg-amber-50" />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-3">
+        {/* Central do dia */}
+        <Card className="p-5 xl:row-span-2">
+          <h2 className="mb-4 font-semibold text-slate-900">Central do Dia</h2>
+
+          {central.length === 0 && (
+            <EmptyState icone={CheckCircle2} titulo="Tudo em dia!"
+              texto="Nenhuma tarefa, aniversário ou lead parado exigindo ação." />
+          )}
+
+          {parados.length > 0 && (
+            <div className="mb-4 rounded-lg border border-red-100 bg-red-50 p-3">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-red-700">
+                <AlertTriangle size={14} /> Leads parados há muito tempo
+              </p>
+              {parados.map((i) => (
+                <Link key={i.id_item} to={`/clientes/${i.id_cliente}`}
+                  className="block truncate py-0.5 text-sm text-red-800 hover:underline">
+                  {i.titulo}
+                </Link>
+              ))}
+            </div>
+          )}
+
+          <ul className="space-y-2">
+            {tarefas.map((t) => (
+              <li key={t.id_item} className="flex items-start gap-2 rounded-lg border border-slate-100 p-2.5">
+                <button onClick={() => concluirTarefa(t.id_item)} title="Concluir"
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-slate-800">{t.titulo}</p>
+                  <p className="text-xs text-slate-400">
+                    {t.nome_cliente && <Link to={`/clientes/${t.id_cliente}`} className="hover:underline">{t.nome_cliente}</Link>}
+                    {' · '}{dataBR(t.data_ref)}
+                    {t.atrasado && <Badge tom="red">atrasada</Badge>}
+                  </p>
+                </div>
+              </li>
+            ))}
+            {aniversarios.map((a) => (
+              <li key={`${a.id_item}-${a.titulo}`} className="flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50/60 p-2.5">
+                <Cake size={16} className="mt-0.5 shrink-0 text-amber-500" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-slate-800">{a.titulo}</p>
+                  <p className="text-xs text-slate-400">{dataBR(a.data_ref)}</p>
+                </div>
+                {whatsapp(a.telefone) && (
+                  <a href={whatsapp(a.telefone, `Olá ${a.nome_cliente?.split(' ')[0]}! 🎉`)} target="_blank" rel="noreferrer"
+                    className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50" title="Enviar WhatsApp">
+                    <MessageCircle size={16} />
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        {/* Evolução de vendas */}
+        <Card className="p-5 xl:col-span-2">
+          <h2 className="mb-1 font-semibold text-slate-900">Prêmio mensal vendido — últimos meses</h2>
+          <p className="mb-4 text-xs text-slate-400">Soma dos prêmios mensais das apólices cadastradas em cada mês</p>
+          {evolucao.length === 0
+            ? <p className="py-8 text-center text-sm text-slate-400">Cadastre a primeira venda para ver o gráfico.</p>
+            : <GraficoBarras dados={evolucao} />}
+        </Card>
+
+        {/* Comissões divididas */}
+        <Card className="p-5">
+          <h2 className="mb-1 font-semibold text-slate-900">Divisão da comissão — mês atual</h2>
+          <p className="mb-4 text-xs text-slate-400">Calculada automaticamente em cada venda</p>
+          <SplitComissao
+            natalia={Number(mesAtual.com.comissao_natalia ?? 0)}
+            assessor={Number(mesAtual.com.comissao_assessor ?? 0)}
+            escritorio={Number(mesAtual.com.comissao_escritorio ?? 0)}
+          />
+        </Card>
+
+        {/* Ranking */}
+        <Card className="p-5">
+          <h2 className="mb-4 flex items-center gap-2 font-semibold text-slate-900">
+            <Trophy size={18} className="text-amber-500" /> Top 5 Assessores
+          </h2>
+          {ranking.filter((r) => r.total_vendas > 0).length === 0
+            ? <p className="text-sm text-slate-400">Ainda sem vendas convertidas.</p>
+            : (
+              <ol className="space-y-3">
+                {ranking.map((r, i) => (
+                  <li key={r.id} className="flex items-center gap-3">
+                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                      i === 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+                      {i + 1}º
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-slate-800">{r.nome}</p>
+                      <p className="text-xs text-slate-400">
+                        {r.total_vendas} venda(s) · conversão {r.taxa_conversao_pct}%
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold text-slate-700">{brlCompacto(r.comissao_total)}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+        </Card>
+
+        {/* Funil macro */}
+        <Card className="p-5 xl:col-span-3">
+          <h2 className="mb-4 font-semibold text-slate-900">Visão do funil</h2>
+          <div className="space-y-2">
+            {funil.map((f, i) => (
+              <Link key={f.status_funil} to="/pipeline" className="group flex items-center gap-3">
+                <span className="w-44 shrink-0 text-right text-xs text-slate-500">{etapaLabel(f.status_funil)}</span>
+                <div className="h-6 flex-1 rounded-r-md bg-slate-50">
+                  <div className="flex h-6 items-center rounded-r-md pl-2 group-hover:opacity-80"
+                    style={{
+                      width: `${Math.max((f.total / maxFunil) * 100, 6)}%`,
+                      background: CHART.sequencial[Math.min(i + 1, CHART.sequencial.length - 1)],
+                    }}>
+                    <span className="text-xs font-semibold text-white">{f.total}</span>
+                  </div>
+                </div>
+              </Link>
+            ))}
+            {funil.length === 0 && <p className="text-sm text-slate-400">Nenhum cliente cadastrado ainda.</p>}
+          </div>
+        </Card>
+      </div>
+    </div>
+  )
+}

@@ -1,29 +1,53 @@
 import { useEffect, useState } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
+import Layout from './components/Layout'
+import Login from './pages/Login'
+import Dashboard from './pages/Dashboard'
+import Pipeline from './pages/Pipeline'
+import Clientes from './pages/Clientes'
+import ClienteDetalhe from './pages/ClienteDetalhe'
+import PosVenda from './pages/PosVenda'
+import Cadastros from './pages/Cadastros'
+import Proposta from './pages/Proposta'
+import FormularioPublico from './pages/FormularioPublico'
+import { Spinner } from './components/ui'
 
-// Tela provisória apenas para validar a conexão com o Supabase.
-// Os módulos do Hub (Cadastros, Pipeline, Pós-Venda, Dashboard) entram nas próximas etapas.
-function App() {
-  const [status, setStatus] = useState('verificando...')
+export default function App() {
+  const [sessao, setSessao] = useState(undefined) // undefined = ainda verificando
 
   useEffect(() => {
-    supabase
-      .from('assessores')
-      .select('id', { count: 'exact', head: true })
-      .then(({ error, count }) => {
-        if (error) setStatus(`Erro na conexão: ${error.message}`)
-        else setStatus(`Conectado! ${count ?? 0} assessor(es) cadastrado(s).`)
-      })
+    supabase.auth.getSession().then(({ data }) => setSessao(data.session))
+    const { data: sub } = supabase.auth.onAuthStateChange((_evento, s) => setSessao(s))
+    return () => sub.subscription.unsubscribe()
   }, [])
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-8">
-      <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-bold">Hub Seguro de Vida</h1>
-        <p className="mt-2 text-slate-600">Status do Supabase: {status}</p>
-      </div>
-    </main>
+    <BrowserRouter>
+      <Routes>
+        {/* Rota PÚBLICA: formulário do cliente, sem login */}
+        <Route path="/f/:token" element={<FormularioPublico />} />
+
+        {/* Rotas internas: exigem login */}
+        {sessao === undefined ? (
+          <Route path="*" element={<Spinner />} />
+        ) : !sessao ? (
+          <Route path="*" element={<Login />} />
+        ) : (
+          <>
+            <Route path="/proposta/:id" element={<Proposta />} />
+            <Route element={<Layout />}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/pipeline" element={<Pipeline />} />
+              <Route path="/clientes" element={<Clientes />} />
+              <Route path="/clientes/:id" element={<ClienteDetalhe />} />
+              <Route path="/pos-venda" element={<PosVenda />} />
+              <Route path="/cadastros" element={<Cadastros />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          </>
+        )}
+      </Routes>
+    </BrowserRouter>
   )
 }
-
-export default App
