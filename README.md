@@ -80,6 +80,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 4. [`supabase/migrations/004_codigos_e_inteligencia.sql`](supabase/migrations/004_codigos_e_inteligencia.sql)
 5. [`supabase/migrations/005_documentos.sql`](supabase/migrations/005_documentos.sql)
 6. [`supabase/migrations/006_crm_interacoes_carteira.sql`](supabase/migrations/006_crm_interacoes_carteira.sql)
+7. [`supabase/migrations/007_assessor_conversao_duplicados.sql`](supabase/migrations/007_assessor_conversao_duplicados.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -153,6 +154,9 @@ npm run dev
 - [x] Mensagens automáticas editáveis + lembrete de reunião + follow-up de proposta
 - [x] Pós-venda robusto: receita recorrente, carteira por seguradora, retenção
 - [x] Backup/exportação de clientes e apólices em CSV
+- [x] Assessor 360 (página do assessor com leads, conversão e comissão)
+- [x] Gráfico de conversão mensal (leads criados × fechados)
+- [x] Detector de clientes duplicados (aviso na tela de Clientes)
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
 - [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)

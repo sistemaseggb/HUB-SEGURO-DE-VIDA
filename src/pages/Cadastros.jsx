@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Plus, Percent, Save, MessageSquareText } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
@@ -63,9 +64,9 @@ function PainelAssessores() {
         {lista.map((a) => (
           <li key={a.id} className="flex items-center gap-3 py-3">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-slate-800">
+              <Link to={`/assessores/${a.id}`} className="text-sm font-medium text-slate-800 hover:text-blue-700 hover:underline">
                 {a.nome} {a.codigo && <span className="font-mono text-xs text-slate-400">· {a.codigo}</span>}
-              </p>
+              </Link>
               <p className="truncate text-xs text-slate-400">{[a.telefone, a.email].filter(Boolean).join(' · ') || '—'}</p>
             </div>
             <button onClick={() => alternarAtivo(a)} title="Clique para alternar">

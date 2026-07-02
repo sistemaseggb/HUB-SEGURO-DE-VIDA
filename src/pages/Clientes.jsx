@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, Users } from 'lucide-react'
+import { Plus, Search, Users, AlertTriangle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { etapaLabel } from '../lib/constants'
 import { dataBR } from '../lib/format'
@@ -20,13 +20,17 @@ export default function Clientes() {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
 
+  const [duplicados, setDuplicados] = useState([])
+
   async function carregar() {
-    const [c, a] = await Promise.all([
+    const [c, a, d] = await Promise.all([
       supabase.from('clientes').select('*, assessores(nome)').order('created_at', { ascending: false }),
       supabase.from('assessores').select('id, nome').eq('ativo', true).order('nome'),
+      supabase.from('vw_possiveis_duplicados').select('*').limit(20),
     ])
     setClientes(c.data ?? [])
     setAssessores(a.data ?? [])
+    setDuplicados(d.data ?? [])
   }
 
   useEffect(() => { carregar() }, [])
@@ -61,6 +65,20 @@ export default function Clientes() {
       <PageHeader titulo="Clientes" subtitulo={`${clientes.length} cliente(s) na base`}>
         <Button onClick={() => setModal(true)}><Plus size={16} /> Novo lead</Button>
       </PageHeader>
+
+      {duplicados.length > 0 && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="flex items-center gap-1.5 text-sm font-medium text-amber-800">
+            <AlertTriangle size={15} /> {duplicados.length} telefone(s) com possível cliente duplicado
+          </p>
+          <ul className="mt-1 text-xs text-amber-700">
+            {duplicados.slice(0, 5).map((d) => (
+              <li key={d.fone}>• {d.clientes} <span className="text-amber-500">({d.fone})</span></li>
+            ))}
+            {duplicados.length > 5 && <li className="text-amber-500">…e mais {duplicados.length - 5}</li>}
+          </ul>
+        </div>
+      )}
 
       <Card>
         <div className="border-b border-slate-100 p-3">

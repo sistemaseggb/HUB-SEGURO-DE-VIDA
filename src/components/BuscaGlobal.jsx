@@ -57,7 +57,7 @@ export default function BuscaGlobal() {
     setAberto(false)
     setTermo('')
     if (item.tipo === 'cliente') navigate(`/clientes/${item.id}`)
-    else navigate('/cadastros')
+    else navigate(`/assessores/${item.id}`)
   }
 
   function onKeyDown(e) {

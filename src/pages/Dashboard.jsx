@@ -90,6 +90,56 @@ function SplitComissao({ natalia, assessor, escritorio }) {
   )
 }
 
+// Gráfico de barras agrupadas (2 séries) com legenda e rótulos diretos
+function GraficoConversao({ dados }) {
+  const [hover, setHover] = useState(null)
+  const max = Math.max(...dados.flatMap((d) => [d.leads, d.fechados]), 1)
+  const W = 560, H = 170, PAD = 8, EIXO = 22
+  const grupo = (W - PAD * 2) / dados.length
+  const bw = Math.min(20, grupo / 2 - 4)
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center gap-4 text-xs text-slate-500">
+        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm" style={{ background: CHART.serie1 }} /> Leads criados</span>
+        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm" style={{ background: CHART.serie2 }} /> Fechados</span>
+      </div>
+      <div className="relative">
+        <svg viewBox={`0 0 ${W} ${H + EIXO}`} className="w-full">
+          {[0.25, 0.5, 0.75, 1].map((fr) => (
+            <line key={fr} x1={PAD} x2={W - PAD} y1={H - H * fr} y2={H - H * fr} stroke={CHART.grid} strokeWidth="1" />
+          ))}
+          <line x1={PAD} x2={W - PAD} y1={H} y2={H} stroke={CHART.eixo} strokeWidth="1" />
+          {dados.map((d, i) => {
+            const cx = PAD + grupo * (i + 0.5)
+            const hL = Math.max((d.leads / max) * (H - 12), d.leads > 0 ? 3 : 0)
+            const hF = Math.max((d.fechados / max) * (H - 12), d.fechados > 0 ? 3 : 0)
+            return (
+              <g key={d.rotulo} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
+                <rect x={cx - grupo / 2} y={0} width={grupo} height={H} fill="transparent" />
+                <rect x={cx - bw - 1} y={H - hL} width={bw} height={hL} rx="4" fill={CHART.serie1}
+                  opacity={hover === null || hover === i ? 1 : 0.45} />
+                <rect x={cx + 1} y={H - hF} width={bw} height={hF} rx="4" fill={CHART.serie2}
+                  opacity={hover === null || hover === i ? 1 : 0.45} />
+                <text x={cx} y={H + 15} textAnchor="middle" fontSize="11" fill={CHART.textoMudo}>{d.rotulo}</text>
+              </g>
+            )
+          })}
+        </svg>
+        {hover !== null && (
+          <div className="pointer-events-none absolute -top-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs shadow-md"
+            style={{ left: `${((hover + 0.5) / dados.length) * 100}%`, transform: 'translateX(-50%)' }}>
+            <span className="font-semibold" style={{ color: CHART.serie1 }}>{dados[hover].leads} leads</span>
+            {' · '}
+            <span className="font-semibold" style={{ color: CHART.serie2 }}>{dados[hover].fechados} fechados</span>
+            <span className="ml-1 text-slate-400">{dados[hover].rotulo}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // Barra de progresso da meta mensal
 function BarraMeta({ rotulo, atual, meta, formato = (v) => v }) {
   const pct = Math.min((atual / meta) * 100, 100)
@@ -121,9 +171,10 @@ export default function Dashboard() {
   const [kpis, setKpis] = useState({})
   const [metas, setMetas] = useState({})
   const [foco, setFoco] = useState([])
+  const [conversao, setConversao] = useState([])
 
   async function carregar() {
-    const [c, d, r, ce, f, k, cfg, pr] = await Promise.all([
+    const [c, d, r, ce, f, k, cfg, pr, cv] = await Promise.all([
       supabase.from('vw_comissoes_mensal').select('*').limit(6),
       supabase.from('vw_dashboard_mensal').select('*').limit(6),
       supabase.from('vw_ranking_assessores').select('*').limit(5),
@@ -132,6 +183,7 @@ export default function Dashboard() {
       supabase.from('vw_kpis_gerais').select('*').single(),
       supabase.from('configuracoes').select('meta_premio_mensal, meta_reunioes_mensal, meta_apolices_mensal').single(),
       supabase.from('vw_prioridades_classificadas').select('*').limit(6),
+      supabase.from('vw_conversao_mensal').select('*').limit(6),
     ])
     setComissoes(c.data ?? [])
     setDashboard(d.data ?? [])
@@ -141,6 +193,7 @@ export default function Dashboard() {
     setKpis(k.data ?? {})
     setMetas(cfg.data ?? {})
     setFoco(pr.data ?? [])
+    setConversao(cv.data ?? [])
     setCarregando(false)
   }
 
@@ -162,6 +215,13 @@ export default function Dashboard() {
   const evolucao = useMemo(
     () => [...dashboard].reverse().map((d) => ({ rotulo: mesBR(d.mes), valor: Number(d.premio_mensal_vendido) })),
     [dashboard]
+  )
+
+  const conversaoChart = useMemo(
+    () => [...conversao].reverse().map((c) => ({
+      rotulo: mesBR(c.mes), leads: Number(c.leads_criados), fechados: Number(c.fechados),
+    })),
+    [conversao]
   )
 
   if (carregando) return <Spinner />
@@ -334,6 +394,15 @@ export default function Dashboard() {
           {evolucao.length === 0
             ? <p className="py-8 text-center text-sm text-slate-400">Cadastre a primeira venda para ver o gráfico.</p>
             : <GraficoBarras dados={evolucao} />}
+        </Card>
+
+        {/* Conversão: leads x fechados */}
+        <Card className="p-5 xl:col-span-2">
+          <h2 className="mb-1 font-semibold text-slate-900">Conversão — leads criados × fechados</h2>
+          <p className="mb-4 text-xs text-slate-400">Quantos leads entraram e quantos viraram venda em cada mês</p>
+          {conversaoChart.length === 0
+            ? <p className="py-8 text-center text-sm text-slate-400">Sem dados suficientes ainda.</p>
+            : <GraficoConversao dados={conversaoChart} />}
         </Card>
 
         {/* Comissões divididas */}

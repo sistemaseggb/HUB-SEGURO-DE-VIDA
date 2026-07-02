@@ -12,6 +12,7 @@ import Cadastros from './pages/Cadastros'
 import Proposta from './pages/Proposta'
 import FormularioPublico from './pages/FormularioPublico'
 import Agenda from './pages/Agenda'
+import AssessorDetalhe from './pages/AssessorDetalhe'
 import Mensagens from './pages/Mensagens'
 import Relatorios from './pages/Relatorios'
 import Importar from './pages/Importar'
@@ -50,6 +51,7 @@ export default function App() {
               <Route path="/mensagens" element={<Mensagens />} />
               <Route path="/relatorios" element={<Relatorios />} />
               <Route path="/importar" element={<Importar />} />
+              <Route path="/assessores/:id" element={<AssessorDetalhe />} />
               <Route path="/cadastros" element={<Cadastros />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
