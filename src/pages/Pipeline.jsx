@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Clock, GripVertical } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ETAPAS } from '../lib/constants'
-import { PageHeader, Badge, Spinner, Modal, Campo, Textarea, Button } from '../components/ui'
+import { PageHeader, Badge, Spinner, Modal, Campo, Textarea, Button, ComoFunciona } from '../components/ui'
 
 // Kanban do funil: arraste o card para a nova etapa — o banco cuida do resto
 // (contador de dias, histórico). Mover para "Perdido" pede o motivo.
@@ -61,6 +61,13 @@ export default function Pipeline() {
     <div>
       <PageHeader titulo="Pipeline de Vendas"
         subtitulo="Arraste os cards entre as etapas. O tempo parado é monitorado automaticamente." />
+
+      <ComoFunciona id="pipeline">
+        Cada cliente é um <strong>card</strong> que caminha da esquerda (novo lead) para a direita (fechado).
+        Arraste com o mouse para mudar de etapa — o sistema registra o histórico e conta os dias parados sozinho.
+        Cards que ficam tempo demais numa etapa ficam <span className="text-amber-600">amarelos</span> e depois
+        <span className="text-red-600"> vermelhos</span>, para você não esquecer ninguém.
+      </ComoFunciona>
 
       <div className="flex gap-3 overflow-x-auto pb-4">
         {ETAPAS.map((etapa) => {

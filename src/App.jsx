@@ -17,6 +17,7 @@ import Mensagens from './pages/Mensagens'
 import Relatorios from './pages/Relatorios'
 import Importar from './pages/Importar'
 import { Spinner } from './components/ui'
+import { ToastProvider } from './components/Toast'
 
 export default function App() {
   const [sessao, setSessao] = useState(undefined) // undefined = ainda verificando
@@ -28,6 +29,7 @@ export default function App() {
   }, [])
 
   return (
+    <ToastProvider>
     <BrowserRouter>
       <Routes>
         {/* Rota PÚBLICA: formulário do cliente, sem login */}
@@ -59,5 +61,6 @@ export default function App() {
         )}
       </Routes>
     </BrowserRouter>
+    </ToastProvider>
   )
 }

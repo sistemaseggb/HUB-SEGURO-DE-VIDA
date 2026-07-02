@@ -5,13 +5,15 @@ import { supabase } from '../lib/supabase'
 import { etapaLabel } from '../lib/constants'
 import { dataBR } from '../lib/format'
 import {
-  PageHeader, Button, Card, Input, Select, Textarea, Campo, Modal, Badge, Spinner, EmptyState,
+  PageHeader, Button, Card, Input, Select, Textarea, Campo, Modal, Badge, Spinner, EmptyState, ComoFunciona,
 } from '../components/ui'
+import { useToast } from '../components/Toast'
 
 const NOVO = { nome: '', codigo: '', telefone: '', email: '', data_nascimento: '', id_assessor: '', perfil_necessidade: '' }
 
 export default function Clientes() {
   const navigate = useNavigate()
+  const toast = useToast()
   const [clientes, setClientes] = useState(null)
   const [assessores, setAssessores] = useState([])
   const [busca, setBusca] = useState('')
@@ -55,6 +57,7 @@ export default function Clientes() {
     if (error) return setErro(error.message)
     setModal(false)
     setForm(NOVO)
+    toast.ok('Lead cadastrado! Já criei a tarefa de primeiro contato.')
     navigate(`/clientes/${data.id}`)
   }
 
@@ -65,6 +68,12 @@ export default function Clientes() {
       <PageHeader titulo="Clientes" subtitulo={`${clientes.length} cliente(s) na base`}>
         <Button onClick={() => setModal(true)}><Plus size={16} /> Novo lead</Button>
       </PageHeader>
+
+      <ComoFunciona id="clientes">
+        Aqui fica sua base de clientes. Todo cliente começa como <strong>lead</strong> e precisa estar ligado a um
+        <strong> assessor</strong> (é o que define a divisão de comissão). Clique em <strong>Novo lead</strong> para
+        cadastrar, ou no nome de um cliente para abrir o perfil completo — com reuniões, planejamento, apólices e documentos.
+      </ComoFunciona>
 
       {duplicados.length > 0 && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">

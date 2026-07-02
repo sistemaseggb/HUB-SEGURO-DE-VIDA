@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Cake, MessageCircle, ShieldCheck, Wallet, TrendingUp, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, dataBR, whatsapp } from '../lib/format'
-import { PageHeader, Card, Badge, Spinner, EmptyState, StatTile } from '../components/ui'
+import { PageHeader, Card, Badge, Spinner, EmptyState, StatTile, ComoFunciona } from '../components/ui'
 import { CHART } from '../lib/constants'
 
 export default function PosVenda() {
@@ -40,6 +40,13 @@ export default function PosVenda() {
     <div>
       <PageHeader titulo="Pós-Venda"
         subtitulo="Carteira ativa e régua de relacionamento — os alertas aparecem sozinhos" />
+
+      <ComoFunciona id="posvenda">
+        Depois da venda, o relacionamento é o que garante renovação e indicações. Aqui você vê a <strong>saúde da
+        sua carteira</strong> (quanto ela rende por mês), os <strong>aniversários</strong> de clientes e apólices que
+        se aproximam, e um alerta de <strong>clientes esquecidos</strong> — quem comprou mas está há muito tempo sem
+        contato. Cada item tem um botão de WhatsApp com mensagem pronta.
+      </ComoFunciona>
 
       {/* Saúde da carteira */}
       <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">

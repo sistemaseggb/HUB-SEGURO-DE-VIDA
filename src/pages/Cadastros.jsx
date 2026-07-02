@@ -3,14 +3,23 @@ import { Link } from 'react-router-dom'
 import { Plus, Percent, Save, MessageSquareText, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
-  PageHeader, Card, Button, Input, Textarea, Campo, Modal, Spinner, Badge,
+  PageHeader, Card, Button, Input, Textarea, Campo, Modal, Spinner, Badge, ComoFunciona,
 } from '../components/ui'
+import { useToast } from '../components/Toast'
 
 export default function Cadastros() {
   return (
     <div>
       <PageHeader titulo="Cadastros"
         subtitulo="Assessores, seguradoras, comissão, metas e mensagens automáticas" />
+
+      <ComoFunciona id="cadastros">
+        Esta é a base de configuração do sistema. Cadastre os <strong>assessores</strong> (quem traz os leads) e as
+        <strong> seguradoras</strong> com o <strong>% de comissão</strong> de cada uma — é o que faz o sistema calcular
+        as comissões automaticamente. Defina também como a comissão é <strong>dividida</strong> (Natália / assessor /
+        escritório), suas <strong>metas do mês</strong> e os <strong>textos das mensagens</strong> automáticas.
+      </ComoFunciona>
+
       <div className="grid gap-6 xl:grid-cols-2">
         <div className="space-y-6">
           <PainelAssessores />
@@ -28,6 +37,7 @@ export default function Cadastros() {
 const ASSESSOR_VAZIO = { nome: '', codigo: '', telefone: '', email: '' }
 
 function PainelAssessores() {
+  const toast = useToast()
   const [lista, setLista] = useState(null)
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState(ASSESSOR_VAZIO)
@@ -55,6 +65,7 @@ function PainelAssessores() {
       : await supabase.from('assessores').insert(payload)
     if (error) return setErro(error.message)
     setModal(false)
+    toast.ok(editando ? 'Assessor atualizado.' : 'Assessor cadastrado.')
     carregar()
   }
 
@@ -66,7 +77,8 @@ function PainelAssessores() {
   async function excluir(a) {
     if (!window.confirm(`Excluir o assessor "${a.nome}"? (Só é possível se ele não tiver clientes vinculados.)`)) return
     const { error } = await supabase.from('assessores').delete().eq('id', a.id)
-    if (error) window.alert('Não foi possível excluir: este assessor tem clientes vinculados. Marque como inativo.')
+    if (error) toast.erro('Não foi possível excluir: este assessor tem clientes vinculados. Marque como inativo.')
+    else toast.ok('Assessor excluído.')
     carregar()
   }
 
@@ -135,6 +147,7 @@ function PainelAssessores() {
 const SEGURADORA_VAZIA = { nome: '', comissao_padrao_percentual: '' }
 
 function PainelSeguradoras() {
+  const toast = useToast()
   const [lista, setLista] = useState(null)
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState(SEGURADORA_VAZIA)
@@ -161,13 +174,15 @@ function PainelSeguradoras() {
       : await supabase.from('seguradoras').insert(form)
     if (error) return setErro(error.message)
     setModal(false)
+    toast.ok(editando ? 'Seguradora atualizada.' : 'Seguradora cadastrada.')
     carregar()
   }
 
   async function excluir(s) {
     if (!window.confirm(`Excluir a seguradora "${s.nome}"? (Só é possível se não houver apólices dela.)`)) return
     const { error } = await supabase.from('seguradoras').delete().eq('id', s.id)
-    if (error) window.alert('Não foi possível excluir: existem apólices desta seguradora.')
+    if (error) toast.erro('Não foi possível excluir: existem apólices desta seguradora.')
+    else toast.ok('Seguradora excluída.')
     carregar()
   }
 
@@ -222,6 +237,7 @@ function PainelSeguradoras() {
 }
 
 function PainelSplit() {
+  const toast = useToast()
   const [cfg, setCfg] = useState(null)
   const [msg, setMsg] = useState(null)
 
@@ -247,7 +263,8 @@ function PainelSplit() {
       meta_apolices_mensal: cfg.meta_apolices_mensal || 0,
       dias_sem_contato_alerta: cfg.dias_sem_contato_alerta || 90,
     }).eq('id', 1)
-    setMsg(error ? `Erro: ${error.message}` : 'Salvo! Vale para as próximas vendas.')
+    if (error) { setMsg(`Erro: ${error.message}`); toast.erro('Erro ao salvar configurações.') }
+    else { setMsg(null); toast.ok('Configurações salvas! Valem para as próximas vendas.') }
   }
 
   const set = (k) => (e) => setCfg({ ...cfg, [k]: e.target.value })
@@ -305,6 +322,7 @@ function PainelSplit() {
 }
 
 function PainelMensagens() {
+  const toast = useToast()
   const [cfg, setCfg] = useState(null)
   const [msg, setMsg] = useState(null)
 
@@ -321,7 +339,8 @@ function PainelMensagens() {
     e.preventDefault()
     setMsg(null)
     const { error } = await supabase.from('configuracoes').update(cfg).eq('id', 1)
-    setMsg(error ? `Erro: ${error.message}` : 'Mensagens salvas!')
+    if (error) { setMsg(`Erro: ${error.message}`); toast.erro('Erro ao salvar mensagens.') }
+    else { setMsg(null); toast.ok('Mensagens salvas!') }
   }
 
   const CAMPOS = [

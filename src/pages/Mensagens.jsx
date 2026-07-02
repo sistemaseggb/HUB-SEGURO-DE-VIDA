@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { MessageCircle, RefreshCw, X, Check, Inbox } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { whatsapp, dataBR } from '../lib/format'
-import { PageHeader, Card, Button, Badge, Spinner, EmptyState } from '../components/ui'
+import { PageHeader, Card, Button, Badge, Spinner, EmptyState, ComoFunciona } from '../components/ui'
+import { useToast } from '../components/Toast'
 
 const ROTULO_TIPO = {
   aniversario_cliente: { texto: 'Aniversário 🎂', tom: 'yellow' },
@@ -15,6 +16,7 @@ const ROTULO_TIPO = {
 // Central de Mensagens: o banco escreve as mensagens sozinho (pg_cron às 8h);
 // aqui a Natália dispara cada uma com 1 clique — o envio marca como enviada.
 export default function Mensagens() {
+  const toast = useToast()
   const [pendentes, setPendentes] = useState(null)
   const [historico, setHistorico] = useState([])
   const [gerando, setGerando] = useState(false)
@@ -45,6 +47,8 @@ export default function Mensagens() {
     await supabase.from('fila_mensagens').update({
       status, enviada_em: status === 'enviada' ? new Date().toISOString() : null,
     }).eq('id', m.id)
+    if (status === 'enviada') toast.ok('Marcada como enviada.')
+    else if (status === 'descartada') toast.info('Mensagem descartada.')
     carregar()
   }
 
@@ -64,6 +68,13 @@ export default function Mensagens() {
           <RefreshCw size={15} className={gerando ? 'animate-spin' : ''} /> Gerar mensagens de hoje
         </Button>
       </PageHeader>
+
+      <ComoFunciona id="mensagens">
+        Todo dia de manhã o sistema <strong>escreve sozinho</strong> as mensagens do dia: parabéns de aniversário,
+        aniversário de apólice, reativação de leads parados e confirmação de reunião. Você só revisa e clica em
+        <strong> Enviar no WhatsApp</strong> — a conversa abre com o texto pronto. Os textos podem ser
+        personalizados em <strong>Cadastros → Mensagens automáticas</strong>.
+      </ComoFunciona>
 
       {aviso && <p className="mb-4 text-sm text-slate-500">{aviso}</p>}
 

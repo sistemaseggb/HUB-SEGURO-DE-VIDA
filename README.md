@@ -164,6 +164,9 @@ npm run dev
 - [x] Edição e exclusão de assessores, seguradoras e clientes
 - [x] Edição e exclusão de apólices, reuniões e interações
 - [x] Resumo dos últimos 7 dias no dashboard
+- [x] Redesign visual premium (Inter + Lexend, paleta de marca, componentes)
+- [x] Faixas didáticas "Como funciona" em cada módulo (dispensáveis)
+- [x] Feedback visual (toasts) nas ações de salvar/excluir/enviar
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
 - [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)

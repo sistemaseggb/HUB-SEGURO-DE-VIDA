@@ -10,6 +10,7 @@ import { brl, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib/format'
 import {
   Button, Card, Input, Select, Textarea, Campo, Modal, Badge, Spinner,
 } from '../components/ui'
+import { useToast } from '../components/Toast'
 
 const ABAS = ['Planejamento', 'Interações', 'Reuniões', 'Apólices', 'Documentos', 'Formulário', 'Tarefas', 'Histórico']
 
@@ -19,6 +20,7 @@ export default function ClienteDetalhe() {
   const [aba, setAba] = useState('Planejamento')
 
   const navigate = useNavigate()
+  const toast = useToast()
   const [prioridade, setPrioridade] = useState(null)
   const [contato, setContato] = useState(null)
   const [editar, setEditar] = useState(false)
@@ -64,6 +66,7 @@ export default function ClienteDetalhe() {
     const { error } = await supabase.from('clientes').update(payload).eq('id', id)
     if (error) return setErroEdit(error.message)
     setEditar(false)
+    toast.ok('Dados do cliente atualizados.')
     carregar()
   }
 
@@ -259,6 +262,7 @@ function AbaHistorico({ idCliente, cliente }) {
 
 // ─── PLANEJAMENTO: os dados da reunião viram o estudo e a proposta ───────────
 function AbaPlanejamento({ idCliente }) {
+  const toast = useToast()
   const [plano, setPlano] = useState(null)
   const [salvo, setSalvo] = useState(false)
 
@@ -292,6 +296,7 @@ function AbaPlanejamento({ idCliente }) {
       .select().single()
     if (data) setPlano(data)
     setSalvo(true)
+    toast.ok('Planejamento salvo.')
     setTimeout(() => setSalvo(false), 2500)
   }
 
@@ -521,6 +526,7 @@ const APOLICE_VAZIA = {
 }
 
 function AbaApolices({ idCliente, onMudanca }) {
+  const toast = useToast()
   const [apolices, setApolices] = useState(null)
   const [seguradoras, setSeguradoras] = useState([])
   const [modal, setModal] = useState(false)
@@ -560,8 +566,13 @@ function AbaApolices({ idCliente, onMudanca }) {
       data_vigencia: form.data_vigencia,
     }
     // Na edição NÃO reenviamos id_cliente (evita re-disparar a esteira de pós-venda)
-    if (editando) await supabase.from('apolices').update(payload).eq('id', editando)
-    else await supabase.from('apolices').insert({ ...payload, id_cliente: idCliente })
+    if (editando) {
+      await supabase.from('apolices').update(payload).eq('id', editando)
+      toast.ok('Apólice atualizada. Comissão recalculada.')
+    } else {
+      await supabase.from('apolices').insert({ ...payload, id_cliente: idCliente })
+      toast.ok('Venda registrada! 🎉 Cliente fechado e pós-venda agendado.')
+    }
     setModal(false)
     carregar(); onMudanca()
   }
@@ -569,6 +580,7 @@ function AbaApolices({ idCliente, onMudanca }) {
   async function excluir(a) {
     if (!window.confirm(`Excluir a apólice de ${a.seguradoras?.nome ?? 'seguradora'} (${brl(a.valor_premio_mensal)}/mês)?`)) return
     await supabase.from('apolices').delete().eq('id', a.id)
+    toast.ok('Apólice excluída.')
     carregar(); onMudanca()
   }
 

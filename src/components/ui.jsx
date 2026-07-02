@@ -1,4 +1,36 @@
-import { X } from 'lucide-react'
+import { useState } from 'react'
+import { X, Lightbulb } from 'lucide-react'
+
+// Faixa didática "Como funciona" — explica o módulo e pode ser dispensada
+// (a escolha fica lembrada no navegador). O grande diferencial de um HUB é
+// se explicar sozinho.
+export function ComoFunciona({ id, titulo = 'Como funciona', children }) {
+  const chave = `hub_help_${id}`
+  const [fechado, setFechado] = useState(() => {
+    try { return localStorage.getItem(chave) === '1' } catch { return false }
+  })
+  if (fechado) return null
+
+  function dispensar() {
+    try { localStorage.setItem(chave, '1') } catch { /* ignora */ }
+    setFechado(true)
+  }
+
+  return (
+    <div className="mb-5 flex items-start gap-3 rounded-2xl border border-brand-100 bg-brand-50/60 p-4">
+      <div className="mt-0.5 shrink-0 rounded-lg bg-brand-100 p-1.5 text-brand-600">
+        <Lightbulb size={16} />
+      </div>
+      <div className="min-w-0 flex-1 text-sm text-slate-600">
+        <p className="mb-0.5 font-semibold text-slate-800">{titulo}</p>
+        {children}
+      </div>
+      <button onClick={dispensar} className="shrink-0 rounded-lg p-1 text-brand-400 hover:bg-brand-100 hover:text-brand-600" title="Entendi, não mostrar de novo">
+        <X size={16} />
+      </button>
+    </div>
+  )
+}
 
 export function Card({ children, className = '' }) {
   return (

@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { STATUS_REUNIAO, etapaLabel } from '../lib/constants'
 import { whatsapp } from '../lib/format'
 import {
-  PageHeader, Card, Button, Select, Input, Textarea, Campo, Modal, Spinner, EmptyState,
+  PageHeader, Card, Button, Select, Input, Textarea, Campo, Modal, Spinner, EmptyState, ComoFunciona,
 } from '../components/ui'
 
 // Agenda: tudo que está marcado, agrupado por dia, com ação rápida de status.
@@ -76,6 +76,12 @@ export default function Agenda() {
         subtitulo="Marcar como realizada avança o cliente no funil e cria a tarefa do estudo — sozinho">
         <Button onClick={() => setModal(true)}><CalendarPlus size={16} /> Agendar reunião</Button>
       </PageHeader>
+
+      <ComoFunciona id="agenda">
+        Suas reuniões agrupadas por dia. Ao marcar uma reunião como <strong>Realizada</strong>, o sistema move o
+        cliente para "Reunião Realizada" no funil e já cria a tarefa de montar o estudo — você não precisa fazer nada
+        manualmente. Reuniões cujo horário já passou aparecem em destaque no topo.
+      </ComoFunciona>
 
       {grupos.length === 0 && (
         <Card>

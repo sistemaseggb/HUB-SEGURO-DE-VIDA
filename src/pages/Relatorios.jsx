@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { brl, mesBR, dataBR } from '../lib/format'
 import { etapaLabel, CHART } from '../lib/constants'
 import { baixarCSV } from '../lib/csv'
-import { PageHeader, Card, Button, Spinner, Input, Campo } from '../components/ui'
+import { PageHeader, Card, Button, Spinner, Input, Campo, ComoFunciona } from '../components/ui'
 
 // Relatórios gerenciais: fechamento de comissões (quanto pagar a cada assessor),
 // análise de perdas e velocidade do funil. Tudo exportável em CSV.
@@ -75,6 +75,13 @@ export default function Relatorios() {
           </Campo>
         </div>
       </PageHeader>
+
+      <ComoFunciona id="relatorios">
+        Escolha o <strong>mês</strong> no canto superior para ver quanto pagar a cada assessor no fechamento
+        (com botão de exportar para Excel). Mais abaixo, o sistema mostra <strong>por que você perde clientes</strong> e
+        o <strong>tempo médio em cada etapa</strong> do funil — para descobrir onde travam as vendas. Faça o backup
+        dos dados de tempos em tempos.
+      </ComoFunciona>
 
       <div className="grid gap-6 xl:grid-cols-2">
         {/* Backup / exportação de dados */}

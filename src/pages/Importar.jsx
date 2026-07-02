@@ -3,7 +3,7 @@ import { Upload, CheckCircle2, AlertTriangle, Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { parseCSV, acharColuna, normalizar, paraDataISO, paraNumero, baixarCSV } from '../lib/csv'
 import { ETAPAS } from '../lib/constants'
-import { PageHeader, Card, Button, Textarea, Campo, Spinner } from '../components/ui'
+import { PageHeader, Card, Button, Textarea, Campo, Spinner, ComoFunciona } from '../components/ui'
 
 // Importador de planilhas: cole o conteúdo (ou envie um .csv) e o sistema
 // reconhece as colunas sozinho, mostra a prévia e importa em lote.
@@ -92,6 +92,13 @@ export default function Importar() {
     <div>
       <PageHeader titulo="Importar Planilhas"
         subtitulo="Traga a base histórica: os dados entram sem disparar tarefas nem formulários" />
+
+      <ComoFunciona id="importar">
+        Traga seus clientes e apólices que já existem. Escolha o tipo, <strong>baixe a planilha modelo</strong> para
+        ver o formato, e cole o conteúdo (ou envie um arquivo .csv). O sistema reconhece as colunas sozinho e mostra
+        uma <strong>prévia</strong> antes de importar. Dados importados não disparam mensagens nem tarefas — entram
+        apenas como histórico. Comece pelos <strong>clientes</strong>, depois as <strong>apólices</strong>.
+      </ComoFunciona>
 
       <Card className="p-5">
         {/* Escolha do tipo */}
