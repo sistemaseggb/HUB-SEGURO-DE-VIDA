@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, MessageCircle, Presentation, Copy, Check,
-  CalendarPlus, FileSignature, ClipboardList, Zap,
+  CalendarPlus, FileSignature, ClipboardList, Zap, Upload, FileText, Download, Trash2,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ETAPAS, etapaLabel, STATUS_REUNIAO, TIPO_TAREFA_ICONE } from '../lib/constants'
@@ -11,7 +11,7 @@ import {
   Button, Card, Input, Select, Textarea, Campo, Modal, Badge, Spinner,
 } from '../components/ui'
 
-const ABAS = ['Planejamento', 'Reuniões', 'Apólices', 'Formulário', 'Tarefas', 'Histórico']
+const ABAS = ['Planejamento', 'Reuniões', 'Apólices', 'Documentos', 'Formulário', 'Tarefas', 'Histórico']
 
 export default function ClienteDetalhe() {
   const { id } = useParams()
@@ -109,6 +109,7 @@ export default function ClienteDetalhe() {
       {aba === 'Planejamento' && <AbaPlanejamento idCliente={id} />}
       {aba === 'Reuniões' && <AbaReunioes idCliente={id} onMudanca={carregar} />}
       {aba === 'Apólices' && <AbaApolices idCliente={id} onMudanca={carregar} />}
+      {aba === 'Documentos' && <AbaDocumentos idCliente={id} />}
       {aba === 'Formulário' && <AbaFormulario idCliente={id} cliente={cliente} />}
       {aba === 'Tarefas' && <AbaTarefas idCliente={id} />}
       {aba === 'Histórico' && <AbaHistorico idCliente={id} cliente={cliente} />}
@@ -435,6 +436,115 @@ function AbaApolices({ idCliente, onMudanca }) {
           </div>
         </form>
       </Modal>
+    </Card>
+  )
+}
+
+// ─── DOCUMENTOS: anexos do cliente no Storage do Supabase ────────────────────
+const CATEGORIAS_DOC = [
+  { id: 'apolice', label: 'Apólice' },
+  { id: 'documento', label: 'Documento pessoal' },
+  { id: 'proposta', label: 'Proposta' },
+  { id: 'geral', label: 'Outro' },
+]
+
+function AbaDocumentos({ idCliente }) {
+  const [docs, setDocs] = useState(null)
+  const [categoria, setCategoria] = useState('apolice')
+  const [enviando, setEnviando] = useState(false)
+  const [erro, setErro] = useState(null)
+
+  const carregar = useCallback(() =>
+    supabase.from('documentos').select('*').eq('id_cliente', idCliente)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setDocs(data ?? [])), [idCliente])
+
+  useEffect(() => { carregar() }, [carregar])
+
+  async function enviar(e) {
+    const arquivo = e.target.files?.[0]
+    e.target.value = '' // permite reenviar o mesmo arquivo depois
+    if (!arquivo) return
+    setErro(null)
+    setEnviando(true)
+    const caminho = `${idCliente}/${Date.now()}-${arquivo.name}`
+    const up = await supabase.storage.from('documentos').upload(caminho, arquivo)
+    if (up.error) {
+      setErro(`Falha no upload: ${up.error.message}`)
+      setEnviando(false)
+      return
+    }
+    await supabase.from('documentos').insert({
+      id_cliente: idCliente, nome: arquivo.name, categoria,
+      caminho, tamanho_bytes: arquivo.size, tipo_mime: arquivo.type,
+    })
+    setEnviando(false)
+    carregar()
+  }
+
+  async function baixar(doc) {
+    const { data, error } = await supabase.storage.from('documentos').createSignedUrl(doc.caminho, 120)
+    if (!error && data?.signedUrl) window.open(data.signedUrl, '_blank')
+  }
+
+  async function excluir(doc) {
+    if (!window.confirm(`Excluir "${doc.nome}"?`)) return
+    await supabase.storage.from('documentos').remove([doc.caminho])
+    await supabase.from('documentos').delete().eq('id', doc.id)
+    carregar()
+  }
+
+  const tamanho = (b) => {
+    if (!b) return ''
+    if (b < 1024) return `${b} B`
+    if (b < 1048576) return `${(b / 1024).toFixed(0)} KB`
+    return `${(b / 1048576).toFixed(1)} MB`
+  }
+  const tomCat = { apolice: 'blue', documento: 'slate', proposta: 'green', geral: 'yellow' }
+
+  if (!docs) return <Spinner />
+
+  return (
+    <Card className="p-5">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <p className="text-sm text-slate-500">Guarde aqui a apólice, documentos do cliente e propostas.</p>
+        <div className="ml-auto flex items-center gap-2">
+          <Select value={categoria} onChange={(e) => setCategoria(e.target.value)} style={{ width: 'auto' }}>
+            {CATEGORIAS_DOC.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </Select>
+          <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white ${enviando ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'}`}>
+            <Upload size={16} /> {enviando ? 'Enviando...' : 'Enviar arquivo'}
+            <input type="file" className="hidden" onChange={enviar} disabled={enviando} />
+          </label>
+        </div>
+      </div>
+
+      {erro && <p className="mb-3 text-sm text-red-600">{erro}</p>}
+
+      {docs.length === 0
+        ? <p className="py-6 text-center text-sm text-slate-400">Nenhum documento anexado ainda.</p>
+        : (
+          <ul className="divide-y divide-slate-100">
+            {docs.map((d) => (
+              <li key={d.id} className="flex items-center gap-3 py-3">
+                <FileText size={18} className="shrink-0 text-slate-400" />
+                <div className="min-w-0 flex-1">
+                  <button onClick={() => baixar(d)} className="truncate text-left text-sm font-medium text-slate-800 hover:text-blue-700 hover:underline">
+                    {d.nome}
+                  </button>
+                  <p className="text-xs text-slate-400">{tamanho(d.tamanho_bytes)} · {dataBR(d.created_at)}</p>
+                </div>
+                <Badge tom={tomCat[d.categoria] ?? 'slate'}>{CATEGORIAS_DOC.find((c) => c.id === d.categoria)?.label ?? d.categoria}</Badge>
+                <button onClick={() => baixar(d)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600" title="Baixar">
+                  <Download size={16} />
+                </button>
+                <button onClick={() => excluir(d)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir">
+                  <Trash2 size={16} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
     </Card>
   )
 }

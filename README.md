@@ -32,8 +32,9 @@ e registrar os dados; o sistema cuida do resto.
 - **Pipeline** — Kanban com arrastar-e-soltar, dias parados com alerta
   amarelo/vermelho configurável, motivo obrigatório ao perder um cliente.
 - **Clientes** — perfil 360º com abas: Planejamento (dados da reunião),
-  Reuniões, Apólices, Formulário de onboarding e Tarefas. Botão **Gerar
-  proposta** cria a apresentação para o cliente.
+  Reuniões, Apólices, **Documentos** (anexos no Storage), Formulário de
+  onboarding, Tarefas e Histórico. Faixa de **Próxima Melhor Ação** e
+  temperatura no topo. Botão **Gerar proposta** cria a apresentação.
 - **Proposta** — apresentação em tela cheia gerada a partir do planejamento
   (capital recomendado, pilares, fechamento) — exportável em PDF pelo navegador.
 - **Formulário público** (`/f/<token>`) — onboarding pós-venda estilo Typeform:
@@ -74,6 +75,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 2. [`supabase/migrations/002_automacao_e_planejamento.sql`](supabase/migrations/002_automacao_e_planejamento.sql)
 3. [`supabase/migrations/003_metas_mensagens_relatorios.sql`](supabase/migrations/003_metas_mensagens_relatorios.sql)
 4. [`supabase/migrations/004_codigos_e_inteligencia.sql`](supabase/migrations/004_codigos_e_inteligencia.sql)
+5. [`supabase/migrations/005_documentos.sql`](supabase/migrations/005_documentos.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -141,6 +143,8 @@ npm run dev
 - [x] Códigos do escritório em clientes e assessores (cadastro, busca, importação)
 - [x] Motor de priorização inteligente (score + Próxima Melhor Ação) no dashboard e no cliente
 - [x] Busca global no topo (clientes e assessores por nome/código/telefone; atalho "/")
+- [x] Documentos e anexos por cliente (Storage do Supabase)
+- [x] Pronto para deploy na Vercel (`vercel.json` + guia em DEPLOY.md)
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
 - [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)
