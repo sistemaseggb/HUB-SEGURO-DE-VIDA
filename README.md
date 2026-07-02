@@ -158,6 +158,8 @@ npm run dev
 - [x] Gráfico de conversão mensal (leads criados × fechados)
 - [x] Detector de clientes duplicados (aviso na tela de Clientes)
 - [x] Responsivo no celular (menu-gaveta, tabelas roláveis, layout adaptável)
+- [x] Guia de "Primeiros passos" no dashboard (some quando o setup termina)
+- [x] Saudação inteligente por horário (bom dia/boa tarde/boa noite)
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
 - [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)

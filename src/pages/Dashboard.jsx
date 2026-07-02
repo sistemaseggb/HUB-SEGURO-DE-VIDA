@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   CalendarCheck, Wallet, FileSignature, TrendingUp, CheckCircle2,
-  MessageCircle, AlertTriangle, Trophy, Cake, Target, Percent, Timer, ShieldCheck, Flame,
+  MessageCircle, AlertTriangle, Trophy, Cake, Target, Percent, Timer, ShieldCheck, Flame, Rocket,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, mesBR, dataBR, whatsapp } from '../lib/format'
@@ -161,6 +161,77 @@ function BarraMeta({ rotulo, atual, meta, formato = (v) => v }) {
   )
 }
 
+// Saudação conforme o horário
+function saudacao() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Bom dia'
+  if (h < 18) return 'Boa tarde'
+  return 'Boa noite'
+}
+
+// Guia de primeiros passos: detecta o que ainda falta configurar e some sozinho
+// quando o essencial estiver pronto. Ajuda a Natália a começar do zero.
+function PrimeirosPassos() {
+  const [estado, setEstado] = useState(null)
+
+  useEffect(() => {
+    Promise.all([
+      supabase.from('seguradoras').select('id', { count: 'exact', head: true }),
+      supabase.from('assessores').select('id', { count: 'exact', head: true }),
+      supabase.from('clientes').select('id', { count: 'exact', head: true }),
+      supabase.from('apolices').select('id', { count: 'exact', head: true }),
+      supabase.from('configuracoes').select('meta_premio_mensal').single(),
+    ]).then(([s, a, c, ap, cfg]) => setEstado({
+      seguradoras: s.count ?? 0,
+      assessores: a.count ?? 0,
+      clientes: c.count ?? 0,
+      apolices: ap.count ?? 0,
+      temMeta: Number(cfg.data?.meta_premio_mensal ?? 0) > 0,
+    }))
+  }, [])
+
+  if (!estado) return null
+
+  const passos = [
+    { ok: estado.seguradoras > 0, texto: 'Cadastrar as seguradoras (com % de comissão)', para: '/cadastros' },
+    { ok: estado.assessores > 0, texto: 'Cadastrar os assessores do escritório', para: '/cadastros' },
+    { ok: estado.temMeta, texto: 'Definir as metas do mês', para: '/cadastros' },
+    { ok: estado.clientes > 0, texto: 'Cadastrar o primeiro cliente (ou importar sua base)', para: '/clientes' },
+    { ok: estado.apolices > 0, texto: 'Registrar a primeira venda (apólice)', para: '/clientes' },
+  ]
+  const feitos = passos.filter((p) => p.ok).length
+
+  // Some quando tudo estiver concluído
+  if (feitos === passos.length) return null
+
+  return (
+    <Card className="mb-6 border-blue-100 bg-blue-50/40 p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+          <Rocket size={18} className="text-blue-600" /> Primeiros passos
+        </h2>
+        <span className="text-sm text-slate-500">{feitos} de {passos.length}</span>
+      </div>
+      <div className="mb-4 h-2 rounded-full bg-slate-200">
+        <div className="h-2 rounded-full bg-blue-600 transition-all" style={{ width: `${(feitos / passos.length) * 100}%` }} />
+      </div>
+      <ul className="space-y-2">
+        {passos.map((p, i) => (
+          <li key={i}>
+            <Link to={p.para} className={`flex items-center gap-3 rounded-lg border p-2.5 text-sm transition-colors ${
+              p.ok ? 'border-transparent text-slate-400' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300'}`}>
+              {p.ok
+                ? <CheckCircle2 size={18} className="shrink-0 text-emerald-500" />
+                : <span className="h-[18px] w-[18px] shrink-0 rounded-full border-2 border-slate-300" />}
+              <span className={p.ok ? 'line-through' : 'font-medium'}>{p.texto}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  )
+}
+
 export default function Dashboard() {
   const [carregando, setCarregando] = useState(true)
   const [comissoes, setComissoes] = useState([])
@@ -235,13 +306,16 @@ export default function Dashboard() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">
-          Bom dia, Natália! 👋
+          {saudacao()}, Natália! 👋
         </h1>
         <p className="mt-1 text-sm text-slate-500">
           {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
           {' · '}{tarefas.length} tarefa(s) na sua central do dia
         </p>
       </div>
+
+      <PrimeirosPassos />
+
 
       {/* KPIs do mês */}
       <div className="mb-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
