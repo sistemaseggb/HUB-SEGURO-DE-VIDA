@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, TrendingDown, Timer, Wallet, Database, Landmark } from 'lucide-react'
+import { Download, TrendingDown, Timer, Wallet, Database, Landmark, HandCoins, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, mesBR, dataBR } from '../lib/format'
 import { etapaLabel, CHART } from '../lib/constants'
@@ -49,7 +49,7 @@ export default function Relatorios() {
 
   useEffect(() => {
     buscarComissoesPaginado(
-      'seguradora, segmento, tipo_receita, cliente_nome, codigo_assessor, producao, parcela, valor, assessores(nome)',
+      'seguradora, segmento, tipo_receita, cliente_nome, codigo_cliente, codigo_assessor, producao, parcela, valor, assessores(nome), clientes(codigo)',
       (q) => q.eq('competencia', `${mes}-01`)
     ).then(setImportadas)
   }, [mes])
@@ -93,12 +93,55 @@ export default function Relatorios() {
       bruno: soma(importadas.filter((r) => r.producao === 'Bruno')),
       semProducao: soma(importadas.filter((r) => r.producao !== 'Nati' && r.producao !== 'Bruno')),
       porSeguradora: agrupa((r) => r.seguradora),
-      porAssessor: agrupa((r) => r.assessores?.nome ?? r.codigo_assessor ?? '(sem assessor)'),
       recorrente: soma(importadas.filter((r) => r.tipo_receita === 'recorrente')),
       vendaNova: soma(importadas.filter((r) => r.tipo_receita === 'venda_nova')),
       campanha: soma(importadas.filter((r) => r.tipo_receita === 'campanha')),
     }
   }, [importadas])
+
+  // Fechamento para o financeiro: repasse por assessor, identificado pelo
+  // código. É a planilha que o líder usa para pagar — precisa conferir 100%.
+  const fechamento = useMemo(() => {
+    const porCod = new Map()
+    for (const r of importadas) {
+      const cod = r.codigo_assessor || '(sem código)'
+      if (!porCod.has(cod)) {
+        porCod.set(cod, { codigo: cod, nome: null, total: 0, estornos: 0, lancamentos: 0, clientes: new Set(), producoes: new Set() })
+      }
+      const a = porCod.get(cod)
+      if (r.assessores?.nome) a.nome = r.assessores.nome
+      a.total += Number(r.valor)
+      if (Number(r.valor) < 0) a.estornos += Number(r.valor)
+      a.lancamentos += 1
+      a.clientes.add(r.cliente_nome)
+      if (r.producao) a.producoes.add(r.producao)
+    }
+    const linhas = [...porCod.values()].sort((a, b) => b.total - a.total)
+    const totalGeral = linhas.reduce((s, a) => s + a.total, 0)
+    return { linhas, totalGeral, confere: Math.abs(totalGeral - imp.total) < 0.005 }
+  }, [importadas, imp.total])
+
+  const codCliente = (r) => r.codigo_cliente || r.clientes?.codigo || ''
+
+  function exportarFechamento() {
+    baixarCSV(`fechamento-financeiro-${mes}.csv`,
+      ['Cód. assessor', 'Assessor', 'Produção', 'Clientes', 'Lançamentos', 'Estornos', 'Total a repassar'],
+      [
+        ...fechamento.linhas.map((a) => [a.codigo, a.nome ?? '', [...a.producoes].join('/'),
+          a.clientes.size, a.lancamentos, a.estornos.toFixed(2).replace('.', ','), a.total.toFixed(2).replace('.', ',')]),
+        ['', 'TOTAL GERAL', '', '', '', '', fechamento.totalGeral.toFixed(2).replace('.', ',')],
+      ])
+  }
+
+  function exportarFechamentoDetalhado() {
+    baixarCSV(`fechamento-detalhado-${mes}.csv`,
+      ['Cód. assessor', 'Assessor', 'Cód. cliente', 'Cliente', 'Seguradora', 'Segmento', 'Produção', 'Parcela', 'Tipo de receita', 'Valor'],
+      [...importadas]
+        .sort((a, b) => (a.codigo_assessor ?? 'zzz').localeCompare(b.codigo_assessor ?? 'zzz') || a.cliente_nome.localeCompare(b.cliente_nome))
+        .map((r) => [r.codigo_assessor ?? '', r.assessores?.nome ?? '', codCliente(r), r.cliente_nome,
+          r.seguradora, r.segmento, r.producao ?? 'A classificar', r.parcela ?? '', r.tipo_receita,
+          Number(r.valor).toFixed(2).replace('.', ',')]))
+  }
 
   // Evolução de todos os meses importados (Natália × Bruno × total)
   const evolucaoImportadas = useMemo(() => {
@@ -357,28 +400,101 @@ export default function Relatorios() {
                   </table>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <p className="mb-2 text-xs font-medium uppercase text-slate-400">Por assessor (comissão gerada)</p>
-                  <table className="w-full min-w-[380px] text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
-                        <th className="py-2 font-medium">Assessor</th>
-                        <th className="py-2 text-right font-medium">Clientes</th>
-                        <th className="py-2 text-right font-medium">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {imp.porAssessor.slice(0, 12).map((a) => (
-                        <tr key={a.chave} className="border-b border-slate-50">
-                          <td className="py-2.5 font-medium text-slate-800">{a.chave}</td>
-                          <td className="py-2.5 text-right text-slate-500">{a.clientes}</td>
-                          <td className="py-2.5 text-right font-semibold">{brl(a.total)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
               </div>
+            </div>
+          )}
+        </Card>
+
+        {/* Fechamento para o financeiro — repasse por assessor */}
+        <Card className="xl:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
+            <div>
+              <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+                <HandCoins size={17} className="text-blue-700" /> Fechamento para o financeiro — {mesBR(mes + '-01')}
+              </h2>
+              <p className="text-xs text-slate-400">
+                A planilha de pagamento: quanto repassar a cada assessor, identificado pelo código.
+                Envie o CSV para o líder.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button disabled={importadas.length === 0} onClick={exportarFechamento}>
+                <Download size={15} /> Fechamento (CSV)
+              </Button>
+              <Button variant="secondary" disabled={importadas.length === 0} onClick={exportarFechamentoDetalhado}>
+                <Download size={15} /> Detalhado com códigos (CSV)
+              </Button>
+            </div>
+          </div>
+
+          {importadas.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-slate-400">
+              Importe as planilhas do mês em <strong>Importar → Comissões</strong> para gerar o fechamento.
+            </p>
+          ) : (
+            <div className="p-5">
+              {/* Conferência automática: a soma dos assessores TEM que bater com o total do mês */}
+              <div className={`mb-4 flex items-center gap-2 rounded-lg border p-3 text-sm ${
+                fechamento.confere ? 'border-emerald-100 bg-emerald-50 text-emerald-800' : 'border-red-100 bg-red-50 text-red-700'}`}>
+                {fechamento.confere ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                {fechamento.confere
+                  ? <>Conferido: a soma dos assessores ({brl(fechamento.totalGeral)}) bate com o total importado do mês, centavo a centavo.</>
+                  : <>Atenção: a soma dos assessores ({brl(fechamento.totalGeral)}) difere do total do mês ({brl(imp.total)}) — verifique antes de pagar.</>}
+              </div>
+
+              {fechamento.linhas.some((a) => a.codigo === '(sem código)' || !a.nome) && (
+                <p className="mb-4 flex items-center gap-2 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
+                  <AlertTriangle size={14} className="shrink-0" />
+                  Há lançamentos sem código de assessor ou com código ainda não cadastrado (nome em branco).
+                  Cadastre os códigos em <strong>Cadastros → Assessores</strong> para o nome aparecer no fechamento.
+                </p>
+              )}
+
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
+                      <th className="py-2 pr-2 font-medium">#</th>
+                      <th className="py-2 font-medium">Cód. assessor</th>
+                      <th className="py-2 font-medium">Assessor</th>
+                      <th className="py-2 font-medium">Produção</th>
+                      <th className="py-2 text-right font-medium">Clientes</th>
+                      <th className="py-2 text-right font-medium">Lançamentos</th>
+                      <th className="py-2 text-right font-medium">Estornos</th>
+                      <th className="py-2 text-right font-medium">Total a repassar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fechamento.linhas.map((a, i) => (
+                      <tr key={a.codigo} className={`border-b border-slate-50 ${a.codigo === '(sem código)' ? 'bg-amber-50/60' : ''}`}>
+                        <td className="py-2.5 pr-2 text-xs text-slate-400">{i + 1}º</td>
+                        <td className="py-2.5">
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-700">
+                            {a.codigo}
+                          </span>
+                        </td>
+                        <td className="py-2.5 font-medium text-slate-800">{a.nome ?? <span className="text-slate-400">— cadastrar —</span>}</td>
+                        <td className="py-2.5 text-xs text-slate-500">{[...a.producoes].join(' / ') || '—'}</td>
+                        <td className="py-2.5 text-right text-slate-500">{a.clientes.size}</td>
+                        <td className="py-2.5 text-right text-slate-500">{a.lancamentos}</td>
+                        <td className={`py-2.5 text-right ${a.estornos < 0 ? 'text-red-600' : 'text-slate-300'}`}>
+                          {a.estornos < 0 ? brl(a.estornos) : '—'}
+                        </td>
+                        <td className="py-2.5 text-right font-semibold text-slate-900">{brl(a.total)}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-slate-50/60">
+                      <td colSpan={7} className="px-2 py-3 text-right text-xs uppercase text-slate-400">Total geral do mês</td>
+                      <td className="py-3 text-right font-bold text-slate-900">{brl(fechamento.totalGeral)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="mt-3 text-xs text-slate-400">
+                Seguros com pagamento anual aparecem no mês em que a seguradora paga a comissão (parcela única);
+                os mensais aparecem todo mês. Estornos entram negativos e já saem abatidos do repasse.
+              </p>
             </div>
           )}
         </Card>
