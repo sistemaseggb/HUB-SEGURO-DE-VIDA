@@ -1,8 +1,11 @@
 import { useState } from 'react'
-import { Upload, CheckCircle2, AlertTriangle, Download, Landmark } from 'lucide-react'
+import { Upload, CheckCircle2, AlertTriangle, Download, FileSpreadsheet, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { parseCSV, acharColuna, normalizar, paraDataISO, paraNumero, baixarCSV } from '../lib/csv'
-import { detectarPlanilha, normalizarComissoes } from '../lib/planilhasComissao'
+import {
+  detectarPlanilha, normalizarComissoes, lerArquivoComissao,
+  inferirSeguradora, inferirCompetencia,
+} from '../lib/planilhasComissao'
 import { ETAPAS } from '../lib/constants'
 import { PageHeader, Card, Button, Textarea, Campo, Input, Spinner, ComoFunciona, Badge } from '../components/ui'
 
@@ -229,57 +232,102 @@ export default function Importar() {
 }
 
 // ─── Importação de COMISSÕES (planilhas mensais das seguradoras) ────────────
-// Detecta sozinho o formato (Azos/Icatu/MAG oficiais ou a planilha interna
-// com Produção/Cód. assessor), normaliza valores e competência e grava em
-// comissoes_importadas. Reimportar o mesmo mês substitui os dados antigos.
+// Arraste os arquivos originais (.xlsx/.xls/.csv) — pode vários de uma vez.
+// O sistema lê cada um, reconhece o formato (Azos/Icatu/MAG oficiais, internas
+// ou o consolidado do Hub), adivinha seguradora e mês pelo nome do arquivo e
+// importa tudo num clique. Reimportar o mesmo mês substitui os dados antigos.
+const brlComissao = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
 function ImportarComissoes({ onVoltar }) {
-  const [texto, setTexto] = useState('')
-  const [deteccao, setDeteccao] = useState(null) // { perfil, cabecalho, linhas }
-  const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7))
-  const [seguradora, setSeguradora] = useState('')
+  const [arquivos, setArquivos] = useState([]) // [{ id, nome, deteccao, seguradora, competencia, erro }]
+  const [texto, setTexto] = useState('')       // alternativa: colar células
+  const [lendo, setLendo] = useState(false)
+  const [arrastando, setArrastando] = useState(false)
   const [importando, setImportando] = useState(false)
   const [resultado, setResultado] = useState(null)
 
-  function analisar(t) {
+  async function receberArquivos(lista) {
+    if (!lista?.length) return
     setResultado(null)
-    const d = detectarPlanilha(t)
-    setDeteccao(d)
-    if (d?.perfil.seguradora) setSeguradora(d.perfil.seguradora)
+    setLendo(true)
+    const novos = []
+    for (const file of lista) {
+      const base = { id: `${file.name}-${Date.now()}-${Math.random()}`, nome: file.name }
+      try {
+        const conteudo = await lerArquivoComissao(file)
+        const deteccao = detectarPlanilha(conteudo)
+        novos.push({
+          ...base,
+          deteccao,
+          seguradora: deteccao?.perfil.seguradora ?? inferirSeguradora(file.name),
+          competencia: inferirCompetencia(file.name),
+          erro: deteccao ? null : 'Formato não reconhecido — nenhuma aba bate com os formatos conhecidos',
+        })
+      } catch (e) {
+        novos.push({ ...base, deteccao: null, seguradora: '', competencia: '', erro: `Não consegui ler: ${e.message}` })
+      }
+    }
+    setArquivos((a) => [...a, ...novos])
+    setLendo(false)
   }
 
-  const seguradoraFixa = Boolean(deteccao?.perfil.seguradora)
-  const porLinha = Boolean(deteccao?.perfil.porLinha) // mês/seguradora vêm do arquivo
-  const { registros, avisos } = deteccao
-    ? normalizarComissoes(deteccao, {
-        competenciaPadrao: competencia ? `${competencia}-01` : null,
-        seguradora: seguradora.trim() || 'Seguradora',
-      })
-    : { registros: [], avisos: [] }
-  const total = registros.reduce((s, r) => s + r.valor, 0)
-  const porProducao = registros.reduce((acc, r) => {
-    const k = r.producao || 'A classificar'
-    acc[k] = (acc[k] ?? 0) + r.valor
-    return acc
-  }, {})
-  const brl = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  function adicionarColado() {
+    const deteccao = detectarPlanilha(texto)
+    setArquivos((a) => [...a, {
+      id: `colado-${Date.now()}`,
+      nome: '(células coladas)',
+      deteccao,
+      seguradora: deteccao?.perfil.seguradora ?? '',
+      competencia: '',
+      erro: deteccao ? null : 'Formato não reconhecido — confira se a linha de cabeçalho veio junto',
+    }])
+    setTexto('')
+  }
 
-  async function importar() {
+  function atualizar(id, campos) {
+    setArquivos((a) => a.map((x) => (x.id === id ? { ...x, ...campos } : x)))
+  }
+
+  // Analisa cada arquivo com os campos atuais (editáveis nos cards)
+  const analises = arquivos.map((a) => {
+    if (!a.deteccao) return { ...a, registros: [], avisos: [], pronto: false }
+    const { registros, avisos } = normalizarComissoes(a.deteccao, {
+      competenciaPadrao: a.competencia ? `${a.competencia}-01` : null,
+      seguradora: (a.seguradora ?? '').trim() || 'Seguradora',
+    })
+    const porLinha = Boolean(a.deteccao.perfil.porLinha)
+    const seguradoraOk = porLinha || Boolean((a.seguradora ?? '').trim())
+    const mesOk = registros.every((r) => r.competencia)
+    return {
+      ...a, registros, avisos, porLinha,
+      seguradoraFixa: Boolean(a.deteccao.perfil.seguradora),
+      pronto: registros.length > 0 && seguradoraOk && mesOk,
+      pendencia: !seguradoraOk ? 'informe a seguradora' : !mesOk ? 'informe o mês' : null,
+    }
+  })
+  const prontos = analises.filter((x) => x.pronto)
+  const registrosTotais = prontos.flatMap((x) => x.registros)
+  const totalGeral = registrosTotais.reduce((s, r) => s + r.valor, 0)
+
+  async function importarTudo() {
     setImportando(true)
-    setResultado(await importarComissoes(registros))
+    const r = await importarComissoes(registrosTotais)
+    setResultado(r)
+    if (!r.erros.length) setArquivos([])
     setImportando(false)
   }
 
   return (
     <div>
       <PageHeader titulo="Importar Planilhas"
-        subtitulo="Comissões: cole a planilha da seguradora e o sistema reconhece o formato sozinho" />
+        subtitulo="Comissões: arraste os arquivos das seguradoras — o sistema faz o resto" />
 
-      <ComoFunciona id="importar-comissoes">
-        Abra a planilha do mês (da seguradora ou a sua interna), selecione as células <strong>com o cabeçalho</strong>,
-        copie e cole abaixo. O sistema reconhece sozinho se é Azos, Icatu, MAG ou a planilha interna com
-        <strong> Produção (Nati/Bruno)</strong> — nada do Bruno é excluído, só separado. Estornos entram como valor
-        negativo. Importar o mesmo mês de novo <strong>substitui</strong> os dados anteriores (pode repetir sem medo).
-        Os totais aparecem em <strong>Relatórios</strong>.
+      <ComoFunciona id="importar-comissoes-v2">
+        Arraste para a área abaixo os arquivos <strong>do jeito que chegam</strong> das seguradoras
+        (.xlsx, .xls ou .csv) — pode soltar <strong>todos de uma vez</strong>. O sistema lê cada um,
+        reconhece se é Azos, Icatu, MAG, Omint ou a planilha interna, e ainda adivinha a seguradora e o mês
+        pelo nome do arquivo (confira e ajuste se precisar). Depois é um clique em <strong>Importar tudo</strong>.
+        Reimportar o mesmo mês substitui os dados — nunca duplica. Nada do Bruno é excluído, só separado.
       </ComoFunciona>
 
       <Card className="p-5">
@@ -297,107 +345,125 @@ function ImportarComissoes({ onVoltar }) {
           </button>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="md:col-span-2">
-            <Campo label="Cole aqui as células da planilha (com a linha de cabeçalho)"
-              dica="Funciona com as planilhas oficiais (Azos, Icatu, MAG) e com as internas mensais.">
-              <Textarea rows={8} value={texto}
-                onChange={(e) => { setTexto(e.target.value); analisar(e.target.value) }}
-                placeholder={'Nome do Segurado\tCódigo assessor\tProdução\tParcela\tComissão Bruta\n...'} />
-            </Campo>
-            <Campo label="...ou envie o arquivo .csv (ex.: relatório da MAG)">
-              <input type="file" accept=".csv,.txt"
-                onChange={(e) => {
-                  const arquivo = e.target.files?.[0]
-                  if (!arquivo) return
-                  const leitor = new FileReader()
-                  leitor.onload = () => { setTexto(leitor.result); analisar(leitor.result) }
-                  leitor.readAsText(arquivo, 'utf-8')
-                }}
-                className="w-full rounded-lg border border-dashed border-slate-300 p-3 text-sm text-slate-500" />
-            </Campo>
-          </div>
-          <div className="space-y-3">
-            {porLinha ? (
-              <p className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-xs text-emerald-800">
-                Arquivo consolidado do Hub: o <strong>mês</strong> e a <strong>seguradora</strong> vêm
-                de cada linha do próprio arquivo — nada a preencher aqui.
-              </p>
-            ) : (
-              <>
-                <Campo label="Mês de competência" obrigatorio
-                  dica="Usado quando a planilha não traz o mês (Icatu/Omint internas).">
-                  <Input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} />
-                </Campo>
-                <Campo label="Seguradora" obrigatorio={!seguradoraFixa}
-                  dica={seguradoraFixa ? 'Identificada pelo formato da planilha.' : 'Ex.: Azos, Icatu, MAG, Omint...'}>
-                  <Input value={seguradora} disabled={seguradoraFixa}
-                    onChange={(e) => setSeguradora(e.target.value)} placeholder="Nome da seguradora" />
-                </Campo>
-              </>
-            )}
-          </div>
-        </div>
-
-        {texto.trim() && !deteccao && (
-          <p className="mt-4 flex items-center gap-2 text-sm text-red-600">
-            <AlertTriangle size={15} />
-            Formato não reconhecido. Confira se a <strong>linha de cabeçalho</strong> veio junto na colagem.
+        {/* Zona de arrastar e soltar */}
+        <label
+          onDragOver={(e) => { e.preventDefault(); setArrastando(true) }}
+          onDragLeave={() => setArrastando(false)}
+          onDrop={(e) => { e.preventDefault(); setArrastando(false); receberArquivos([...e.dataTransfer.files]) }}
+          className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
+            arrastando ? 'border-blue-500 bg-blue-50' : 'border-slate-300 bg-slate-50/50 hover:border-blue-400 hover:bg-blue-50/40'}`}>
+          <FileSpreadsheet size={30} className={arrastando ? 'text-blue-600' : 'text-slate-400'} />
+          <p className="font-medium text-slate-700">
+            Arraste as planilhas do mês aqui — pode soltar todas de uma vez
           </p>
+          <p className="text-xs text-slate-400">
+            ou clique para escolher · aceita .xlsx, .xlsm, .xls e .csv, do jeito que chegam das seguradoras
+          </p>
+          <input type="file" multiple accept=".xlsx,.xlsm,.xls,.csv,.txt" className="hidden"
+            onChange={(e) => { receberArquivos([...e.target.files]); e.target.value = '' }} />
+        </label>
+
+        {lendo && <Spinner />}
+
+        {/* Um card por arquivo */}
+        {analises.length > 0 && (
+          <div className="mt-5 space-y-3">
+            {analises.map((a) => {
+              const porProducao = a.registros.reduce((acc, r) => {
+                const k = r.producao || 'A classificar'
+                acc[k] = (acc[k] ?? 0) + r.valor
+                return acc
+              }, {})
+              return (
+                <div key={a.id} className={`rounded-xl border p-4 ${
+                  a.erro ? 'border-red-200 bg-red-50/50' : a.pronto ? 'border-emerald-200 bg-emerald-50/30' : 'border-amber-200 bg-amber-50/40'}`}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {a.erro
+                      ? <AlertTriangle size={16} className="shrink-0 text-red-500" />
+                      : a.pronto
+                        ? <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+                        : <AlertTriangle size={16} className="shrink-0 text-amber-500" />}
+                    <span className="max-w-[280px] truncate text-sm font-medium text-slate-800" title={a.nome}>{a.nome}</span>
+                    {a.deteccao && <Badge tom="green">{a.deteccao.perfil.rotulo}</Badge>}
+                    {a.registros.length > 0 && (
+                      <>
+                        <Badge>{a.registros.length} lançamento(s)</Badge>
+                        <Badge tom="blue">{brlComissao(a.registros.reduce((s, r) => s + r.valor, 0))}</Badge>
+                        {Object.entries(porProducao).map(([p, v]) => (
+                          <Badge key={p} tom={p === 'A classificar' ? 'yellow' : 'slate'}>{p}: {brlComissao(v)}</Badge>
+                        ))}
+                      </>
+                    )}
+                    <button onClick={() => setArquivos((arr) => arr.filter((x) => x.id !== a.id))}
+                      className="ml-auto rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-red-600" title="Remover">
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  {a.erro && <p className="mt-2 text-xs text-red-600">{a.erro}</p>}
+
+                  {a.deteccao && !a.porLinha && (
+                    <div className="mt-3 flex flex-wrap items-end gap-3">
+                      <div className="w-44">
+                        <Campo label="Seguradora" obrigatorio={!a.seguradoraFixa}>
+                          <Input value={a.seguradora} disabled={a.seguradoraFixa}
+                            onChange={(e) => atualizar(a.id, { seguradora: e.target.value })}
+                            placeholder="Ex.: Azos, MAG..." />
+                        </Campo>
+                      </div>
+                      <div className="w-44">
+                        <Campo label="Mês de competência">
+                          <Input type="month" value={a.competencia}
+                            onChange={(e) => atualizar(a.id, { competencia: e.target.value })} />
+                        </Campo>
+                      </div>
+                      {a.pendencia && <p className="pb-2 text-xs font-medium text-amber-700">← {a.pendencia}</p>}
+                    </div>
+                  )}
+                  {a.porLinha && (
+                    <p className="mt-2 text-xs text-emerald-700">Mês e seguradora vêm de cada linha do próprio arquivo.</p>
+                  )}
+                  {a.avisos.length > 0 && (
+                    <ul className="mt-2 list-inside list-disc text-xs text-amber-700">
+                      {a.avisos.slice(0, 3).map((av, i) => <li key={i}>{av}</li>)}
+                    </ul>
+                  )}
+                </div>
+              )
+            })}
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <Button onClick={importarTudo} disabled={importando || prontos.length === 0}>
+                <Upload size={15} />
+                {importando
+                  ? 'Importando...'
+                  : `Importar tudo (${prontos.length} arquivo(s), ${registrosTotais.length} lançamentos, ${brlComissao(totalGeral)})`}
+              </Button>
+              {analises.some((x) => !x.pronto) && (
+                <p className="text-xs text-amber-700">
+                  Arquivos com aviso ficam de fora — complete o que falta ou remova (✕).
+                </p>
+              )}
+            </div>
+          </div>
         )}
 
-        {deteccao && (
-          <div className="mt-5 border-t border-slate-100 pt-5">
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <Badge tom="green"><Landmark size={12} /> {deteccao.perfil.rotulo}</Badge>
-              <Badge>{registros.length} lançamento(s)</Badge>
-              <Badge tom="blue">Total {brl(total)}</Badge>
-              {Object.entries(porProducao).map(([p, v]) => (
-                <Badge key={p} tom={p === 'A classificar' ? 'yellow' : 'slate'}>{p}: {brl(v)}</Badge>
-              ))}
+        {/* Alternativa: colar células */}
+        {arquivos.length === 0 && (
+          <details className="mt-4">
+            <summary className="cursor-pointer text-xs font-medium text-slate-400 hover:text-slate-600">
+              Prefere copiar e colar as células? Clique aqui
+            </summary>
+            <div className="mt-3">
+              <Textarea rows={6} value={texto} onChange={(e) => setTexto(e.target.value)}
+                placeholder={'Cole aqui as células da planilha, com a linha de cabeçalho'} />
+              <div className="mt-2">
+                <Button variant="secondary" disabled={!texto.trim()} onClick={adicionarColado}>
+                  Analisar o que colei
+                </Button>
+              </div>
             </div>
-
-            {avisos.length > 0 && (
-              <ul className="mb-3 list-inside list-disc text-xs text-amber-700">
-                {avisos.map((a, i) => <li key={i}>{a}</li>)}
-              </ul>
-            )}
-
-            <div className="overflow-x-auto rounded-lg border border-slate-100">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-500">
-                    {['Cliente', 'Seguradora', 'Competência', 'Produção', 'Cód. assessor', 'Parcela', 'Receita', 'Valor'].map((h) => (
-                      <th key={h} className="px-3 py-2 font-medium">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {registros.slice(0, 5).map((r, i) => (
-                    <tr key={i} className="border-t border-slate-100">
-                      <td className="px-3 py-2 text-slate-700">{r.cliente_nome}</td>
-                      <td className="px-3 py-2">{r.seguradora}</td>
-                      <td className="px-3 py-2">{r.competencia ?? '—'}</td>
-                      <td className="px-3 py-2">{r.producao ?? '—'}</td>
-                      <td className="px-3 py-2">{r.codigo_assessor ?? '—'}</td>
-                      <td className="px-3 py-2">{r.parcela ?? '—'}</td>
-                      <td className="px-3 py-2">{r.tipo_receita}</td>
-                      <td className={`px-3 py-2 font-medium ${r.valor < 0 ? 'text-red-600' : 'text-slate-800'}`}>{brl(r.valor)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mt-4">
-              <Button onClick={importar}
-                disabled={importando || registros.length === 0
-                  || (!porLinha && !seguradora.trim())
-                  || registros.some((r) => !r.competencia)}>
-                <Upload size={15} /> {importando ? 'Importando...' : `Importar ${registros.length} lançamento(s)`}
-              </Button>
-            </div>
-          </div>
+          </details>
         )}
 
         {importando && <Spinner />}
@@ -408,6 +474,9 @@ function ImportarComissoes({ onVoltar }) {
               <CheckCircle2 size={17} className="text-emerald-600" />
               {resultado.ok} lançamento(s) importado(s)
               {resultado.substituidos > 0 && ` · ${resultado.substituidos} antigo(s) do mesmo mês substituído(s)`}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Confira em <strong>Relatórios → Fechamento para o financeiro</strong> — a faixa verde confirma que os totais batem.
             </p>
             {resultado.erros.length > 0 && (
               <ul className="mt-2 list-inside list-disc text-xs text-red-600">

@@ -5,15 +5,22 @@
 // comissoes_importadas. A usuária só copia as células da planilha e cola.
 import { parseCSV, normalizar, acharColuna } from './csv'
 
-// Converte dinheiro nos 3 formatos que aparecem nas planilhas:
-// "61.08" (número americano), "R$1.539,94" / "273,96" (texto BR),
+// Converte dinheiro nos formatos que aparecem nas planilhas:
+// "61.08" (americano), "R$1.539,94" / "273,96" (BR), "2,487.61" (americano
+// com milhar — formato que o Excel gera ao exportar células formatadas),
 // com suporte a negativos ("-R$144,81" = estorno).
 export function paraValor(v) {
   let s = String(v ?? '').trim().replace(/R\$\s?/g, '').replace(/\s/g, '')
   if (!s || s === '-' || s === '#REF!') return null
   const negativo = s.startsWith('-')
   if (negativo) s = s.slice(1)
-  if (s.includes(',')) s = s.replaceAll('.', '').replace(',', '.')
+  if (s.includes(',') && s.includes('.')) {
+    // os dois separadores: o que vem POR ÚLTIMO é o decimal
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replaceAll('.', '').replace(',', '.')
+    else s = s.replaceAll(',', '')
+  } else if (s.includes(',')) {
+    s = s.replace(',', '.')
+  }
   const n = Number(s)
   if (!Number.isFinite(n)) return null
   return negativo ? -n : n
@@ -239,11 +246,21 @@ const PERFIS = [
   },
 ]
 
+// O extrato empresarial da Icatu é um .xls que na verdade é HTML — os acentos
+// chegam como entidades ("Comiss&atilde;o"). Decodifica as comuns do pt-BR.
+const ENTIDADES = {
+  atilde: 'ã', otilde: 'õ', ntilde: 'ñ', ecirc: 'ê', acirc: 'â', ocirc: 'ô',
+  aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú',
+  agrave: 'à', ccedil: 'ç', uuml: 'ü', amp: '&', nbsp: ' ', quot: '"', lt: '<', gt: '>',
+}
+const decodificarEntidades = (t) =>
+  t.replace(/&([a-z]+);/gi, (m, e) => ENTIDADES[e.toLowerCase()] ?? m)
+
 // Procura, nas primeiras linhas do texto colado, uma linha de cabeçalho que
 // case com algum perfil (os relatórios oficiais têm razão social/CNPJ antes
 // do cabeçalho de verdade — por isso não dá para assumir a linha 1).
 export function detectarPlanilha(texto) {
-  const todasLinhas = String(texto ?? '').split(/\r?\n/)
+  const todasLinhas = decodificarEntidades(String(texto ?? '')).split(/\r?\n/)
   for (let i = 0; i < Math.min(todasLinhas.length, 12); i++) {
     const recorte = todasLinhas.slice(i).join('\n')
     const { cabecalho, linhas } = parseCSV(recorte)
@@ -253,6 +270,60 @@ export function detectarPlanilha(texto) {
     if (perfil) return { perfil, cabecalho, linhas }
   }
   return null
+}
+
+// Lê um arquivo enviado (xlsx/xlsm/xls/csv) e devolve o texto tabular da
+// primeira aba cujo formato for reconhecido. O parser de Excel só é baixado
+// quando o primeiro arquivo chega (import dinâmico).
+export async function lerArquivoComissao(file) {
+  const nome = file.name.toLowerCase()
+  if (nome.endsWith('.csv') || nome.endsWith('.txt')) {
+    return await file.text()
+  }
+  const XLSX = await import('xlsx')
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+  let primeiro = null
+  for (const sn of wb.SheetNames) {
+    const texto = XLSX.utils.sheet_to_csv(wb.Sheets[sn], { FS: ';', blankrows: false })
+    primeiro ??= texto
+    if (detectarPlanilha(texto)) return texto
+  }
+  return primeiro ?? ''
+}
+
+// Adivinha a seguradora pelo nome do arquivo ("MAG_MAIO_26.xlsx" → MAG)
+const SEGURADORAS_CONHECIDAS = [
+  ['azos', 'Azos'], ['icatu', 'Icatu'], ['mag', 'MAG'], ['omint', 'Omint'],
+  ['metlife', 'Met Life'], ['met life', 'Met Life'], ['prudential', 'Prudential'],
+  ['akad', 'Akad'], ['pottencial', 'Pottencial'], ['axa', 'AXA'],
+]
+export function inferirSeguradora(nomeArquivo) {
+  const n = normalizar(nomeArquivo)
+  for (const [chave, nome] of SEGURADORAS_CONHECIDAS) {
+    if (n.includes(normalizar(chave))) return nome
+  }
+  return ''
+}
+
+// Adivinha a competência pelo nome do arquivo ("Icatu Indiv. MAIO 26" → 2026-05)
+const MESES_NOME = [
+  ['janeiro', 1], ['fevereiro', 2], ['marco', 3], ['abril', 4], ['maio', 5],
+  ['junho', 6], ['julho', 7], ['agosto', 8], ['setembro', 9], ['outubro', 10],
+  ['novembro', 11], ['dezembro', 12],
+  ['jan', 1], ['fev', 2], ['mar', 3], ['abr', 4], ['mai', 5], ['jun', 6],
+  ['jul', 7], ['ago', 8], ['set', 9], ['out', 10], ['nov', 11], ['dez', 12],
+]
+export function inferirCompetencia(nomeArquivo) {
+  const n = normalizar(nomeArquivo)
+  for (const [nomeMes, mes] of MESES_NOME) {
+    const i = n.indexOf(nomeMes)
+    if (i < 0) continue
+    const resto = n.slice(i + nomeMes.length)
+    const ano = resto.match(/^[a-z]*(\d{4}|\d{2})/)
+    const aaaa = ano ? (ano[1].length === 2 ? `20${ano[1]}` : ano[1]) : String(new Date().getFullYear())
+    return `${aaaa}-${String(mes).padStart(2, '0')}`
+  }
+  return ''
 }
 
 // Converte as linhas cruas para o modelo canônico. `competenciaPadrao`
