@@ -22,6 +22,7 @@ e registrar os dados; o sistema cuida do resto.
 | Aniversário (cliente ou apólice) se aproxima | Aparece na Régua de Relacionamento e na Central do Dia, com botão de WhatsApp com mensagem pronta |
 | Todo dia às 8h (pg_cron) | O banco **escreve as mensagens do dia** (aniversários, reativação de leads parados) na Central de Mensagens — envio com 1 clique |
 | Planilha importada | Dados históricos entram **sem** disparar tarefas/formulários (flag `importado`), mas com comissão calculada e funil correto |
+| Planilha de comissão do mês importada | Dashboard ganha o card "Comissão recebida das seguradoras" (Natália × Bruno + evolução) e os Relatórios fecham o mês por seguradora/assessor — reimportar o mesmo mês substitui, sem duplicar |
 | A qualquer momento | O sistema **pontua cada lead** (score de prioridade: etapa + urgência + valor potencial + reunião marcada) e sugere a **Próxima Melhor Ação** — o "Foco de Hoje" do dashboard e a faixa no perfil do cliente |
 | Reunião marcada para amanhã | Entra na Central de Mensagens um **lembrete de confirmação** pronto |
 | Proposta apresentada | Cria sozinho a tarefa de **follow-up em 3 dias** |

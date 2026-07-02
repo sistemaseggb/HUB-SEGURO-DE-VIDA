@@ -6,6 +6,21 @@ import { etapaLabel, CHART } from '../lib/constants'
 import { baixarCSV } from '../lib/csv'
 import { PageHeader, Card, Button, Spinner, Input, Campo, ComoFunciona, Badge } from '../components/ui'
 
+// Busca comissoes_importadas em páginas de 1000 (limite do Supabase por
+// consulta) — meses cheios passam disso com facilidade (MAG sozinha tem 500+).
+async function buscarComissoesPaginado(colunas, filtro = (q) => q) {
+  const todas = []
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await filtro(
+      supabase.from('comissoes_importadas').select(colunas).order('id')
+    ).range(de, de + 999)
+    if (error || !data?.length) break
+    todas.push(...data)
+    if (data.length < 1000) break
+  }
+  return todas
+}
+
 // Relatórios gerenciais: fechamento de comissões (quanto pagar a cada assessor),
 // análise de perdas e velocidade do funil. Tudo exportável em CSV.
 export default function Relatorios() {
@@ -30,12 +45,19 @@ export default function Relatorios() {
     })
   }, [])
 
+  const [resumoImportadas, setResumoImportadas] = useState([])
+
   useEffect(() => {
-    supabase.from('comissoes_importadas')
-      .select('seguradora, segmento, tipo_receita, cliente_nome, codigo_assessor, producao, parcela, valor, assessores(nome)')
-      .eq('competencia', `${mes}-01`)
-      .then(({ data }) => setImportadas(data ?? []))
+    buscarComissoesPaginado(
+      'seguradora, segmento, tipo_receita, cliente_nome, codigo_assessor, producao, parcela, valor, assessores(nome)',
+      (q) => q.eq('competencia', `${mes}-01`)
+    ).then(setImportadas)
   }, [mes])
+
+  useEffect(() => {
+    supabase.from('vw_comissoes_importadas_resumo').select('*')
+      .then(({ data }) => setResumoImportadas(data ?? []))
+  }, [])
 
   const doMes = useMemo(
     () => (comissoes ?? []).filter((c) => String(c.mes).startsWith(mes)),
@@ -77,6 +99,42 @@ export default function Relatorios() {
       campanha: soma(importadas.filter((r) => r.tipo_receita === 'campanha')),
     }
   }, [importadas])
+
+  // Evolução de todos os meses importados (Natália × Bruno × total)
+  const evolucaoImportadas = useMemo(() => {
+    const porMes = new Map()
+    for (const r of resumoImportadas) {
+      const m = String(r.competencia).slice(0, 7)
+      const acc = porMes.get(m) ?? { total: 0, nati: 0, bruno: 0 }
+      acc.total += Number(r.total)
+      if (r.producao === 'Nati') acc.nati += Number(r.total)
+      if (r.producao === 'Bruno') acc.bruno += Number(r.total)
+      porMes.set(m, acc)
+    }
+    return [...porMes.entries()].sort().map(([m, v]) => ({ mes: m, ...v }))
+  }, [resumoImportadas])
+
+  // Matriz cliente × mês — a "Comissão Mês" da planilha geral, agora automática
+  async function exportarMatrizClienteMes() {
+    const linhas = await buscarComissoesPaginado('cliente_nome, seguradora, competencia, valor')
+    const meses = [...new Set(linhas.map((r) => String(r.competencia).slice(0, 7)))].sort()
+    const porCliente = new Map()
+    for (const r of linhas) {
+      const k = `${r.cliente_nome}|${r.seguradora}`
+      if (!porCliente.has(k)) porCliente.set(k, {})
+      const c = porCliente.get(k)
+      const m = String(r.competencia).slice(0, 7)
+      c[m] = (c[m] ?? 0) + Number(r.valor)
+    }
+    baixarCSV('matriz-cliente-mes.csv',
+      ['Cliente', 'Seguradora', ...meses.map((m) => mesBR(`${m}-01`))],
+      [...porCliente.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([k, valores]) => {
+          const [cliente, seguradora] = k.split('|')
+          return [cliente, seguradora, ...meses.map((m) => valores[m]?.toFixed(2).replace('.', ',') ?? '')]
+        }))
+  }
 
   async function exportarClientes() {
     const { data } = await supabase
@@ -225,6 +283,11 @@ export default function Relatorios() {
                 )}>
                 <Download size={15} /> Detalhado CSV
               </Button>
+              <Button variant="secondary" disabled={evolucaoImportadas.length === 0}
+                onClick={exportarMatrizClienteMes}
+                title="Comissão de cada cliente mês a mês — a 'Comissão Mês' da planilha geral, agora automática">
+                <Download size={15} /> Matriz cliente × mês
+              </Button>
             </div>
           </div>
 
@@ -263,6 +326,31 @@ export default function Relatorios() {
                           <td className="py-2.5 text-right">{brl(s.nati)}</td>
                           <td className="py-2.5 text-right text-slate-500">{brl(s.bruno)}</td>
                           <td className="py-2.5 text-right font-semibold">{brl(s.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <p className="mb-2 text-xs font-medium uppercase text-slate-400">Evolução — todos os meses importados</p>
+                  <table className="w-full min-w-[380px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
+                        <th className="py-2 font-medium">Mês</th>
+                        <th className="py-2 text-right font-medium">Natália</th>
+                        <th className="py-2 text-right font-medium">Bruno</th>
+                        <th className="py-2 text-right font-medium">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {evolucaoImportadas.map((e) => (
+                        <tr key={e.mes}
+                          className={`border-b border-slate-50 ${e.mes === mes ? 'bg-blue-50/50 font-medium' : ''}`}>
+                          <td className="py-2.5 text-slate-800">{mesBR(`${e.mes}-01`)}</td>
+                          <td className="py-2.5 text-right">{brl(e.nati)}</td>
+                          <td className="py-2.5 text-right text-slate-500">{brl(e.bruno)}</td>
+                          <td className="py-2.5 text-right font-semibold">{brl(e.total)}</td>
                         </tr>
                       ))}
                     </tbody>

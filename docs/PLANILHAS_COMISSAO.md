@@ -267,6 +267,23 @@ Com o modelo canônico alimentado pelos 12 arquivos, ficam viáveis:
         Natália × Bruno, por seguradora, por assessor, recorrente × venda
         nova × campanha e exportação CSV (resumo e detalhado).
 
+## Rotina mensal (o ciclo completo no Hub)
+
+Todo mês, quando as planilhas chegarem:
+
+1. **Importar → Comissões**: cole a planilha de cada seguradora (tabela
+   abaixo). Escolha o mês — reimportar o mesmo mês **substitui** os dados
+   antigos, então pode colar de novo quantas vezes precisar.
+2. **Dashboard** atualiza sozinho: card "Comissão recebida das seguradoras"
+   com o mês de referência, split Natália × Bruno e evolução dos últimos meses.
+3. **Relatórios** mostram o fechamento: por seguradora, por assessor
+   (base de repasse), recorrente × venda nova × campanha e a evolução de
+   todos os meses.
+4. Exportações substituem a planilha geral antiga:
+   - **Resumo CSV** e **Detalhado CSV** — fechamento do mês;
+   - **Matriz cliente × mês** — a aba "Comissão Mês" da geral (parada desde
+     dez/2023), agora gerada automaticamente com todos os meses importados.
+
 ## Como importar cada arquivo no Hub (passo a passo)
 
 | Arquivo | Como importar |
