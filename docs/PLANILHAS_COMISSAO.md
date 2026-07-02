@@ -136,6 +136,40 @@ Arquivo multi-abas — funciona como o "sistema" atual do escritório:
   nas planilhas mensais por seguradora. É exatamente o vazio que os
   relatórios consolidados devem preencher.
 
+### 10. `VIDA_INDIVIDUAL_ICATU.xlsx` (oficial — Icatu individual, jun/26)
+
+- "Extrato Analítico Individual", período 01/06/2026 → 30/07/2026.
+- Cabeçalho real na **linha 5**; 146 linhas de dados; rodapé com totais por
+  tipo de lançamento.
+- Colunas: `Cliente`, `CPF`, `Lançamento`, `Produto`, `Processo`,
+  `Data de pagamento`, `Certificado`, `Apólice`, `Proposta`, `Parcela`,
+  `Vencimento`, `Data do cálculo`, `Valor base`, `%`, `Comissão` (texto BR).
+- Dois tipos de lançamento: **Corretagem** (recorrente, Σ R$ 883,37) e
+  **Agenciamento** (venda nova, Σ R$ 1.230,43). Contém **estornos com valor
+  negativo** (`-R$144,81`).
+- É a fonte da qual a interna `Icatu Indiv.` é montada.
+
+### 11. `VIDA_EMPRESARIAL_ICATU.xls` (oficial — Icatu empresarial, jun/26)
+
+- **Atenção: apesar da extensão `.xls`, o arquivo é uma tabela HTML** (export
+  do portal Icatu) — não abre com leitores de Excel binário.
+- 11 linhas de dados + linha `Valor Total` (Σ prêmio R$ 8.884,88, Σ comissão
+  **R$ 2.781,55**). Colunas: `Estipulante`, `Subestipulante`, `Apólice`,
+  `N.Fatura`, `Competência` (`202604`/`202605`), `Prêmio`, `Comissão`.
+
+**Conciliação comprovada**: o rodapé "PAGAMENTO DE CORRETAGEM R$ 3.664,92" do
+extrato individual = corretagem individual (R$ 883,37) **+ empresarial
+(R$ 2.781,55)** — a Icatu paga tudo no mesmo código de corretagem. Os números
+das planilhas fecham entre si.
+
+## Regra de negócio: Natália × Bruno
+
+As planilhas chegam sempre com **todos** os seguros do escritório (Natália e
+Bruno juntos). A coluna `Produção` (Nati/Bruno) é quem separa. **Regra
+definida pela usuária**: não excluir os dados do Bruno — apenas **separar**.
+O sistema (Hub) é apenas da Natália, então os relatórios devem trazer o total
+geral E o recorte por produção, sem descartar nada.
+
 ## Problemas de padronização encontrados (a corrigir na consolidação)
 
 | # | Problema | Onde |
@@ -150,6 +184,8 @@ Arquivo multi-abas — funciona como o "sistema" atual do escritório:
 | 8 | Seguradora com até 5 grafias diferentes na geral (`Mag`, `mag`, `MAG`…) | Geral |
 | 9 | Fórmulas quebradas `#REF!` e códigos compostos (`9045148/ 300321`) | Geral |
 | 10 | Matriz `Comissão Mês` desatualizada desde dez/2023 | Geral |
+| 11 | Arquivo `.xls` que na verdade é HTML (não abre como Excel binário) | Icatu Empresarial oficial |
+| 12 | Estornos aparecem de 3 jeitos: linha negativa (Icatu), coluna própria (MAG) ou linha "Estorno realizado" (Azos campanhas) | Oficiais |
 
 ## Modelo canônico (proposta para a consolidação)
 
@@ -181,13 +217,41 @@ Cada linha de comissão, de qualquer origem, será normalizada para:
 | Azos oficial (comissões) | jun/26 | R$ 3.009,53 |
 | Azos oficial (campanha Multiplicazos) | jun/26 | R$ 3.329,97 |
 | MAG oficial (carteira + angariação) | jun/26 | R$ 9.750,72 |
+| Icatu Individual oficial (corretagem + agenciamento) | jun/26 | R$ 2.113,80 |
+| Icatu Empresarial oficial | jun/26 | R$ 2.781,55 |
 | Omint (interna) | jun/26 | R$ 98,67 |
+| **Total jun/26** | | **R$ 21.084,24** |
+
+## Relatórios finais que os dados permitem gerar
+
+Com o modelo canônico alimentado pelos 12 arquivos, ficam viáveis:
+
+1. **Fechamento mensal consolidado** — total de comissão por competência,
+   aberto por seguradora, com variação mês a mês.
+2. **Separação Natália × Bruno** — recorte por `Produção` em todos os
+   relatórios (sem excluir os dados do Bruno).
+3. **Comissão por assessor (cód. AAI)** — base para repasse: valor gerado,
+   nº de clientes e de parcelas por assessor/mês.
+4. **Recorrente × venda nova** — as oficiais distinguem: MAG
+   (`CARTEIRA` × `ANGARIACAO`), Icatu (`Corretagem` × `Agenciamento`),
+   Azos (comissão × campanha).
+5. **Carteira de clientes ativos** — da aba `Propostas fechadas`: 353 apólices
+   ativas com seguradora, prêmio e assessor (após normalizar grafias).
+6. **Evolução mensal por cliente** — reconstrução da matriz `Comissão Mês`
+   (abandonada desde dez/2023) a partir das planilhas por seguradora.
+7. **Estornos e cancelamentos** — consolidando os 3 formatos de estorno +
+   motivos de cancelamento da geral.
+8. **Auditoria oficial × interna** — conferência automática de que a planilha
+   interna do mês bate com o relatório oficial da seguradora.
+9. **Reuniões e conversão por assessor** — abas `Reuniões Marcadas` e
+   `Agendamentos` da geral.
 
 ## Pendências
 
-- [ ] Receber as **2 planilhas restantes** (envio parcelado).
+- [x] ~~Receber as planilhas~~ → **12 arquivos recebidos, mapa completo**.
 - [x] ~~Confirmar se a "geral" é montada a partir das mensais~~ → a geral tem o
       registro-mestre de propostas (`Propostas fechadas`) e uma matriz mensal
       abandonada desde dez/2023; a consolidação mensal precisa ser reconstruída
       a partir das planilhas por seguradora.
 - [ ] Definir formato dos relatórios finais de exportação (CSV/XLSX, por assessor × por seguradora × por mês).
+- [ ] Implementar a consolidação e os relatórios de exportação.
