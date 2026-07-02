@@ -16,7 +16,9 @@ Existem dois tipos de planilha:
    ex.: `AZOS_COMISSÃO_MAIO_26`, `Icatu Indiv. MAIO 26`): reorganizam os dados
    oficiais acrescentando as colunas de gestão do escritório
    (**Código assessor** e **Produção** = quem vendeu, Nati/Bruno).
-3. **Planilha "geral"** (a mais importante, consolida tudo) — *aguardando envio*.
+3. **Planilha "geral"** (`PLANILHA GERAL DE SEGUROS NATALIA E BRUNO.xlsx`):
+   registro-mestre de propostas fechadas desde 2023 + matriz de comissão mensal
+   (abandonada desde o fim de 2023 — ver §10).
 
 ## Arquivos mapeados até agora
 
@@ -74,6 +76,66 @@ Existem dois tipos de planilha:
 - Observações: várias linhas por cliente/parcela (uma por cobertura);
   `Código assessor` vazio em algumas linhas; também **sem coluna de data**.
 
+### 6. `MAG_MAIO_26.xlsx` (interna — MAG, maio/26)
+
+- Aba `Página3` — **566 linhas** (a maior das internas).
+- Colunas: `Nome/Razão social`, `Código do cliente`, `Código assessor`,
+  `Produção`, `Parcela comissionada`, `Competência comissionada` (`202605`),
+  `Parcela faturada`, `Competência faturada`, `Valor Comissão` (número),
+  `Valor estorno`.
+- Σ Valor Comissão: **R$ 7.723,52** (Nati 318 linhas, Bruno 248).
+- É a única interna que **tem competência em coluna** (herdada do relatório
+  oficial da MAG). Muitas linhas por cliente (uma por cobertura/verba).
+
+### 7. `RELAÇÃO COMISSÕES MAG JUNHO.csv` (oficial — MAG, junho/26)
+
+- CSV separado por `;`, BOM UTF-8, **543 linhas**, 36 colunas.
+- Colunas-chave: `Nome/Razão social`, `CPF/CNPJ do cliente`, `Proposta`,
+  `Descrição Produto`, `Valor base`, `Parcela/Competência comissionada e
+  faturada`, `Tipo de lançamento` (`ANGARIACAO_COMISSAO` = venda nova,
+  `CARTEIRA_COMISSAO` = recorrente), `Data de efetivação do crédito`,
+  `Valor Angariação`, `Valor Comissão`, `Valor estorno`, `Valor bonificação`.
+- Σ Comissão (carteira): **R$ 7.500,10** + Σ Angariação: **R$ 2.250,62**.
+- Competência única: 202606. Valores em texto BR (`352,34`); campos com `\t`
+  no início (CNPJ, nº inscrição) para não perder zeros.
+
+### 8. `OMINT_MAIO_26.xlsx` e `OMINT_junho26.xlsx` (internas — Omint)
+
+- Aba `Sheet1` — colunas: `Segurado / Estipulante`, `Código do cliente`,
+  `Código assessor`, `Produção`, `N° Parcela`, `Vl. a Receber` (número).
+- Maio: 4 linhas, Σ **R$ 3.323,16** | Junho: 1 linha, Σ **R$ 98,67**.
+- Sem coluna de competência (mês só no nome do arquivo).
+
+### 9. `PLANILHA GERAL DE SEGUROS NATALIA E BRUNO.xlsx` (a "geral")
+
+Arquivo multi-abas — funciona como o "sistema" atual do escritório:
+
+| Aba | Estado | Conteúdo |
+|---|---|---|
+| `Propostas fechadas` | visível | **Registro-mestre**: 365 propostas desde mar/2023. Colunas: nome, cód. cliente, especialista (Nati), % comissão, assessor, cód. AI, apólice, seguradora, prêmio anual/mês, data, tipo (resgatável ou não), % , status ATIVO/INATIVO, motivo cancelamento |
+| `Comissão Mês` | visível | Matriz cliente × mês (2023-03 → 2024-12): comissão recorrente esperada por cliente |
+| `Reuniões Marcadas (2025)` | visível | Assessores (nome, líder, função, código, nível) × reuniões por mês |
+| `Agendamentos ` | oculta | Contagem de agendamentos por assessor |
+| `Tabela dinâmica 1` | oculta | Vazia (resíduo de pivot) |
+
+**Achados importantes da geral:**
+
+- A aba `Propostas fechadas` é a fonte dos cadastros (cliente, assessor,
+  seguradora, apólice, prêmio, status) — é ela que deve alimentar a importação
+  do Hub.
+- A mesma seguradora está grafada de até **5 formas** (`MAG`/`Mag`/`mag`,
+  `Azos`/`azos`/`AZos`, `Met Life`/`Metlife`, `Akad (RC)`/`AKad (RC)`,
+  `Omint`/`OMINT`/`Omint (Seg. Viagem)`) — 20 grafias para ~10 seguradoras
+  reais. Distribuição (após normalizar): MAG 183, Icatu 44, Azos 49, Akad 32,
+  Met Life 19, Prudential 12, Omint 14, Pottencial 5, AXA 1, vazio 6.
+- Status: 353 ATIVO, 8 INATIVO, 4 em branco. Há 7 células `#REF!` (fórmulas
+  quebradas) e códigos de cliente compostos (`9045148/ 300321`) ou com mais de
+  uma apólice na mesma célula.
+- A matriz `Comissão Mês` **parou de ser preenchida** após dez/2023 (2024 tem
+  só 2–4 clientes/mês) — o acompanhamento mensal de comissão hoje só existe
+  nas planilhas mensais por seguradora. É exatamente o vazio que os
+  relatórios consolidados devem preencher.
+
 ## Problemas de padronização encontrados (a corrigir na consolidação)
 
 | # | Problema | Onde |
@@ -84,7 +146,10 @@ Existem dois tipos de planilha:
 | 4 | Nomes de cliente com espaços à esquerda, caixa alta × capitalizado, truncados | Todas |
 | 5 | `Código do cliente` como `473522.0` (float) ou vazio | Internas |
 | 6 | Abas com 1000 linhas/26 colunas formatadas mas vazias (incham o arquivo) | Internas |
-| 7 | Nome de coluna inconsistente para o mesmo conceito: `Nome do Segurado` × `Cliente` × `Nome/Razão social`; `Parcela` × `N.Fatura` | Todas |
+| 7 | Nome de coluna inconsistente para o mesmo conceito: `Nome do Segurado` × `Cliente` × `Nome/Razão social` × `Segurado / Estipulante`; `Parcela` × `N.Fatura` × `N° Parcela` | Todas |
+| 8 | Seguradora com até 5 grafias diferentes na geral (`Mag`, `mag`, `MAG`…) | Geral |
+| 9 | Fórmulas quebradas `#REF!` e códigos compostos (`9045148/ 300321`) | Geral |
+| 10 | Matriz `Comissão Mês` desatualizada desde dez/2023 | Geral |
 
 ## Modelo canônico (proposta para a consolidação)
 
@@ -103,8 +168,26 @@ Cada linha de comissão, de qualquer origem, será normalizada para:
 | `valor_comissao` | decimal (2 casas) | `Comissão` / `Comissão Bruta` / `Valor Recebido` |
 | `data_pagamento` | data | quando existir |
 
+## Resumo financeiro dos arquivos recebidos
+
+| Origem | Competência | Valor |
+|---|---|---|
+| Azos (interna) | maio/26 | R$ 5.052,49 |
+| Icatu Individual (interna) | maio/26 | R$ 5.362,92 |
+| Icatu Empresarial (interna) | maio/26 | R$ 2.659,80 |
+| MAG (interna) | maio/26 | R$ 7.723,52 |
+| Omint (interna) | maio/26 | R$ 3.323,16 |
+| **Total maio/26 (internas)** | | **R$ 24.121,89** |
+| Azos oficial (comissões) | jun/26 | R$ 3.009,53 |
+| Azos oficial (campanha Multiplicazos) | jun/26 | R$ 3.329,97 |
+| MAG oficial (carteira + angariação) | jun/26 | R$ 9.750,72 |
+| Omint (interna) | jun/26 | R$ 98,67 |
+
 ## Pendências
 
-- [ ] Receber as demais planilhas (envio parcelado) — **inclusive a "geral"**.
-- [ ] Confirmar com a usuária: a "geral" é montada a partir das mensais ou é independente?
+- [ ] Receber as **2 planilhas restantes** (envio parcelado).
+- [x] ~~Confirmar se a "geral" é montada a partir das mensais~~ → a geral tem o
+      registro-mestre de propostas (`Propostas fechadas`) e uma matriz mensal
+      abandonada desde dez/2023; a consolidação mensal precisa ser reconstruída
+      a partir das planilhas por seguradora.
 - [ ] Definir formato dos relatórios finais de exportação (CSV/XLSX, por assessor × por seguradora × por mês).
