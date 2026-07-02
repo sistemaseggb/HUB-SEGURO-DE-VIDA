@@ -126,7 +126,7 @@ export function StatTile({ rotulo, valor, detalhe, icone: Icone, corIcone = 'tex
     <div className="group rounded-2xl border border-slate-200/70 bg-white p-5 shadow-card transition-shadow hover:shadow-card-hover">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm text-slate-500">{rotulo}</p>
+          <p className="text-sm leading-snug text-slate-500">{rotulo}</p>
           <p className="mt-1.5 font-display text-[1.7rem] font-semibold leading-none tracking-tight text-slate-900 tabular">{valor}</p>
           {detalhe && <p className="mt-2 text-xs text-slate-400">{detalhe}</p>}
         </div>

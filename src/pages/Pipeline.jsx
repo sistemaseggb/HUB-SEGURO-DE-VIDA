@@ -71,26 +71,24 @@ export default function Pipeline() {
               onDragOver={(e) => { e.preventDefault(); setColunaAlvo(etapa.id) }}
               onDragLeave={() => setColunaAlvo(null)}
               onDrop={() => soltar(etapa.id)}
-              className={`flex w-64 shrink-0 flex-col rounded-xl border p-2 transition-colors ${
-                colunaAlvo === etapa.id ? 'border-blue-400 bg-blue-50/60' : 'border-slate-200 bg-slate-100/60'
+              className={`flex w-64 shrink-0 flex-col overflow-hidden rounded-2xl border transition-colors ${
+                colunaAlvo === etapa.id ? 'border-blue-400 bg-blue-50/60' : 'border-slate-200/70 bg-slate-100/50'
               }`}
             >
-              <div className="mb-2 flex items-center justify-between px-2 pt-1">
-                <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: etapa.cor }} />
-                  {etapa.label}
-                </span>
-                <span className="text-xs font-medium text-slate-400">{daEtapa.length}</span>
+              <div className="h-1" style={{ background: etapa.cor }} />
+              <div className="mb-1 flex items-center justify-between px-3 py-2.5">
+                <span className="text-sm font-semibold text-slate-700">{etapa.label}</span>
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-xs font-semibold text-slate-500 ring-1 ring-slate-200">{daEtapa.length}</span>
               </div>
 
-              <div className="flex min-h-24 flex-1 flex-col gap-2">
+              <div className="flex min-h-24 flex-1 flex-col gap-2 px-2 pb-2">
                 {daEtapa.map((card) => (
                   <div
                     key={card.id}
                     draggable
                     onDragStart={() => setArrastando(card)}
                     onDragEnd={() => setArrastando(null)}
-                    className="cursor-grab rounded-lg border border-slate-200 bg-white p-3 shadow-sm hover:border-blue-300 active:cursor-grabbing"
+                    className="cursor-grab rounded-xl border border-slate-200/80 bg-white p-3 shadow-card transition-all hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-card-hover active:cursor-grabbing"
                   >
                     <div className="flex items-start justify-between gap-1">
                       <Link to={`/clientes/${card.id}`} className="text-sm font-medium text-slate-900 hover:text-blue-700 hover:underline">
