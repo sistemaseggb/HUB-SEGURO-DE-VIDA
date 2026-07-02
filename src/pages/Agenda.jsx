@@ -1,28 +1,33 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CalendarPlus, MessageCircle, CalendarClock } from 'lucide-react'
+import { CalendarPlus, MessageCircle, CalendarClock, Mail, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { STATUS_REUNIAO, etapaLabel } from '../lib/constants'
-import { whatsapp } from '../lib/format'
+import { whatsapp, dataHoraBR } from '../lib/format'
 import {
-  PageHeader, Card, Button, Select, Input, Textarea, Campo, Modal, Spinner, EmptyState, ComoFunciona,
+  PageHeader, Card, Button, Select, Input, Textarea, Campo, Modal, Spinner, EmptyState, ComoFunciona, Badge,
 } from '../components/ui'
+import { useToast } from '../components/Toast'
 
 // Agenda: tudo que está marcado, agrupado por dia, com ação rápida de status.
 export default function Agenda() {
+  const toast = useToast()
   const [reunioes, setReunioes] = useState(null)
   const [clientes, setClientes] = useState([])
+  const [pendentes, setPendentes] = useState([])
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState({ id_cliente: '', data_hora: '', notas: '' })
 
   const carregar = useCallback(async () => {
     const desde = new Date(Date.now() - 30 * 86400000).toISOString()
-    const [r, c] = await Promise.all([
+    const [r, c, p] = await Promise.all([
       supabase.from('vw_agenda_reunioes').select('*').gte('data_hora', desde).order('data_hora'),
       supabase.from('clientes').select('id, nome').order('nome'),
+      supabase.from('vw_agenda_externa_pendentes').select('*'),
     ])
     setReunioes(r.data ?? [])
     setClientes(c.data ?? [])
+    setPendentes(p.data ?? [])
   }, [])
 
   useEffect(() => { carregar() }, [carregar])
@@ -40,6 +45,19 @@ export default function Agenda() {
   async function mudarStatus(r, status) {
     await supabase.from('reunioes').update({ status }).eq('id', r.id)
     carregar()
+  }
+
+  async function vincular(evento, idCliente) {
+    if (!idCliente) return
+    const { error } = await supabase.rpc('fn_vincular_evento', { p_evento_id: evento.id, p_cliente_id: idCliente })
+    if (error) return toast.erro('Erro ao vincular: ' + error.message)
+    toast.ok('Reunião vinculada ao cliente.')
+    carregar()
+  }
+
+  async function ignorarEvento(evento) {
+    await supabase.from('agenda_externa').update({ status: 'ignorada' }).eq('id', evento.id)
+    setPendentes((ps) => ps.filter((p) => p.id !== evento.id))
   }
 
   const grupos = useMemo(() => {
@@ -80,8 +98,40 @@ export default function Agenda() {
       <ComoFunciona id="agenda">
         Suas reuniões agrupadas por dia. Ao marcar uma reunião como <strong>Realizada</strong>, o sistema move o
         cliente para "Reunião Realizada" no funil e já cria a tarefa de montar o estudo — você não precisa fazer nada
-        manualmente. Reuniões cujo horário já passou aparecem em destaque no topo.
+        manualmente. Reuniões cujo horário já passou aparecem em destaque no topo. Se a integração com o Outlook
+        estiver ligada, as reuniões marcadas lá aparecem aqui sozinhas.
       </ComoFunciona>
+
+      {/* Caixa de entrada do Outlook: eventos que o sistema não conseguiu casar */}
+      {pendentes.length > 0 && (
+        <Card className="mb-6 border-amber-200 bg-amber-50/40 p-5">
+          <h2 className="mb-1 flex items-center gap-2 font-semibold text-slate-900">
+            <Mail size={18} className="text-amber-500" /> Reuniões do Outlook a vincular
+            <Badge tom="yellow">{pendentes.length}</Badge>
+          </h2>
+          <p className="mb-4 text-xs text-slate-500">
+            Estas reuniões vieram da sua agenda do Outlook, mas o sistema não identificou o cliente automaticamente.
+            Escolha o cliente de cada uma (ou ignore, se não for reunião de cliente).
+          </p>
+          <ul className="space-y-2">
+            {pendentes.map((ev) => (
+              <li key={ev.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-100 bg-white p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-800">{ev.assunto || '(sem assunto)'}</p>
+                  <p className="text-xs text-slate-400">{dataHoraBR(ev.inicio)}{ev.organizador && ` · ${ev.organizador}`}</p>
+                </div>
+                <Select defaultValue="" onChange={(e) => vincular(ev, e.target.value)} style={{ width: 'auto' }}>
+                  <option value="">Vincular ao cliente…</option>
+                  {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </Select>
+                <button onClick={() => ignorarEvento(ev)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600" title="Ignorar (não é reunião de cliente)">
+                  <X size={16} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {grupos.length === 0 && (
         <Card>

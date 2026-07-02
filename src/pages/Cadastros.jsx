@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Percent, Save, MessageSquareText, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Percent, Save, MessageSquareText, Pencil, Trash2, CalendarSync, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   PageHeader, Card, Button, Input, Textarea, Campo, Modal, Spinner, Badge, ComoFunciona,
@@ -28,6 +28,7 @@ export default function Cadastros() {
         <div className="space-y-6">
           <PainelSeguradoras />
           <PainelSplit />
+          <PainelOutlook />
         </div>
       </div>
     </div>
@@ -315,6 +316,70 @@ function PainelSplit() {
         <div className="flex items-center gap-3">
           <Button type="submit" disabled={soma !== 100}><Save size={15} /> Salvar configurações</Button>
           {msg && <span className="text-sm text-slate-500">{msg}</span>}
+        </div>
+      </form>
+    </Card>
+  )
+}
+
+function PainelOutlook() {
+  const toast = useToast()
+  const [cfg, setCfg] = useState(null)
+  const [sincronizando, setSincronizando] = useState(false)
+
+  useEffect(() => {
+    supabase.from('configuracoes')
+      .select('outlook_email, outlook_sync_ativo, outlook_ultima_sync')
+      .single().then(({ data }) => setCfg(data))
+  }, [])
+
+  if (!cfg) return <Card className="p-5"><Spinner /></Card>
+  const set = (k, v) => setCfg({ ...cfg, [k]: v })
+
+  async function salvar(e) {
+    e.preventDefault()
+    const { error } = await supabase.from('configuracoes').update({
+      outlook_email: cfg.outlook_email || null,
+      outlook_sync_ativo: cfg.outlook_sync_ativo,
+    }).eq('id', 1)
+    toast[error ? 'erro' : 'ok'](error ? 'Erro ao salvar.' : 'Integração salva.')
+  }
+
+  async function sincronizarAgora() {
+    setSincronizando(true)
+    const { data, error } = await supabase.functions.invoke('sync-outlook')
+    setSincronizando(false)
+    if (error) return toast.erro('A ponte ainda não está publicada ou houve erro. Veja o guia de configuração.')
+    toast.ok(`Sincronizado: ${data?.processados ?? 0} evento(s).`)
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="mb-1 flex items-center gap-2 font-semibold text-slate-900">
+        <CalendarSync size={17} className="text-blue-600" /> Integração com o Outlook
+      </h2>
+      <p className="mb-4 text-xs text-slate-400">
+        Traz as reuniões da agenda da Natália (Microsoft 365) para o Hub automaticamente.
+        Requer configuração inicial no painel da Microsoft — veja <code className="rounded bg-slate-100 px-1">docs/INTEGRACAO_OUTLOOK.md</code>.
+      </p>
+      <form onSubmit={salvar} className="space-y-4">
+        <Campo label="E-mail (caixa) da Natália no Microsoft 365" dica="Ex.: natalia@empresa.com.br">
+          <Input type="email" value={cfg.outlook_email ?? ''} onChange={(e) => set('outlook_email', e.target.value)}
+            placeholder="natalia@empresa.com.br" />
+        </Campo>
+        <label className="flex items-center gap-2.5">
+          <input type="checkbox" checked={cfg.outlook_sync_ativo ?? false}
+            onChange={(e) => set('outlook_sync_ativo', e.target.checked)} className="h-4 w-4 accent-brand-600" />
+          <span className="text-sm text-slate-700">Sincronização ativada</span>
+        </label>
+        {cfg.outlook_ultima_sync && (
+          <p className="text-xs text-slate-400">Última sincronização: {new Date(cfg.outlook_ultima_sync).toLocaleString('pt-BR')}</p>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="submit"><Save size={15} /> Salvar</Button>
+          <Button type="button" variant="secondary" onClick={sincronizarAgora} disabled={sincronizando}>
+            <RefreshCw size={15} className={sincronizando ? 'animate-spin' : ''} /> Sincronizar agora
+          </Button>
         </div>
       </form>
     </Card>

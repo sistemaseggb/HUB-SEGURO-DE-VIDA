@@ -81,6 +81,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 5. [`supabase/migrations/005_documentos.sql`](supabase/migrations/005_documentos.sql)
 6. [`supabase/migrations/006_crm_interacoes_carteira.sql`](supabase/migrations/006_crm_interacoes_carteira.sql)
 7. [`supabase/migrations/007_assessor_conversao_duplicados.sql`](supabase/migrations/007_assessor_conversao_duplicados.sql)
+8. [`supabase/migrations/008_integracao_outlook.sql`](supabase/migrations/008_integracao_outlook.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -167,6 +168,8 @@ npm run dev
 - [x] Redesign visual premium (Inter + Lexend, paleta de marca, componentes)
 - [x] Faixas didáticas "Como funciona" em cada módulo (dispensáveis)
 - [x] Feedback visual (toasts) nas ações de salvar/excluir/enviar
+- [x] Integração com a agenda do Outlook (Microsoft Graph, mão única) — guia
+      em [`docs/INTEGRACAO_OUTLOOK.md`](docs/INTEGRACAO_OUTLOOK.md)
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
 - [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)
