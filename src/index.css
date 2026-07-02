@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/* Tema base do Hub — ajustes globais ficam aqui (Tailwind v4) */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
