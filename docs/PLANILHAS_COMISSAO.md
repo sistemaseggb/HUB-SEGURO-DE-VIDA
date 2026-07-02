@@ -253,5 +253,26 @@ Com o modelo canônico alimentado pelos 12 arquivos, ficam viáveis:
       registro-mestre de propostas (`Propostas fechadas`) e uma matriz mensal
       abandonada desde dez/2023; a consolidação mensal precisa ser reconstruída
       a partir das planilhas por seguradora.
-- [ ] Definir formato dos relatórios finais de exportação (CSV/XLSX, por assessor × por seguradora × por mês).
-- [ ] Implementar a consolidação e os relatórios de exportação.
+- [x] ~~Definir formato dos relatórios finais~~ → workbook consolidado entregue
+      (Fechamento, Nati × Bruno, Por Assessor, Detalhamento) e relatórios no Hub.
+- [x] ~~Implementar a consolidação~~ → **implementado no Hub**:
+      - `supabase/migrations/009_comissoes_importadas.sql` — tabela + view de resumo;
+      - `src/lib/planilhasComissao.js` — detecção automática dos 6 perfis de
+        planilha (internas + oficiais Azos/Icatu/MAG), testada com os 12
+        arquivos reais: todos os totais batem centavo a centavo;
+      - **Importar → Comissões**: cola as células (ou envia o CSV da MAG),
+        o formato é reconhecido sozinho, prévia com totais por produção e
+        reimportar o mesmo mês substitui os dados antigos;
+      - **Relatórios**: card "Comissões recebidas das seguradoras" com
+        Natália × Bruno, por seguradora, por assessor, recorrente × venda
+        nova × campanha e exportação CSV (resumo e detalhado).
+
+## Como importar cada arquivo no Hub (passo a passo)
+
+| Arquivo | Como importar |
+|---|---|
+| Internas (Azos/Icatu/MAG/Omint) | Copiar células com cabeçalho → colar → escolher mês e seguradora |
+| Azos oficial (comissões/campanhas) | Copiar tudo (pode incluir o topo institucional) → colar |
+| MAG oficial | Enviar o `.csv` direto no campo de arquivo |
+| Icatu individual oficial | Copiar células → colar (mês vem da data de pagamento) |
+| Icatu empresarial oficial | Abrir o `.xls` no Excel → copiar células → colar → escolher o mês |

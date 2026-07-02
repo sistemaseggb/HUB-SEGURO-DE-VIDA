@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, TrendingDown, Timer, Wallet, Database } from 'lucide-react'
+import { Download, TrendingDown, Timer, Wallet, Database, Landmark } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, mesBR, dataBR } from '../lib/format'
 import { etapaLabel, CHART } from '../lib/constants'
 import { baixarCSV } from '../lib/csv'
-import { PageHeader, Card, Button, Spinner, Input, Campo, ComoFunciona } from '../components/ui'
+import { PageHeader, Card, Button, Spinner, Input, Campo, ComoFunciona, Badge } from '../components/ui'
 
 // Relatórios gerenciais: fechamento de comissões (quanto pagar a cada assessor),
 // análise de perdas e velocidade do funil. Tudo exportável em CSV.
@@ -14,6 +14,7 @@ export default function Relatorios() {
   const [splitMensal, setSplitMensal] = useState([])
   const [motivos, setMotivos] = useState([])
   const [tempos, setTempos] = useState([])
+  const [importadas, setImportadas] = useState([])
 
   useEffect(() => {
     Promise.all([
@@ -29,6 +30,13 @@ export default function Relatorios() {
     })
   }, [])
 
+  useEffect(() => {
+    supabase.from('comissoes_importadas')
+      .select('seguradora, segmento, tipo_receita, cliente_nome, codigo_assessor, producao, parcela, valor, assessores(nome)')
+      .eq('competencia', `${mes}-01`)
+      .then(({ data }) => setImportadas(data ?? []))
+  }, [mes])
+
   const doMes = useMemo(
     () => (comissoes ?? []).filter((c) => String(c.mes).startsWith(mes)),
     [comissoes, mes]
@@ -39,6 +47,36 @@ export default function Relatorios() {
   )
   const totalPagar = doMes.reduce((s, c) => s + Number(c.comissao_a_pagar), 0)
   const maxMotivo = Math.max(...motivos.map((m) => m.total), 1)
+
+  // Comissões importadas das seguradoras: agregações do mês selecionado
+  const imp = useMemo(() => {
+    const soma = (arr) => arr.reduce((s, r) => s + Number(r.valor), 0)
+    const agrupa = (chave) => {
+      const m = new Map()
+      for (const r of importadas) {
+        const k = chave(r)
+        if (!m.has(k)) m.set(k, [])
+        m.get(k).push(r)
+      }
+      return [...m.entries()].map(([k, rs]) => ({
+        chave: k, total: soma(rs),
+        nati: soma(rs.filter((r) => r.producao === 'Nati')),
+        bruno: soma(rs.filter((r) => r.producao === 'Bruno')),
+        clientes: new Set(rs.map((r) => r.cliente_nome)).size,
+      })).sort((a, b) => b.total - a.total)
+    }
+    return {
+      total: soma(importadas),
+      nati: soma(importadas.filter((r) => r.producao === 'Nati')),
+      bruno: soma(importadas.filter((r) => r.producao === 'Bruno')),
+      semProducao: soma(importadas.filter((r) => r.producao !== 'Nati' && r.producao !== 'Bruno')),
+      porSeguradora: agrupa((r) => r.seguradora),
+      porAssessor: agrupa((r) => r.assessores?.nome ?? r.codigo_assessor ?? '(sem assessor)'),
+      recorrente: soma(importadas.filter((r) => r.tipo_receita === 'recorrente')),
+      vendaNova: soma(importadas.filter((r) => r.tipo_receita === 'venda_nova')),
+      campanha: soma(importadas.filter((r) => r.tipo_receita === 'campanha')),
+    }
+  }, [importadas])
 
   async function exportarClientes() {
     const { data } = await supabase
@@ -156,6 +194,105 @@ export default function Relatorios() {
                 </tbody>
               </table></div>
             )}
+        </Card>
+
+        {/* Comissões importadas das seguradoras */}
+        <Card className="xl:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
+            <div>
+              <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+                <Landmark size={17} className="text-emerald-600" /> Comissões recebidas das seguradoras — {mesBR(mes + '-01')}
+              </h2>
+              <p className="text-xs text-slate-400">
+                Extrato real importado das planilhas (Azos, Icatu, MAG, Omint...) em Importar → Comissões
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" disabled={importadas.length === 0}
+                onClick={() => baixarCSV(
+                  `comissoes-seguradoras-${mes}.csv`,
+                  ['Seguradora', 'Natália', 'Bruno', 'Total', 'Clientes'],
+                  imp.porSeguradora.map((s) => [s.chave, s.nati, s.bruno, s.total, s.clientes])
+                )}>
+                <Download size={15} /> Resumo CSV
+              </Button>
+              <Button variant="secondary" disabled={importadas.length === 0}
+                onClick={() => baixarCSV(
+                  `comissoes-detalhado-${mes}.csv`,
+                  ['Cliente', 'Seguradora', 'Segmento', 'Produção', 'Assessor', 'Cód. assessor', 'Parcela', 'Tipo de receita', 'Valor'],
+                  importadas.map((r) => [r.cliente_nome, r.seguradora, r.segmento, r.producao ?? 'A classificar',
+                    r.assessores?.nome ?? '', r.codigo_assessor ?? '', r.parcela ?? '', r.tipo_receita, r.valor])
+                )}>
+                <Download size={15} /> Detalhado CSV
+              </Button>
+            </div>
+          </div>
+
+          {importadas.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-slate-400">
+              Nenhuma comissão importada neste mês. Importe as planilhas das seguradoras em <strong>Importar → Comissões</strong>.
+            </p>
+          ) : (
+            <div className="p-5">
+              <div className="mb-4 flex flex-wrap gap-2">
+                <Badge tom="blue">Total do mês: {brl(imp.total)}</Badge>
+                <Badge tom="green">Natália: {brl(imp.nati)}</Badge>
+                <Badge>Bruno: {brl(imp.bruno)}</Badge>
+                {imp.semProducao !== 0 && <Badge tom="yellow">A classificar: {brl(imp.semProducao)}</Badge>}
+                <Badge>Recorrente: {brl(imp.recorrente)}</Badge>
+                <Badge>Venda nova: {brl(imp.vendaNova)}</Badge>
+                {imp.campanha !== 0 && <Badge tom="gold">Campanhas: {brl(imp.campanha)}</Badge>}
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                <div className="overflow-x-auto">
+                  <p className="mb-2 text-xs font-medium uppercase text-slate-400">Por seguradora</p>
+                  <table className="w-full min-w-[380px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
+                        <th className="py-2 font-medium">Seguradora</th>
+                        <th className="py-2 text-right font-medium">Natália</th>
+                        <th className="py-2 text-right font-medium">Bruno</th>
+                        <th className="py-2 text-right font-medium">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {imp.porSeguradora.map((s) => (
+                        <tr key={s.chave} className="border-b border-slate-50">
+                          <td className="py-2.5 font-medium text-slate-800">{s.chave}</td>
+                          <td className="py-2.5 text-right">{brl(s.nati)}</td>
+                          <td className="py-2.5 text-right text-slate-500">{brl(s.bruno)}</td>
+                          <td className="py-2.5 text-right font-semibold">{brl(s.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <p className="mb-2 text-xs font-medium uppercase text-slate-400">Por assessor (comissão gerada)</p>
+                  <table className="w-full min-w-[380px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
+                        <th className="py-2 font-medium">Assessor</th>
+                        <th className="py-2 text-right font-medium">Clientes</th>
+                        <th className="py-2 text-right font-medium">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {imp.porAssessor.slice(0, 12).map((a) => (
+                        <tr key={a.chave} className="border-b border-slate-50">
+                          <td className="py-2.5 font-medium text-slate-800">{a.chave}</td>
+                          <td className="py-2.5 text-right text-slate-500">{a.clientes}</td>
+                          <td className="py-2.5 text-right font-semibold">{brl(a.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </Card>
 
         {/* Motivos de perda */}

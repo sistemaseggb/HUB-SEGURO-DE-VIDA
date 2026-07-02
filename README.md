@@ -82,6 +82,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 6. [`supabase/migrations/006_crm_interacoes_carteira.sql`](supabase/migrations/006_crm_interacoes_carteira.sql)
 7. [`supabase/migrations/007_assessor_conversao_duplicados.sql`](supabase/migrations/007_assessor_conversao_duplicados.sql)
 8. [`supabase/migrations/008_integracao_outlook.sql`](supabase/migrations/008_integracao_outlook.sql)
+9. [`supabase/migrations/009_comissoes_importadas.sql`](supabase/migrations/009_comissoes_importadas.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -170,6 +171,10 @@ npm run dev
 - [x] Feedback visual (toasts) nas ações de salvar/excluir/enviar
 - [x] Integração com a agenda do Outlook (Microsoft Graph, mão única) — guia
       em [`docs/INTEGRACAO_OUTLOOK.md`](docs/INTEGRACAO_OUTLOOK.md)
+- [x] Importador de comissões das seguradoras (Azos, Icatu, MAG, Omint —
+      formatos oficiais e internos reconhecidos sozinhos; mapa em
+      [`docs/PLANILHAS_COMISSAO.md`](docs/PLANILHAS_COMISSAO.md)) + relatório
+      "Comissões recebidas" com separação Natália × Bruno e exportação CSV
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
 - [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)
