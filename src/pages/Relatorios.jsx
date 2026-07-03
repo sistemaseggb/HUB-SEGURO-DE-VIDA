@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Download, TrendingDown, TrendingUp, Timer, Wallet, Database, Landmark, HandCoins,
-  CheckCircle2, AlertTriangle, Printer, Sparkles, ArrowUpRight, ArrowDownRight, MessageCircle,
+  CheckCircle2, AlertTriangle, Printer, Sparkles, ArrowUpRight, ArrowDownRight, MessageCircle, PiggyBank,
 } from 'lucide-react'
 
 // Badge de variação percentual vs mês anterior (▲ verde / ▼ vermelho)
@@ -18,10 +18,51 @@ function VariacaoBadge({ atual, anterior, rotulo, grande }) {
     </span>
   )
 }
+// Bloco do fechamento: linha-resumo do assessor + uma sub-linha por seguradora
+// (a quebra assessor × seguradora que o financeiro precisa para lançar)
+function FragmentoAssessor({ a }) {
+  return (
+    <>
+      <tr className={`border-t border-slate-100 ${a.codigo === '(sem código)' ? 'bg-amber-50/60' : 'bg-slate-50/60'}`}>
+        <td className="py-2.5">
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-700">
+            {a.codigo}
+          </span>
+        </td>
+        <td className="py-2.5 font-semibold text-slate-800">{a.nome ?? <span className="text-slate-400">— cadastrar —</span>}</td>
+        <td className="py-2.5 text-xs text-slate-500">{[...a.producoes].join(' / ') || '—'}</td>
+        <td className="py-2.5 text-right text-slate-500">{a.clientes}</td>
+        <td className="py-2.5 text-right text-slate-500">{a.lancamentos}</td>
+        <td className={`py-2.5 text-right ${a.estornos < 0 ? 'text-red-600' : 'text-slate-300'}`}>
+          {a.estornos < 0 ? brl(a.estornos) : '—'}
+        </td>
+        <td className="py-2.5 text-right font-semibold text-slate-900">{brl(a.split.bruto)}</td>
+        <td className="py-2.5 text-right text-slate-600">{brl(a.split.liquido)}</td>
+        <td className="py-2.5 text-right font-semibold text-emerald-700">{brl(a.split.assessor)}</td>
+      </tr>
+      {a.seguradoras.map((s) => (
+        <tr key={s.seguradora} className="border-b border-slate-50 text-xs">
+          <td />
+          <td className="py-2 pl-4 text-slate-500">↳ {s.seguradora}</td>
+          <td className="py-2 text-slate-400">{[...s.producoes].join(' / ') || '—'}</td>
+          <td className="py-2 text-right text-slate-400">{s.clientes}</td>
+          <td className="py-2 text-right text-slate-400">{s.lancamentos}</td>
+          <td className={`py-2 text-right ${s.estornos < 0 ? 'text-red-500' : 'text-slate-300'}`}>
+            {s.estornos < 0 ? brl(s.estornos) : '—'}
+          </td>
+          <td className="py-2 text-right tabular-nums text-slate-700">{brl(s.split.bruto)}</td>
+          <td className="py-2 text-right tabular-nums text-slate-400">{brl(s.split.liquido)}</td>
+          <td className="py-2 text-right tabular-nums text-slate-600">{brl(s.split.assessor)}</td>
+        </tr>
+      ))}
+    </>
+  )
+}
 import { supabase } from '../lib/supabase'
 import { brl, mesBR, dataBR } from '../lib/format'
 import { etapaLabel, CHART } from '../lib/constants'
 import { baixarCSV } from '../lib/csv'
+import { configSplit, splitComissao } from '../lib/fechamento'
 import { PageHeader, Card, Button, Spinner, Input, Select, Campo, ComoFunciona, Badge } from '../components/ui'
 
 // Busca comissoes_importadas em páginas de 1000 (limite do Supabase por
@@ -48,6 +89,12 @@ export default function Relatorios() {
   const [motivos, setMotivos] = useState([])
   const [tempos, setTempos] = useState([])
   const [importadas, setImportadas] = useState([])
+  const [cfgBanco, setCfgBanco] = useState(null)
+  const [todasComissoes, setTodasComissoes] = useState([])
+
+  // Percentuais do fechamento (imposto 20% e divisão 40/30/30 sobre o líquido)
+  // vêm de Cadastros; antes da migração 011 valem os padrões do escritório.
+  const cfg = useMemo(() => configSplit(cfgBanco), [cfgBanco])
 
   useEffect(() => {
     Promise.all([
@@ -75,9 +122,19 @@ export default function Relatorios() {
   }
   useEffect(carregarComissoesDoMes, [mes]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Todos os meses (colunas mínimas) — alimenta o Controle da Natália:
+  // quanto ela ganha em cada mês, incluindo as vendas indicadas por ela.
+  function carregarTodasComissoes() {
+    buscarComissoesPaginado('competencia, producao, tipo_receita, codigo_assessor, valor')
+      .then(setTodasComissoes)
+  }
+  useEffect(carregarTodasComissoes, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     supabase.from('assessores').select('id, nome, codigo').order('nome')
       .then(({ data }) => setAssessoresLista(data ?? []))
+    supabase.from('configuracoes').select('*').single()
+      .then(({ data }) => setCfgBanco(data))
   }, [])
 
   // Pendências de classificação do mês: produção (Nati/Bruno) e assessor.
@@ -87,6 +144,7 @@ export default function Relatorios() {
     await supabase.from('comissoes_importadas').update({ producao })
       .eq('cliente_nome', cliente).is('producao', null)
     carregarComissoesDoMes()
+    carregarTodasComissoes()
     supabase.from('vw_comissoes_importadas_resumo').select('*')
       .then(({ data }) => setResumoImportadas(data ?? []))
   }
@@ -97,6 +155,7 @@ export default function Relatorios() {
       .update({ id_assessor: a.id, codigo_assessor: a.codigo ?? null })
       .eq('cliente_nome', cliente).is('codigo_assessor', null)
     carregarComissoesDoMes()
+    carregarTodasComissoes()
   }
 
   useEffect(() => {
@@ -154,27 +213,105 @@ export default function Relatorios() {
     }
   }, [importadas])
 
-  // Fechamento para o financeiro: repasse por assessor, identificado pelo
+  // Fechamento para o financeiro: assessor × seguradora, identificado pelo
   // código. É a planilha que o líder usa para pagar — precisa conferir 100%.
+  // Cada bloco traz a cascata completa: bruto → imposto → líquido → divisão
+  // (especialista / escritório / assessor).
   const fechamento = useMemo(() => {
     const porCod = new Map()
     for (const r of importadas) {
       const cod = r.codigo_assessor || '(sem código)'
       if (!porCod.has(cod)) {
-        porCod.set(cod, { codigo: cod, nome: null, total: 0, estornos: 0, lancamentos: 0, clientes: new Set(), producoes: new Set() })
+        porCod.set(cod, { codigo: cod, nome: null, clientes: new Set(), producoes: new Set(), segMap: new Map() })
       }
       const a = porCod.get(cod)
       if (r.assessores?.nome) a.nome = r.assessores.nome
-      a.total += Number(r.valor)
-      if (Number(r.valor) < 0) a.estornos += Number(r.valor)
-      a.lancamentos += 1
       a.clientes.add(r.cliente_nome)
       if (r.producao) a.producoes.add(r.producao)
+      if (!a.segMap.has(r.seguradora)) {
+        a.segMap.set(r.seguradora, {
+          seguradora: r.seguradora, bruto: 0, estornos: 0, lancamentos: 0,
+          recorrente: 0, vendaNova: 0, campanha: 0, clientes: new Set(), producoes: new Set(),
+        })
+      }
+      const s = a.segMap.get(r.seguradora)
+      const v = Number(r.valor)
+      s.bruto += v
+      if (v < 0) s.estornos += v
+      s.lancamentos += 1
+      s.clientes.add(r.cliente_nome)
+      if (r.producao) s.producoes.add(r.producao)
+      if (r.tipo_receita === 'recorrente') s.recorrente += v
+      else if (r.tipo_receita === 'venda_nova') s.vendaNova += v
+      else if (r.tipo_receita === 'campanha') s.campanha += v
     }
-    const linhas = [...porCod.values()].sort((a, b) => b.total - a.total)
-    const totalGeral = linhas.reduce((s, a) => s + a.total, 0)
-    return { linhas, totalGeral, confere: Math.abs(totalGeral - imp.total) < 0.005 }
-  }, [importadas, imp.total])
+    const linhas = [...porCod.values()].map((a) => {
+      const seguradoras = [...a.segMap.values()]
+        .map((s) => ({ ...s, clientes: s.clientes.size, split: splitComissao(s.bruto, cfg) }))
+        .sort((x, y) => y.bruto - x.bruto)
+      const soma = (k) => seguradoras.reduce((acc, s) => acc + s[k], 0)
+      const bruto = soma('bruto')
+      return {
+        codigo: a.codigo, nome: a.nome, producoes: a.producoes, seguradoras,
+        clientes: a.clientes.size, lancamentos: soma('lancamentos'), estornos: soma('estornos'),
+        recorrente: soma('recorrente'), vendaNova: soma('vendaNova'), campanha: soma('campanha'),
+        bruto, split: splitComissao(bruto, cfg),
+      }
+    }).sort((x, y) => y.bruto - x.bruto)
+    const brutoGeral = linhas.reduce((s, a) => s + a.bruto, 0)
+    const totalGeral = {
+      bruto: brutoGeral,
+      estornos: linhas.reduce((s, a) => s + a.estornos, 0),
+      lancamentos: linhas.reduce((s, a) => s + a.lancamentos, 0),
+      split: splitComissao(brutoGeral, cfg),
+    }
+    return { linhas, totalGeral, confere: Math.abs(brutoGeral - imp.total) < 0.005 }
+  }, [importadas, imp.total, cfg])
+
+  // Controle da Natália — quanto ela ganha de fato em cada mês:
+  //   40% do líquido da produção dela (Nati) + 30% do líquido das vendas em
+  //   que ELA é a assessora que indicou (código próprio, padrão CS8868).
+  const natalia = useMemo(() => {
+    const codNat = String(cfg.codigo_natalia ?? '').trim().toUpperCase()
+    const ehCodigoDela = (c) => codNat && String(c ?? '').trim().toUpperCase() === codNat
+    const porMes = new Map()
+    for (const r of todasComissoes) {
+      const m = String(r.competencia).slice(0, 7)
+      if (!porMes.has(m)) {
+        porMes.set(m, { brutoNati: 0, recorrente: 0, vendaNova: 0, campanha: 0, brutoIndicacao: 0 })
+      }
+      const acc = porMes.get(m)
+      const v = Number(r.valor)
+      if (r.producao === 'Nati') {
+        acc.brutoNati += v
+        if (r.tipo_receita === 'recorrente') acc.recorrente += v
+        else if (r.tipo_receita === 'venda_nova') acc.vendaNova += v
+        else if (r.tipo_receita === 'campanha') acc.campanha += v
+      }
+      if (ehCodigoDela(r.codigo_assessor)) acc.brutoIndicacao += v
+    }
+    const meses = [...porMes.entries()].sort().map(([m, acc]) => {
+      const sp = splitComissao(acc.brutoNati, cfg)
+      const ganhoIndicacao = splitComissao(acc.brutoIndicacao, cfg).assessor
+      return {
+        mes: m, ...acc,
+        imposto: sp.imposto, liquido: sp.liquido,
+        ganhoProducao: sp.especialista,
+        ganhoRecorrente: splitComissao(acc.recorrente, cfg).especialista,
+        ganhoVendaNova: splitComissao(acc.vendaNova, cfg).especialista,
+        ganhoCampanha: splitComissao(acc.campanha, cfg).especialista,
+        ganhoIndicacao,
+        ganhoTotal: sp.especialista + ganhoIndicacao,
+      }
+    })
+    const doMes = meses.find((x) => x.mes === mes) ?? null
+    // Recorrência garantida: média do ganho recorrente dos últimos 3 meses
+    const base = meses.filter((x) => x.ganhoRecorrente > 0).slice(-3)
+    const projecaoRecorrente = base.length >= 2
+      ? { media: base.reduce((s, x) => s + x.ganhoRecorrente, 0) / base.length, meses: base.map((x) => x.mes) }
+      : null
+    return { meses, doMes, projecaoRecorrente, codigo: cfg.codigo_natalia }
+  }, [todasComissoes, cfg, mes])
 
   const codCliente = (r) => r.codigo_cliente || r.clientes?.codigo || ''
 
@@ -197,24 +334,65 @@ export default function Relatorios() {
     return { semProducao: ordena(semProducao), semAssessor: ordena(semAssessor) }
   }, [importadas])
 
+  const num = (v) => Number(v ?? 0).toFixed(2).replace('.', ',')
+
+  // A planilha do financeiro: uma linha por assessor × seguradora com a
+  // cascata completa (bruto → imposto → líquido → 40/30/30) + subtotal por
+  // assessor e total geral. O financeiro lança pelo bruto; as demais colunas
+  // mostram exatamente como o valor se divide.
   function exportarFechamento() {
+    const pctEsp = `${Number(cfg.split_natalia_pct)}%`
+    const pctEsc = `${Number(cfg.split_escritorio_pct)}%`
+    const pctAss = `${Number(cfg.split_assessor_pct)}%`
+    const linhaSplit = (base) => [
+      num(base.split.bruto), num(base.split.imposto), num(base.split.liquido),
+      num(base.split.especialista), num(base.split.escritorio), num(base.split.assessor),
+    ]
+    const linhas = []
+    for (const a of fechamento.linhas) {
+      for (const s of a.seguradoras) {
+        linhas.push([a.codigo, a.nome ?? '', s.seguradora, [...s.producoes].join('/'),
+          s.clientes, s.lancamentos, num(s.recorrente), num(s.vendaNova), num(s.campanha),
+          num(s.estornos), ...linhaSplit(s)])
+      }
+      linhas.push([a.codigo, `TOTAL ${a.nome ?? a.codigo}`, 'Todas', [...a.producoes].join('/'),
+        a.clientes, a.lancamentos, num(a.recorrente), num(a.vendaNova), num(a.campanha),
+        num(a.estornos), ...linhaSplit(a)])
+    }
+    linhas.push(['', 'TOTAL GERAL DO MÊS', '', '', '', fechamento.totalGeral.lancamentos,
+      '', '', '', num(fechamento.totalGeral.estornos), ...linhaSplit(fechamento.totalGeral)])
     baixarCSV(`fechamento-financeiro-${mes}.csv`,
-      ['Cód. assessor', 'Assessor', 'Produção', 'Clientes', 'Lançamentos', 'Estornos', 'Total a repassar'],
-      [
-        ...fechamento.linhas.map((a) => [a.codigo, a.nome ?? '', [...a.producoes].join('/'),
-          a.clientes.size, a.lancamentos, a.estornos.toFixed(2).replace('.', ','), a.total.toFixed(2).replace('.', ',')]),
-        ['', 'TOTAL GERAL', '', '', '', '', fechamento.totalGeral.toFixed(2).replace('.', ',')],
-      ])
+      ['Cód. assessor', 'Assessor', 'Seguradora', 'Produção', 'Clientes', 'Lançamentos',
+        'Recorrente (bruto)', 'Venda nova (bruto)', 'Campanha (bruto)', 'Estornos',
+        'Comissão bruta', `Imposto (${Number(cfg.imposto_pct)}%)`, 'Base líquida',
+        `Especialista (${pctEsp})`, `Escritório (${pctEsc})`, `Repasse assessor (${pctAss})`],
+      linhas)
   }
 
   function exportarFechamentoDetalhado() {
     baixarCSV(`fechamento-detalhado-${mes}.csv`,
-      ['Cód. assessor', 'Assessor', 'Cód. cliente', 'Cliente', 'Seguradora', 'Segmento', 'Produção', 'Parcela', 'Tipo de receita', 'Valor'],
+      ['Cód. assessor', 'Assessor', 'Cód. cliente', 'Cliente', 'Seguradora', 'Segmento', 'Produção',
+        'Parcela', 'Tipo de receita', 'Valor bruto', `Valor líquido (−${Number(cfg.imposto_pct)}%)`,
+        `Repasse assessor (${Number(cfg.split_assessor_pct)}%)`],
       [...importadas]
         .sort((a, b) => (a.codigo_assessor ?? 'zzz').localeCompare(b.codigo_assessor ?? 'zzz') || a.cliente_nome.localeCompare(b.cliente_nome))
-        .map((r) => [r.codigo_assessor ?? '', r.assessores?.nome ?? '', codCliente(r), r.cliente_nome,
-          r.seguradora, r.segmento, r.producao ?? 'A classificar', r.parcela ?? '', r.tipo_receita,
-          Number(r.valor).toFixed(2).replace('.', ',')]))
+        .map((r) => {
+          const sp = splitComissao(Number(r.valor), cfg)
+          return [r.codigo_assessor ?? '', r.assessores?.nome ?? '', codCliente(r), r.cliente_nome,
+            r.seguradora, r.segmento, r.producao ?? 'A classificar', r.parcela ?? '', r.tipo_receita,
+            num(sp.bruto), num(sp.liquido), num(sp.assessor)]
+        }))
+  }
+
+  // Extrato da Natália em CSV — todos os meses, com a memória de cálculo
+  function exportarGanhosNatalia() {
+    baixarCSV('ganhos-natalia.csv',
+      ['Mês', 'Bruto produção Nati', `Imposto (${Number(cfg.imposto_pct)}%)`, 'Líquido',
+        `Ganho produção (${Number(cfg.split_natalia_pct)}%)`, 'do qual recorrente', 'do qual venda nova', 'do qual campanha',
+        `Indicações ${natalia.codigo} (${Number(cfg.split_assessor_pct)}%)`, 'GANHO TOTAL NO MÊS'],
+      natalia.meses.map((x) => [mesBR(`${x.mes}-01`), num(x.brutoNati), num(x.imposto), num(x.liquido),
+        num(x.ganhoProducao), num(x.ganhoRecorrente), num(x.ganhoVendaNova), num(x.ganhoCampanha),
+        num(x.ganhoIndicacao), num(x.ganhoTotal)]))
   }
 
   // Inteligência do mês: comparativos com o mês anterior, top clientes,
@@ -279,16 +457,19 @@ export default function Relatorios() {
 
   // Resumo do fechamento pronto para mandar ao líder pelo WhatsApp
   function enviarResumoWhatsApp() {
+    const tg = fechamento.totalGeral.split
     const texto = [
       `*Fechamento de comissões — ${mesBR(mes + '-01')}*`,
-      `Total: ${brl(imp.total)}${fechamento.confere ? ' ✅ conferido' : ''}`,
-      `Natália: ${brl(imp.nati)} · Bruno: ${brl(imp.bruno)}`,
+      `Bruto: ${brl(imp.total)}${fechamento.confere ? ' ✅ conferido' : ''}`,
+      `Imposto (${Number(cfg.imposto_pct)}%): ${brl(tg.imposto)} · Líquido: ${brl(tg.liquido)}`,
+      `Divisão do líquido — Especialista ${Number(cfg.split_natalia_pct)}%: ${brl(tg.especialista)} · Escritório ${Number(cfg.split_escritorio_pct)}%: ${brl(tg.escritorio)} · Assessores ${Number(cfg.split_assessor_pct)}%: ${brl(tg.assessor)}`,
+      `Produção — Natália: ${brl(imp.nati)} · Bruno: ${brl(imp.bruno)} (bruto)`,
       '',
-      '*Por seguradora:*',
+      '*Por seguradora (bruto):*',
       ...imp.porSeguradora.map((s) => `• ${s.chave}: ${brl(s.total)}`),
       '',
-      '*Assessores (total a repassar):*',
-      ...fechamento.linhas.slice(0, 8).map((a) => `• ${a.codigo}${a.nome ? ` — ${a.nome}` : ''}: ${brl(a.total)}`),
+      `*Assessores (bruto gerado · repasse ${Number(cfg.split_assessor_pct)}%):*`,
+      ...fechamento.linhas.slice(0, 8).map((a) => `• ${a.codigo}${a.nome ? ` — ${a.nome}` : ''}: ${brl(a.bruto)} · ${brl(a.split.assessor)}`),
       fechamento.linhas.length > 8 ? `… e mais ${fechamento.linhas.length - 8} (planilha completa em anexo)` : '',
       '',
       '_Gerado pelo Hub Seguro de Vida_',
@@ -297,20 +478,33 @@ export default function Relatorios() {
   }
 
   // Fechamento em PDF: abre uma janela de impressão com layout limpo —
-  // o navegador salva em PDF (mesmo caminho da Proposta).
+  // o navegador salva em PDF (mesmo caminho da Proposta). Cada assessor
+  // aparece com o detalhamento por seguradora e a cascata bruto → líquido.
   function imprimirFechamento() {
     const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    const linhas = fechamento.linhas.map((a, i) => `
-      <tr>
-        <td class="mudo">${i + 1}º</td>
+    const tg = fechamento.totalGeral
+    const linhas = fechamento.linhas.map((a) => `
+      <tr class="assessor">
         <td><code>${esc(a.codigo)}</code></td>
-        <td class="nome">${esc(a.nome ?? '— cadastrar —')}</td>
-        <td>${esc([...a.producoes].join(' / ') || '—')}</td>
-        <td class="num">${a.clientes.size}</td>
+        <td class="nome">${esc(a.nome ?? '— cadastrar —')} <span class="mudo">· ${esc([...a.producoes].join(' / ') || 'produção a classificar')}</span></td>
+        <td class="num">${a.clientes}</td>
         <td class="num">${a.lancamentos}</td>
         <td class="num ${a.estornos < 0 ? 'neg' : 'mudo'}">${a.estornos < 0 ? brl(a.estornos) : '—'}</td>
-        <td class="num total">${brl(a.total)}</td>
-      </tr>`).join('')
+        <td class="num total">${brl(a.split.bruto)}</td>
+        <td class="num">${brl(a.split.liquido)}</td>
+        <td class="num total">${brl(a.split.assessor)}</td>
+      </tr>
+      ${a.seguradoras.map((s) => `
+      <tr class="seg">
+        <td></td>
+        <td class="mudo">↳ ${esc(s.seguradora)}</td>
+        <td class="num mudo">${s.clientes}</td>
+        <td class="num mudo">${s.lancamentos}</td>
+        <td class="num ${s.estornos < 0 ? 'neg' : 'mudo'}">${s.estornos < 0 ? brl(s.estornos) : '—'}</td>
+        <td class="num">${brl(s.split.bruto)}</td>
+        <td class="num mudo">${brl(s.split.liquido)}</td>
+        <td class="num">${brl(s.split.assessor)}</td>
+      </tr>`).join('')}`).join('')
     const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
       <title>Fechamento de comissões — ${mesBR(mes + '-01')}</title>
       <style>
@@ -319,35 +513,54 @@ export default function Relatorios() {
         h1 { font-size: 20px; margin-bottom: 2px; }
         .sub { color: #64748b; font-size: 12px; margin-bottom: 18px; }
         .confere { border: 1px solid ${fechamento.confere ? '#a7f3d0' : '#fecaca'}; background: ${fechamento.confere ? '#ecfdf5' : '#fef2f2'};
-          color: ${fechamento.confere ? '#065f46' : '#991b1b'}; border-radius: 8px; padding: 10px 14px; font-size: 12px; margin-bottom: 18px; }
+          color: ${fechamento.confere ? '#065f46' : '#991b1b'}; border-radius: 8px; padding: 10px 14px; font-size: 12px; margin-bottom: 12px; }
+        .cascata { display: flex; gap: 18px; flex-wrap: wrap; border: 1px solid #e2e8f0; border-radius: 8px;
+          padding: 10px 14px; font-size: 12px; margin-bottom: 18px; color: #334155; }
+        .cascata b { display: block; font-size: 14px; }
         table { width: 100%; border-collapse: collapse; }
         th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #64748b;
           border-bottom: 2px solid #e2e8f0; padding: 6px 8px; }
         th.num { text-align: right; }
-        td { padding: 7px 8px; border-bottom: 1px solid #f1f5f9; }
+        td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; }
         td.num { text-align: right; font-variant-numeric: tabular-nums; }
         td.total { font-weight: 700; }
         td.nome { font-weight: 600; }
-        td.mudo, .mudo { color: #94a3b8; }
+        td.mudo, .mudo { color: #94a3b8; font-weight: 400; }
         td.neg { color: #dc2626; }
+        tr.assessor td { background: #f8fafc; border-top: 1px solid #e2e8f0; }
+        tr.seg td { font-size: 12px; }
         code { background: #f1f5f9; border-radius: 4px; padding: 1px 6px; font-size: 11px; }
         tr.geral td { border-top: 2px solid #e2e8f0; font-weight: 700; font-size: 14px; }
         .rodape { margin-top: 22px; color: #94a3b8; font-size: 10px; }
         @media print { body { padding: 0; } }
       </style></head><body>
       <h1>Fechamento de comissões — ${mesBR(mes + '-01')}</h1>
-      <p class="sub">Repasse por assessor · gerado pelo Hub Seguro de Vida em ${new Date().toLocaleDateString('pt-BR')}</p>
+      <p class="sub">Por assessor e seguradora · gerado pelo Hub Seguro de Vida em ${new Date().toLocaleDateString('pt-BR')}</p>
       <p class="confere">${fechamento.confere
-        ? `✓ Conferido: a soma dos assessores (${brl(fechamento.totalGeral)}) bate com o total importado do mês, centavo a centavo.`
-        : `⚠ Atenção: a soma dos assessores (${brl(fechamento.totalGeral)}) difere do total do mês (${brl(imp.total)}).`}</p>
+        ? `✓ Conferido: a soma dos assessores (${brl(tg.bruto)}) bate com o total importado do mês, centavo a centavo.`
+        : `⚠ Atenção: a soma dos assessores (${brl(tg.bruto)}) difere do total do mês (${brl(imp.total)}).`}</p>
+      <div class="cascata">
+        <span>Comissão bruta<b>${brl(tg.split.bruto)}</b></span>
+        <span>− Imposto (${Number(cfg.imposto_pct)}%)<b>${brl(tg.split.imposto)}</b></span>
+        <span>= Base líquida<b>${brl(tg.split.liquido)}</b></span>
+        <span>Especialista (${Number(cfg.split_natalia_pct)}%)<b>${brl(tg.split.especialista)}</b></span>
+        <span>Escritório (${Number(cfg.split_escritorio_pct)}%)<b>${brl(tg.split.escritorio)}</b></span>
+        <span>Assessores (${Number(cfg.split_assessor_pct)}%)<b>${brl(tg.split.assessor)}</b></span>
+      </div>
       <table>
-        <thead><tr><th>#</th><th>Cód. assessor</th><th>Assessor</th><th>Produção</th>
-          <th class="num">Clientes</th><th class="num">Lançamentos</th><th class="num">Estornos</th><th class="num">Total a repassar</th></tr></thead>
+        <thead><tr><th>Cód. assessor</th><th>Assessor / Seguradora</th>
+          <th class="num">Clientes</th><th class="num">Lanç.</th><th class="num">Estornos</th>
+          <th class="num">Comissão bruta</th><th class="num">Líquido (−${Number(cfg.imposto_pct)}%)</th>
+          <th class="num">Repasse assessor (${Number(cfg.split_assessor_pct)}%)</th></tr></thead>
         <tbody>${linhas}
-          <tr class="geral"><td colspan="7">Total geral do mês</td><td class="num">${brl(fechamento.totalGeral)}</td></tr>
+          <tr class="geral"><td colspan="5">Total geral do mês</td>
+            <td class="num">${brl(tg.split.bruto)}</td><td class="num">${brl(tg.split.liquido)}</td>
+            <td class="num">${brl(tg.split.assessor)}</td></tr>
         </tbody>
       </table>
-      <p class="rodape">Estornos entram com valor negativo e já estão abatidos dos totais. Seguros com pagamento anual
+      <p class="rodape">Cascata do escritório: comissão bruta − imposto (${Number(cfg.imposto_pct)}%) = líquido, dividido em
+        ${Number(cfg.split_natalia_pct)}% especialista / ${Number(cfg.split_escritorio_pct)}% escritório / ${Number(cfg.split_assessor_pct)}% assessor.
+        Estornos entram com valor negativo e já estão abatidos dos totais. Seguros com pagamento anual
         aparecem no mês em que a seguradora pagou a comissão; os mensais aparecem todo mês.</p>
       <script>window.onload = () => window.print()</script>
       </body></html>`
@@ -713,7 +926,7 @@ export default function Relatorios() {
           </Card>
         )}
 
-        {/* Fechamento para o financeiro — repasse por assessor */}
+        {/* Fechamento para o financeiro — assessor × seguradora com a cascata bruto → líquido */}
         <Card className="xl:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
             <div>
@@ -721,8 +934,9 @@ export default function Relatorios() {
                 <HandCoins size={17} className="text-blue-700" /> Fechamento para o financeiro — {mesBR(mes + '-01')}
               </h2>
               <p className="text-xs text-slate-400">
-                A planilha de pagamento: quanto repassar a cada assessor, identificado pelo código.
-                Envie o CSV para o líder.
+                A planilha de pagamento, separada por <strong>assessor e seguradora</strong>, com bruto, imposto
+                ({Number(cfg.imposto_pct)}%), líquido e a divisão {Number(cfg.split_natalia_pct)}/{Number(cfg.split_escritorio_pct)}/{Number(cfg.split_assessor_pct)}.
+                Envie o CSV para o financeiro.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -753,8 +967,25 @@ export default function Relatorios() {
                 fechamento.confere ? 'border-emerald-100 bg-emerald-50 text-emerald-800' : 'border-red-100 bg-red-50 text-red-700'}`}>
                 {fechamento.confere ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
                 {fechamento.confere
-                  ? <>Conferido: a soma dos assessores ({brl(fechamento.totalGeral)}) bate com o total importado do mês, centavo a centavo.</>
-                  : <>Atenção: a soma dos assessores ({brl(fechamento.totalGeral)}) difere do total do mês ({brl(imp.total)}) — verifique antes de pagar.</>}
+                  ? <>Conferido: a soma dos assessores ({brl(fechamento.totalGeral.bruto)}) bate com o total importado do mês, centavo a centavo.</>
+                  : <>Atenção: a soma dos assessores ({brl(fechamento.totalGeral.bruto)}) difere do total do mês ({brl(imp.total)}) — verifique antes de pagar.</>}
+              </div>
+
+              {/* Cascata do mês: bruto → imposto → líquido → divisão 40/30/30 */}
+              <div className="mb-4 grid grid-cols-2 gap-3 rounded-lg border border-slate-100 bg-slate-50/60 p-4 text-sm sm:grid-cols-3 lg:grid-cols-6">
+                {[
+                  ['Comissão bruta', fechamento.totalGeral.split.bruto, 'font-bold'],
+                  [`− Imposto (${Number(cfg.imposto_pct)}%)`, fechamento.totalGeral.split.imposto, 'text-slate-500'],
+                  ['= Base líquida', fechamento.totalGeral.split.liquido, 'font-bold'],
+                  [`Especialista (${Number(cfg.split_natalia_pct)}%)`, fechamento.totalGeral.split.especialista, 'text-blue-700 font-semibold'],
+                  [`Escritório (${Number(cfg.split_escritorio_pct)}%)`, fechamento.totalGeral.split.escritorio, 'text-slate-700 font-semibold'],
+                  [`Assessores (${Number(cfg.split_assessor_pct)}%)`, fechamento.totalGeral.split.assessor, 'text-emerald-700 font-semibold'],
+                ].map(([rotulo, valor, classe]) => (
+                  <div key={rotulo}>
+                    <p className="text-[11px] uppercase tracking-wide text-slate-400">{rotulo}</p>
+                    <p className={`tabular-nums ${classe}`}>{brl(valor)}</p>
+                  </div>
+                ))}
               </div>
 
               {(pendencias.semProducao.length > 0 || pendencias.semAssessor.length > 0) && (
@@ -824,50 +1055,142 @@ export default function Relatorios() {
               )}
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] text-left text-sm">
+                <table className="w-full min-w-[880px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
-                      <th className="py-2 pr-2 font-medium">#</th>
                       <th className="py-2 font-medium">Cód. assessor</th>
-                      <th className="py-2 font-medium">Assessor</th>
+                      <th className="py-2 font-medium">Assessor / Seguradora</th>
                       <th className="py-2 font-medium">Produção</th>
                       <th className="py-2 text-right font-medium">Clientes</th>
-                      <th className="py-2 text-right font-medium">Lançamentos</th>
+                      <th className="py-2 text-right font-medium">Lanç.</th>
                       <th className="py-2 text-right font-medium">Estornos</th>
-                      <th className="py-2 text-right font-medium">Total a repassar</th>
+                      <th className="py-2 text-right font-medium">Comissão bruta</th>
+                      <th className="py-2 text-right font-medium">Líquido (−{Number(cfg.imposto_pct)}%)</th>
+                      <th className="py-2 text-right font-medium">Repasse assessor ({Number(cfg.split_assessor_pct)}%)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {fechamento.linhas.map((a, i) => (
-                      <tr key={a.codigo} className={`border-b border-slate-50 ${a.codigo === '(sem código)' ? 'bg-amber-50/60' : ''}`}>
-                        <td className="py-2.5 pr-2 text-xs text-slate-400">{i + 1}º</td>
-                        <td className="py-2.5">
-                          <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-700">
-                            {a.codigo}
-                          </span>
-                        </td>
-                        <td className="py-2.5 font-medium text-slate-800">{a.nome ?? <span className="text-slate-400">— cadastrar —</span>}</td>
-                        <td className="py-2.5 text-xs text-slate-500">{[...a.producoes].join(' / ') || '—'}</td>
-                        <td className="py-2.5 text-right text-slate-500">{a.clientes.size}</td>
-                        <td className="py-2.5 text-right text-slate-500">{a.lancamentos}</td>
-                        <td className={`py-2.5 text-right ${a.estornos < 0 ? 'text-red-600' : 'text-slate-300'}`}>
-                          {a.estornos < 0 ? brl(a.estornos) : '—'}
-                        </td>
-                        <td className="py-2.5 text-right font-semibold text-slate-900">{brl(a.total)}</td>
-                      </tr>
+                    {fechamento.linhas.map((a) => (
+                      <FragmentoAssessor key={a.codigo} a={a} />
                     ))}
                     <tr className="bg-slate-50/60">
-                      <td colSpan={7} className="px-2 py-3 text-right text-xs uppercase text-slate-400">Total geral do mês</td>
-                      <td className="py-3 text-right font-bold text-slate-900">{brl(fechamento.totalGeral)}</td>
+                      <td colSpan={6} className="px-2 py-3 text-right text-xs uppercase text-slate-400">Total geral do mês</td>
+                      <td className="py-3 text-right font-bold text-slate-900">{brl(fechamento.totalGeral.split.bruto)}</td>
+                      <td className="py-3 text-right font-bold text-slate-900">{brl(fechamento.totalGeral.split.liquido)}</td>
+                      <td className="py-3 text-right font-bold text-emerald-700">{brl(fechamento.totalGeral.split.assessor)}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
 
               <p className="mt-3 text-xs text-slate-400">
-                Seguros com pagamento anual aparecem no mês em que a seguradora paga a comissão (parcela única);
-                os mensais aparecem todo mês. Estornos entram negativos e já saem abatidos do repasse.
+                Cascata do escritório: comissão bruta − imposto ({Number(cfg.imposto_pct)}%) = líquido, dividido em{' '}
+                {Number(cfg.split_natalia_pct)}% especialista / {Number(cfg.split_escritorio_pct)}% escritório / {Number(cfg.split_assessor_pct)}% assessor
+                (percentuais editáveis em Cadastros). O financeiro lança pelo <strong>bruto</strong>; as demais colunas
+                mostram como o valor se divide. Seguros com pagamento anual aparecem no mês em que a seguradora paga a
+                comissão (parcela única); os mensais aparecem todo mês. Estornos entram negativos e já saem abatidos.
               </p>
+            </div>
+          )}
+        </Card>
+
+        {/* Controle da Natália — o que ela de fato ganha (líquido), mês a mês */}
+        <Card className="xl:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
+            <div>
+              <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+                <PiggyBank size={17} className="text-pink-600" /> Controle da Natália — quanto ela ganha
+              </h2>
+              <p className="text-xs text-slate-400">
+                Líquido real: {Number(cfg.split_natalia_pct)}% da produção dela (após imposto de {Number(cfg.imposto_pct)}%)
+                + {Number(cfg.split_assessor_pct)}% das vendas indicadas pelo código dela ({natalia.codigo})
+              </p>
+            </div>
+            <Button variant="secondary" disabled={natalia.meses.length === 0} onClick={exportarGanhosNatalia}>
+              <Download size={15} /> Extrato da Natália (CSV)
+            </Button>
+          </div>
+
+          {natalia.meses.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-slate-400">
+              Importe as planilhas das seguradoras em <strong>Importar → Comissões</strong> para calcular os ganhos.
+            </p>
+          ) : (
+            <div className="p-5">
+              {natalia.doMes ? (
+                <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                  {[
+                    ['Bruto produção Nati', natalia.doMes.brutoNati, 'text-slate-900 font-bold'],
+                    [`− Imposto (${Number(cfg.imposto_pct)}%)`, natalia.doMes.imposto, 'text-slate-500'],
+                    ['= Líquido', natalia.doMes.liquido, 'text-slate-900 font-bold'],
+                    [`Parte dela (${Number(cfg.split_natalia_pct)}%)`, natalia.doMes.ganhoProducao, 'text-pink-700 font-semibold'],
+                    [`Indicações ${natalia.codigo}`, natalia.doMes.ganhoIndicacao, 'text-pink-700 font-semibold'],
+                    ['GANHO NO MÊS', natalia.doMes.ganhoTotal, 'text-pink-700 font-bold text-base'],
+                  ].map(([rotulo, valor, classe]) => (
+                    <div key={rotulo} className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
+                      <p className="text-[11px] uppercase tracking-wide text-slate-400">{rotulo}</p>
+                      <p className={`tabular-nums ${classe}`}>{brl(valor)}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mb-5 rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm text-amber-800">
+                  Ainda não há comissões importadas em {mesBR(mes + '-01')} — a tabela abaixo mostra os meses já importados.
+                </p>
+              )}
+
+              {natalia.doMes && (
+                <div className="mb-5 flex flex-wrap gap-2">
+                  <Badge tom="green">Recorrente: {brl(natalia.doMes.ganhoRecorrente)}</Badge>
+                  <Badge tom="blue">Venda nova: {brl(natalia.doMes.ganhoVendaNova)}</Badge>
+                  {natalia.doMes.ganhoCampanha !== 0 && <Badge tom="gold">Campanhas: {brl(natalia.doMes.ganhoCampanha)}</Badge>}
+                  <span className="self-center text-xs text-slate-400">— parte da Natália ({Number(cfg.split_natalia_pct)}% do líquido) por tipo de receita</span>
+                </div>
+              )}
+
+              <div className="overflow-x-auto">
+                <p className="mb-2 text-xs font-medium uppercase text-slate-400">Mês a mês — o extrato dela</p>
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
+                      <th className="py-2 font-medium">Mês</th>
+                      <th className="py-2 text-right font-medium">Bruto produção</th>
+                      <th className="py-2 text-right font-medium">Líquido (−{Number(cfg.imposto_pct)}%)</th>
+                      <th className="py-2 text-right font-medium">Parte dela ({Number(cfg.split_natalia_pct)}%)</th>
+                      <th className="py-2 text-right font-medium">do qual recorrente</th>
+                      <th className="py-2 text-right font-medium">Indicações ({Number(cfg.split_assessor_pct)}%)</th>
+                      <th className="py-2 text-right font-medium">Ganho total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {natalia.meses.map((x) => (
+                      <tr key={x.mes} className={`border-b border-slate-50 ${x.mes === mes ? 'bg-pink-50/50 font-medium' : ''}`}>
+                        <td className="py-2.5 text-slate-800">{mesBR(`${x.mes}-01`)}</td>
+                        <td className="py-2.5 text-right tabular-nums text-slate-500">{brl(x.brutoNati)}</td>
+                        <td className="py-2.5 text-right tabular-nums text-slate-500">{brl(x.liquido)}</td>
+                        <td className="py-2.5 text-right tabular-nums">{brl(x.ganhoProducao)}</td>
+                        <td className="py-2.5 text-right tabular-nums text-slate-500">{brl(x.ganhoRecorrente)}</td>
+                        <td className="py-2.5 text-right tabular-nums text-slate-500">{brl(x.ganhoIndicacao)}</td>
+                        <td className="py-2.5 text-right font-semibold tabular-nums text-pink-700">{brl(x.ganhoTotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {natalia.projecaoRecorrente && (
+                <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-pink-100 bg-pink-50/70 p-3 text-sm text-slate-700">
+                  <TrendingUp size={16} className="shrink-0 text-pink-600" />
+                  <span>
+                    <strong>Recorrência dela:</strong> ≈ {brl(natalia.projecaoRecorrente.media)}/mês já garantidos
+                    pela carteira, mantidos os contratos atuais.
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    Média da parte recorrente de {natalia.projecaoRecorrente.meses.map((m) => mesBR(`${m}-01`)).join(', ')} —
+                    não inclui vendas novas, campanhas nem indicações.
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </Card>

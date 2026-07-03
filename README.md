@@ -51,8 +51,10 @@ e registrar os dados; o sistema cuida do resto.
 - **Central de Mensagens** — fila abastecida automaticamente pelo banco
   (aniversários de cliente/apólice e reativação de leads parados); cada
   mensagem sai pronta, é enviada com 1 clique e marcada como tratada.
-- **Relatórios** — comissões a pagar por assessor (fechamento do mês, com
-  exportação CSV), motivos de perda e tempo médio por etapa do funil.
+- **Relatórios** — fechamento do mês por **assessor × seguradora** com a
+  cascata bruto → imposto → líquido → divisão 40/30/30 (CSV para o
+  financeiro + PDF), Controle da Natália (ganho líquido mês a mês e
+  recorrência), motivos de perda e tempo médio por etapa do funil.
 - **Importar** — traga as planilhas históricas (clientes e apólices): colunas
   detectadas automaticamente, prévia antes de importar, criação automática de
   assessores/seguradoras que faltam e planilha modelo para download.
@@ -84,6 +86,8 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 7. [`supabase/migrations/007_assessor_conversao_duplicados.sql`](supabase/migrations/007_assessor_conversao_duplicados.sql)
 8. [`supabase/migrations/008_integracao_outlook.sql`](supabase/migrations/008_integracao_outlook.sql)
 9. [`supabase/migrations/009_comissoes_importadas.sql`](supabase/migrations/009_comissoes_importadas.sql)
+10. [`supabase/migrations/010_meta_comissao_recebida.sql`](supabase/migrations/010_meta_comissao_recebida.sql)
+11. [`supabase/migrations/011_fechamento_liquido.sql`](supabase/migrations/011_fechamento_liquido.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -176,8 +180,12 @@ npm run dev
       formatos oficiais e internos reconhecidos sozinhos; mapa em
       [`docs/PLANILHAS_COMISSAO.md`](docs/PLANILHAS_COMISSAO.md)) + relatório
       "Comissões recebidas" com separação Natália × Bruno e exportação CSV
-- [x] Fechamento para o financeiro: repasse por assessor com códigos,
+- [x] Fechamento para o financeiro separado por assessor × seguradora, com a
+      cascata bruto → imposto (20%) → líquido → divisão 40/30/30, códigos,
       conferência automática, pendências resolvidas na tela e PDF de 1 clique
+- [x] Controle da Natália (migração 011): quanto ela ganha (líquido) em cada
+      mês — 40% da produção dela + indicações pelo código CS8868 — com
+      recorrência garantida e extrato CSV
 - [x] Inteligência do mês: variação por seguradora vs mês anterior, tipo de
       receita, top clientes com concentração e alerta de seguradora faltante
 - [x] Extrato de comissões no Cliente 360 (aba Comissões) e no Assessor 360

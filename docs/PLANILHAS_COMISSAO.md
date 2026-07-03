@@ -162,6 +162,25 @@ extrato individual = corretagem individual (R$ 883,37) **+ empresarial
 (R$ 2.781,55)** — a Icatu paga tudo no mesmo código de corretagem. Os números
 das planilhas fecham entre si.
 
+## Regra de negócio: a cascata financeira do fechamento
+
+Definida pela usuária (jul/2026). Os valores das planilhas das seguradoras
+são sempre **brutos**; sobre eles:
+
+1. **Imposto do escritório: 20%** da bruta.
+2. O **líquido** restante é dividido: **40% especialista** (Natália na
+   produção dela, Bruno na dele), **30% escritório** e **30% assessor** que
+   indicou o cliente.
+3. O **financeiro recebe o bruto** (com a cascata inteira em colunas para
+   conferência); o Hub mostra o **líquido** para a Natália ter controle do
+   que de fato ganha.
+4. A Natália também atua como assessora — **código CS8868**: nas vendas
+   indicadas por ela, os 30% do assessor também são dela.
+
+Percentuais e código vivem em `configuracoes` (migração 011) e são editáveis
+em Cadastros; o cálculo compartilhado está em `src/lib/fechamento.js` e na
+view `vw_fechamento_assessor_seguradora`.
+
 ## Regra de negócio: Natália × Bruno
 
 As planilhas chegam sempre com **todos** os seguros do escritório (Natália e

@@ -264,6 +264,9 @@ function PainelSplit() {
       meta_apolices_mensal: cfg.meta_apolices_mensal || 0,
       // só existe após a migração 010 — incluir antes dela quebraria o salvar
       ...(cfg.meta_comissao_mensal !== undefined && { meta_comissao_mensal: cfg.meta_comissao_mensal || 0 }),
+      // só existem após a migração 011 (imposto e código AAI da Natália)
+      ...(cfg.imposto_pct !== undefined && { imposto_pct: cfg.imposto_pct || 0 }),
+      ...(cfg.codigo_natalia !== undefined && { codigo_natalia: (cfg.codigo_natalia || '').trim().toUpperCase() }),
       dias_sem_contato_alerta: cfg.dias_sem_contato_alerta || 90,
     }).eq('id', 1)
     if (error) { setMsg(`Erro: ${error.message}`); toast.erro('Erro ao salvar configurações.') }
@@ -276,7 +279,9 @@ function PainelSplit() {
     <Card className="p-5">
       <h2 className="mb-1 font-semibold text-slate-900">Divisão de comissão e alertas</h2>
       <p className="mb-4 text-xs text-slate-400">
-        Aplicada automaticamente em cada venda. Alterações não afetam vendas antigas.
+        Regra do fechamento: da comissão <strong>bruta</strong> sai primeiro o imposto do escritório;
+        a divisão Natália / Assessor / Escritório vale sobre o <strong>líquido</strong>.
+        Usada nos Relatórios (fechamento e Controle da Natália) e em cada venda.
       </p>
       <form onSubmit={salvar} className="space-y-4">
         <div className="grid grid-cols-3 gap-3">
@@ -292,6 +297,16 @@ function PainelSplit() {
         </div>
         {soma !== 100 && (
           <p className="text-sm text-amber-600">A soma precisa dar 100% (atual: {soma}%).</p>
+        )}
+        {cfg.imposto_pct !== undefined && (
+          <div className="grid grid-cols-3 gap-3">
+            <Campo label="Imposto do escritório (%)" dica="Sai da bruta, antes da divisão">
+              <Input type="number" step="0.01" min="0" max="100" value={cfg.imposto_pct} onChange={set('imposto_pct')} />
+            </Campo>
+            <Campo label="Código AAI da Natália" dica="Indicações com este código também são dela">
+              <Input value={cfg.codigo_natalia ?? ''} onChange={set('codigo_natalia')} placeholder="CS8868" />
+            </Campo>
+          </div>
         )}
         <div className="grid grid-cols-3 gap-3">
           <Campo label="Alerta amarelo (dias parado)">
