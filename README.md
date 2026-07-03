@@ -88,6 +88,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 9. [`supabase/migrations/009_comissoes_importadas.sql`](supabase/migrations/009_comissoes_importadas.sql)
 10. [`supabase/migrations/010_meta_comissao_recebida.sql`](supabase/migrations/010_meta_comissao_recebida.sql)
 11. [`supabase/migrations/011_fechamento_liquido.sql`](supabase/migrations/011_fechamento_liquido.sql)
+12. [`supabase/migrations/012_historico_apolices.sql`](supabase/migrations/012_historico_apolices.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →

@@ -34,7 +34,13 @@ comissão BRUTA (planilha da seguradora)
    (300 clientes da planilha geral, com códigos — os assessores são criados
    automaticamente com seus códigos).
 3. **Importar → Apólices**: cole o conteúdo de `cadastro-apolices.csv`
-   (349 apólices ativas da geral, com seguradora, prêmio, vigência, % e nº).
+   (apólices da geral, com seguradora, prêmio, data de emissão/vigência, % e
+   nº). A planilha pode trazer também as colunas **Status** (ATIVO/INATIVO) e
+   **Motivo cancelamento**: apólices inativas entram como `cancelada` com o
+   motivo — só como histórico, sem disparar pós-venda (requer a migração
+   `012_historico_apolices.sql`). A data de emissão vira o "aniversário da
+   apólice": o sistema puxa sozinho a mensagem de renovação todo ano e a
+   tarefa de revisão 11 meses depois.
 4. **Importar → Comissões**: cole o conteúdo de
    `comissoes-consolidadas-mai-jun-2026.csv` — maio e junho inteiros entram de
    uma vez (o sistema reconhece o formato "Hub — consolidado": mês e

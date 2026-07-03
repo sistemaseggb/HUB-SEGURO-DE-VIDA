@@ -524,7 +524,14 @@ function AbaReunioes({ idCliente, onMudanca }) {
 const APOLICE_VAZIA = {
   id_seguradora: '', numero_apolice: '', valor_premio_mensal: '',
   capital_segurado: '', percentual_comissao: '', data_vigencia: '',
+  status: 'ativa', motivo_cancelamento: '',
 }
+
+const STATUS_APOLICE = [
+  { id: 'ativa', label: 'Ativa', tom: 'green' },
+  { id: 'suspensa', label: 'Suspensa', tom: 'yellow' },
+  { id: 'cancelada', label: 'Cancelada', tom: 'red' },
+]
 
 function AbaApolices({ idCliente, onMudanca }) {
   const toast = useToast()
@@ -552,6 +559,7 @@ function AbaApolices({ idCliente, onMudanca }) {
       id_seguradora: a.id_seguradora, numero_apolice: a.numero_apolice ?? '',
       valor_premio_mensal: a.valor_premio_mensal, capital_segurado: a.capital_segurado,
       percentual_comissao: a.percentual_comissao ?? '', data_vigencia: a.data_vigencia,
+      status: a.status ?? 'ativa', motivo_cancelamento: a.motivo_cancelamento ?? '',
     })
     setModal(true)
   }
@@ -565,6 +573,10 @@ function AbaApolices({ idCliente, onMudanca }) {
       capital_segurado: form.capital_segurado,
       percentual_comissao: form.percentual_comissao || null,
       data_vigencia: form.data_vigencia,
+      status: form.status,
+      // coluna da migração 012 — só envia quando ela já existe no banco
+      ...(apolices.some((a) => 'motivo_cancelamento' in a)
+        && { motivo_cancelamento: form.status === 'cancelada' ? (form.motivo_cancelamento || null) : null }),
     }
     // Na edição NÃO reenviamos id_cliente (evita re-disparar a esteira de pós-venda)
     if (editando) {
@@ -600,7 +612,7 @@ function AbaApolices({ idCliente, onMudanca }) {
       {apolices.length === 0
         ? <p className="py-6 text-center text-sm text-slate-400">Nenhuma apólice ainda.</p>
         : (
-          <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm">
+          <div className="overflow-x-auto"><table className="w-full min-w-[880px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
                 <th className="py-2 pr-3 font-medium">Seguradora</th>
@@ -608,13 +620,14 @@ function AbaApolices({ idCliente, onMudanca }) {
                 <th className="py-2 pr-3 font-medium">Capital</th>
                 <th className="py-2 pr-3 font-medium">Comissão total</th>
                 <th className="py-2 pr-3 font-medium">Natália / Assessor / Escritório</th>
-                <th className="py-2 pr-3 font-medium">Vigência</th>
+                <th className="py-2 pr-3 font-medium">Emissão / Vigência</th>
+                <th className="py-2 pr-3 font-medium">Status</th>
                 <th className="py-2 font-medium"></th>
               </tr>
             </thead>
             <tbody>
               {apolices.map((a) => (
-                <tr key={a.id} className="border-b border-slate-50">
+                <tr key={a.id} className={`border-b border-slate-50 ${a.status === 'cancelada' ? 'opacity-60' : ''}`}>
                   <td className="py-3 pr-3 font-medium text-slate-800">{a.seguradoras?.nome}</td>
                   <td className="py-3 pr-3">{brl(a.valor_premio_mensal)}</td>
                   <td className="py-3 pr-3">{brl(a.capital_segurado)}</td>
@@ -623,6 +636,16 @@ function AbaApolices({ idCliente, onMudanca }) {
                     {brl(a.comissao_natalia)} / {brl(a.comissao_assessor)} / {brl(a.comissao_escritorio)}
                   </td>
                   <td className="py-3 pr-3">{dataBR(a.data_vigencia)}</td>
+                  <td className="py-3 pr-3">
+                    <Badge tom={STATUS_APOLICE.find((s) => s.id === a.status)?.tom ?? 'slate'}>
+                      {STATUS_APOLICE.find((s) => s.id === a.status)?.label ?? a.status}
+                    </Badge>
+                    {a.status === 'cancelada' && a.motivo_cancelamento && (
+                      <p className="mt-1 max-w-[180px] truncate text-xs text-slate-400" title={a.motivo_cancelamento}>
+                        {a.motivo_cancelamento}
+                      </p>
+                    )}
+                  </td>
                   <td className="py-3">
                     <div className="flex gap-1">
                       <button onClick={() => abrirEdicao(a)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600" title="Editar">
@@ -668,9 +691,22 @@ function AbaApolices({ idCliente, onMudanca }) {
                 onChange={(e) => setForm({ ...form, percentual_comissao: e.target.value })} />
             </Campo>
           </div>
-          <Campo label="Nº da apólice">
-            <Input value={form.numero_apolice} onChange={(e) => setForm({ ...form, numero_apolice: e.target.value })} />
-          </Campo>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Nº da apólice">
+              <Input value={form.numero_apolice} onChange={(e) => setForm({ ...form, numero_apolice: e.target.value })} />
+            </Campo>
+            <Campo label="Status">
+              <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                {STATUS_APOLICE.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </Select>
+            </Campo>
+          </div>
+          {form.status === 'cancelada' && (
+            <Campo label="Motivo do cancelamento" dica="Fica no histórico do cliente — ajuda o pós-venda">
+              <Input value={form.motivo_cancelamento} placeholder="Ex.: inadimplência, troca de seguradora..."
+                onChange={(e) => setForm({ ...form, motivo_cancelamento: e.target.value })} />
+            </Campo>
+          )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
             <Button type="submit" variant="success">{editando ? 'Salvar alterações' : 'Confirmar venda'}</Button>

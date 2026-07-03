@@ -57,10 +57,12 @@ const MODELOS = {
       vigencia:   { apelidos: ['vigencia', 'inicio', 'emissao', 'data'], obrigatorio: true },
       percentual: { apelidos: ['percentual', 'comissao', '%'] },
       numero:     { apelidos: ['numero', 'apolice', 'contrato'] },
+      status:     { apelidos: ['status', 'situacao'] },
+      motivo:     { apelidos: ['motivocancelamento', 'motivo'] },
     },
     exemplo: [
-      ['Cliente', 'Seguradora', 'Prêmio mensal', 'Capital', 'Vigência', '% Comissão', 'Nº apólice'],
-      ['Maria Souza', 'Prudential do Brasil', 'R$ 500,00', 'R$ 1.000.000,00', '01/03/2024', '40', 'AP-12345'],
+      ['Cliente', 'Seguradora', 'Prêmio mensal', 'Capital', 'Vigência', '% Comissão', 'Nº apólice', 'Status', 'Motivo cancelamento'],
+      ['Maria Souza', 'Prudential do Brasil', 'R$ 500,00', 'R$ 1.000.000,00', '01/03/2024', '40', 'AP-12345', 'ATIVO', ''],
     ],
   },
 }
@@ -703,6 +705,12 @@ async function importarApolices({ linhas, mapa }) {
     const vigencia = paraDataISO(l[mapa.vigencia])
     if (premio == null || !vigencia)
       return erros.push(`Linha ${i + 2} (${nomeCliente}): prêmio ou vigência inválidos`)
+    // Histórico completo: a planilha geral traz INATIVO + motivo do
+    // cancelamento — entram como 'cancelada' (as automações de pós-venda só
+    // olham apólices ativas, então nada dispara para elas).
+    const statusBruto = mapa.status !== undefined ? normalizar(l[mapa.status]) : ''
+    const status = /inativ|cancel/.test(statusBruto) ? 'cancelada'
+      : /suspens/.test(statusBruto) ? 'suspensa' : 'ativa'
     registros.push({
       id_cliente: idCliente,
       id_seguradora: segPorNome.get(normalizar(l[mapa.seguradora])),
@@ -711,6 +719,10 @@ async function importarApolices({ linhas, mapa }) {
       data_vigencia: vigencia,
       percentual_comissao: mapa.percentual !== undefined ? paraNumero(l[mapa.percentual]) : null,
       numero_apolice: mapa.numero !== undefined ? l[mapa.numero] || null : null,
+      status,
+      // coluna da migração 012 — só entra se a planilha trouxer motivo
+      ...(mapa.motivo !== undefined && (l[mapa.motivo] ?? '').trim() !== ''
+        && { motivo_cancelamento: l[mapa.motivo].trim() }),
       importada: true,
     })
   })
