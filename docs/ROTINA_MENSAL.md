@@ -1,8 +1,28 @@
 # Rotina mensal de comissões — manual da Natália
 
 O ciclo do mês tem 3 passos e leva menos de 10 minutos. O resultado final é o
-**Fechamento para o financeiro**: a planilha que o líder usa para pagar cada
-assessor, com todo mundo identificado pelo código e conferência automática.
+**Fechamento para o financeiro**: a planilha separada por **assessor e
+seguradora**, com todo mundo identificado pelo código, conferência automática
+e a cascata financeira completa.
+
+## A regra financeira do escritório (como todo valor é calculado)
+
+```
+comissão BRUTA (planilha da seguradora)
+  − imposto do escritório (20%)
+  = base LÍQUIDA
+      × 40% → especialista (Natália na produção dela, Bruno na dele)
+      × 30% → escritório
+      × 30% → assessor que indicou o cliente
+```
+
+- O **financeiro lança pelo bruto** — a planilha traz o bruto e também todas
+  as colunas da cascata para conferência.
+- O **Hub mostra o líquido** — no card *Controle da Natália* ela vê o que de
+  fato ganha em cada mês.
+- A Natália também atua como **assessora (código CS8868)**: nas vendas
+  indicadas por ela, os 30% do assessor também são dela.
+- Os percentuais são editáveis em **Cadastros → Divisão de comissão**.
 
 ---
 
@@ -55,13 +75,24 @@ No card **Fechamento para o financeiro**:
   "É da Nati"/"É do Bruno" para clientes sem produção e vincule o assessor
   nos que estão sem código — a correção vale para todos os meses daquele
   cliente, de uma vez.
-- **Fechamento (CSV)** → a planilha do líder: uma linha por assessor
-  (código, nome, produção, clientes, lançamentos, estornos, total a repassar)
-  com linha de total geral.
+- **Fechamento (CSV)** → a planilha do financeiro: uma linha por
+  **assessor × seguradora** (código, nome, produção, clientes, lançamentos,
+  recorrente/venda nova/campanha, estornos, comissão bruta, imposto, base
+  líquida e as três partes da divisão), com subtotal por assessor e total
+  geral do mês.
 - **Imprimir / PDF** → o mesmo fechamento em página limpa para imprimir ou
   salvar em PDF (o navegador abre a janela de impressão sozinho).
-- **Detalhado com códigos (CSV)** → cada lançamento com código do assessor E
-  código do cliente — para auditoria e tirar dúvidas de pagamento.
+- **Detalhado com códigos (CSV)** → cada lançamento com código do assessor,
+  código do cliente, valor bruto, líquido e repasse do assessor — para
+  auditoria e tirar dúvidas de pagamento.
+- **Extrato da Natália (CSV)** no card *Controle da Natália* → mês a mês:
+  bruto da produção dela, imposto, líquido, parte dela (40%), quanto disso é
+  recorrente, indicações (código CS8868) e o ganho total.
+
+> Fechamento líquido: rode a migração `011_fechamento_liquido.sql` no
+> Supabase (uma vez) — ela grava o imposto (20%), a divisão 40/30/30 e o
+> código CS8868 da Natália, e cria a view `vw_fechamento_assessor_seguradora`
+> com o fechamento direto no banco.
 
 > Meta de comissão recebida: rode a migração `010_meta_comissao_recebida.sql`
 > no Supabase e defina o valor em Cadastros — o Dashboard passa a mostrar a
