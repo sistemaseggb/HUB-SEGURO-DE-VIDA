@@ -12,6 +12,7 @@ export default function AssessorDetalhe() {
   const { id } = useParams()
   const [resumo, setResumo] = useState(null)
   const [clientes, setClientes] = useState([])
+  const [comissoes, setComissoes] = useState([])
 
   const carregar = useCallback(async () => {
     const [r, c] = await Promise.all([
@@ -20,6 +21,13 @@ export default function AssessorDetalhe() {
     ])
     setResumo(r.data)
     setClientes(c.data ?? [])
+    // extrato importado das seguradoras: pelo vínculo direto e pelo código
+    const filtro = r.data?.codigo
+      ? `id_assessor.eq.${id},codigo_assessor.eq.${r.data.codigo}`
+      : `id_assessor.eq.${id}`
+    const { data: ext } = await supabase.from('comissoes_importadas')
+      .select('competencia, seguradora, cliente_nome, producao, valor').or(filtro)
+    setComissoes(ext ?? [])
   }, [id])
 
   useEffect(() => { carregar() }, [carregar])
@@ -66,6 +74,8 @@ export default function AssessorDetalhe() {
           detalhe="total gerado (histórico)" icone={Wallet} corIcone="text-violet-600 bg-violet-50" />
       </div>
 
+      {comissoes.length > 0 && <ExtratoComissoesAssessor comissoes={comissoes} />}
+
       <Card>
         <div className="border-b border-slate-100 p-5 pb-3">
           <h2 className="font-semibold text-slate-900">Clientes deste assessor ({clientes.length})</h2>
@@ -105,5 +115,65 @@ export default function AssessorDetalhe() {
           )}
       </Card>
     </div>
+  )
+}
+
+// Extrato real de comissões do assessor (planilhas importadas): total por mês
+// e os clientes que mais geram — a base da conversa de repasse com ele.
+function ExtratoComissoesAssessor({ comissoes }) {
+  const total = comissoes.reduce((s, c) => s + Number(c.valor), 0)
+
+  const porMes = new Map()
+  const porCliente = new Map()
+  for (const c of comissoes) {
+    const m = String(c.competencia).slice(0, 7)
+    porMes.set(m, (porMes.get(m) ?? 0) + Number(c.valor))
+    porCliente.set(c.cliente_nome, (porCliente.get(c.cliente_nome) ?? 0) + Number(c.valor))
+  }
+  const meses = [...porMes.entries()].sort((a, b) => b[0].localeCompare(a[0])).slice(0, 6)
+  const top = [...porCliente.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
+  const mesRotulo = (m) => new Date(`${m}-15`).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+
+  return (
+    <Card className="mb-6 p-5">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <h2 className="font-semibold text-slate-900">Comissões geradas (extrato das seguradoras)</h2>
+        <div className="ml-auto flex gap-2">
+          <Badge tom="blue">Total: {brl(total)}</Badge>
+          <Badge>{porCliente.size} cliente(s) com movimento</Badge>
+        </div>
+      </div>
+      <div className="grid gap-6 md:grid-cols-2">
+        <div>
+          <p className="mb-2 text-xs font-medium uppercase text-slate-400">Últimos meses</p>
+          <div className="space-y-1.5">
+            {meses.map(([m, v]) => (
+              <div key={m} className="flex items-center gap-3 text-sm">
+                <span className="w-16 shrink-0 capitalize text-slate-500">{mesRotulo(m)}</span>
+                <div className="h-5 flex-1 rounded bg-slate-50">
+                  <div className="flex h-5 items-center rounded bg-violet-400/80 pl-2"
+                    style={{ width: `${Math.max((v / Math.max(...meses.map(([, x]) => x), 1)) * 100, 6)}%` }}>
+                    <span className="text-xs font-semibold text-white">{brl(v)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="mb-2 text-xs font-medium uppercase text-slate-400">Clientes que mais geram</p>
+          <ul className="space-y-2">
+            {top.map(([nome, v], i) => (
+              <li key={nome} className="flex items-center gap-2 text-sm">
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                  i === 0 ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-500'}`}>{i + 1}</span>
+                <span className="min-w-0 flex-1 truncate font-medium text-slate-800">{nome}</span>
+                <span className="font-semibold tabular-nums text-slate-900">{brl(v)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </Card>
   )
 }

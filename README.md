@@ -176,6 +176,13 @@ npm run dev
       formatos oficiais e internos reconhecidos sozinhos; mapa em
       [`docs/PLANILHAS_COMISSAO.md`](docs/PLANILHAS_COMISSAO.md)) + relatório
       "Comissões recebidas" com separação Natália × Bruno e exportação CSV
+- [x] Fechamento para o financeiro: repasse por assessor com códigos,
+      conferência automática, pendências resolvidas na tela e PDF de 1 clique
+- [x] Inteligência do mês: variação por seguradora vs mês anterior, tipo de
+      receita, top clientes com concentração e alerta de seguradora faltante
+- [x] Extrato de comissões no Cliente 360 (aba Comissões) e no Assessor 360
+      (últimos meses + clientes que mais geram)
+- [x] Meta de comissão recebida (migração 010) no card Metas do Dashboard
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
 - [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)
