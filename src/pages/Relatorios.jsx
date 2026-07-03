@@ -1,5 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, TrendingDown, Timer, Wallet, Database, Landmark, HandCoins, CheckCircle2, AlertTriangle, Printer } from 'lucide-react'
+import {
+  Download, TrendingDown, Timer, Wallet, Database, Landmark, HandCoins,
+  CheckCircle2, AlertTriangle, Printer, Sparkles, ArrowUpRight, ArrowDownRight,
+} from 'lucide-react'
+
+// Badge de variação percentual vs mês anterior (▲ verde / ▼ vermelho)
+function VariacaoBadge({ atual, anterior, rotulo, grande }) {
+  if (!anterior) return rotulo ? <span className="text-xs text-slate-400">{rotulo}: novo</span>
+    : <span className="text-xs text-slate-300">novo</span>
+  const pct = Math.round(((atual - anterior) / Math.abs(anterior)) * 100)
+  const sobe = pct >= 0
+  return (
+    <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-semibold ${
+      grande ? 'text-sm' : 'text-xs'} ${sobe ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+      {sobe ? <ArrowUpRight size={grande ? 15 : 12} /> : <ArrowDownRight size={grande ? 15 : 12} />}
+      {sobe ? '+' : ''}{pct}%{rotulo ? ` ${rotulo}` : ''}
+    </span>
+  )
+}
 import { supabase } from '../lib/supabase'
 import { brl, mesBR, dataBR } from '../lib/format'
 import { etapaLabel, CHART } from '../lib/constants'
@@ -198,6 +216,50 @@ export default function Relatorios() {
           r.seguradora, r.segmento, r.producao ?? 'A classificar', r.parcela ?? '', r.tipo_receita,
           Number(r.valor).toFixed(2).replace('.', ',')]))
   }
+
+  // Inteligência do mês: comparativos com o mês anterior, top clientes,
+  // concentração de receita e vigilância de seguradoras não importadas.
+  const inteligencia = useMemo(() => {
+    const [a, m] = mes.split('-').map(Number)
+    const dAnt = new Date(a, m - 2, 1)
+    const mesAnterior = `${dAnt.getFullYear()}-${String(dAnt.getMonth() + 1).padStart(2, '0')}`
+    const doMes = (mesX) => resumoImportadas.filter((r) => String(r.competencia).slice(0, 7) === mesX)
+
+    const porSeg = (linhas) => {
+      const mm = new Map()
+      for (const r of linhas) mm.set(r.seguradora, (mm.get(r.seguradora) ?? 0) + Number(r.total))
+      return mm
+    }
+    const segAtual = porSeg(doMes(mes))
+    const segAnt = porSeg(doMes(mesAnterior))
+    const seguradoras = [...new Set([...segAtual.keys(), ...segAnt.keys()])]
+      .map((s) => ({ seguradora: s, atual: segAtual.get(s) ?? 0, anterior: segAnt.get(s) ?? 0 }))
+      .sort((x, y) => y.atual - x.atual)
+
+    const porReceita = (linhas) => {
+      const mm = { recorrente: 0, venda_nova: 0, campanha: 0 }
+      for (const r of linhas) mm[r.tipo_receita] = (mm[r.tipo_receita] ?? 0) + Number(r.total)
+      return mm
+    }
+    const recAtual = porReceita(doMes(mes))
+    const recAnt = porReceita(doMes(mesAnterior))
+
+    const totalAtual = seguradoras.reduce((s, x) => s + x.atual, 0)
+    const totalAnterior = seguradoras.reduce((s, x) => s + x.anterior, 0)
+    const faltando = seguradoras.filter((x) => x.anterior > 0 && x.atual === 0).map((x) => x.seguradora)
+
+    const porCliente = new Map()
+    for (const r of importadas) porCliente.set(r.cliente_nome, (porCliente.get(r.cliente_nome) ?? 0) + Number(r.valor))
+    const topClientes = [...porCliente.entries()].sort((x, y) => y[1] - x[1]).slice(0, 5)
+    const somaTop = topClientes.reduce((s, [, v]) => s + v, 0)
+
+    return {
+      mesAnterior, seguradoras, recAtual, recAnt, totalAtual, totalAnterior, faltando,
+      topClientes,
+      concentracao: totalAtual > 0 ? Math.round((somaTop / totalAtual) * 100) : 0,
+      temAnterior: totalAnterior > 0,
+    }
+  }, [resumoImportadas, importadas, mes])
 
   // Fechamento em PDF: abre uma janela de impressão com layout limpo —
   // o navegador salva em PDF (mesmo caminho da Proposta).
@@ -522,6 +584,85 @@ export default function Relatorios() {
             </div>
           )}
         </Card>
+
+        {/* Inteligência do mês — comparativos e alertas */}
+        {importadas.length > 0 && (
+          <Card className="p-5 xl:col-span-2">
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+                <Sparkles size={17} className="text-violet-600" /> Inteligência do mês — {mesBR(mes + '-01')}
+              </h2>
+              {inteligencia.temAnterior && (
+                <VariacaoBadge atual={inteligencia.totalAtual} anterior={inteligencia.totalAnterior}
+                  rotulo={`vs ${mesBR(inteligencia.mesAnterior + '-01')}`} grande />
+              )}
+            </div>
+            <p className="mb-4 text-xs text-slate-400">Comparativos calculados sozinhos a partir das planilhas importadas</p>
+
+            {inteligencia.faltando.length > 0 && (
+              <p className="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <AlertTriangle size={15} className="shrink-0" />
+                <span><strong>Falta importar:</strong> {inteligencia.faltando.join(', ')} — teve movimento em{' '}
+                {mesBR(inteligencia.mesAnterior + '-01')} e ainda não entrou neste mês.</span>
+              </p>
+            )}
+
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div>
+                <p className="mb-2 text-xs font-medium uppercase text-slate-400">Seguradoras — variação vs mês anterior</p>
+                <div className="space-y-1.5">
+                  {inteligencia.seguradoras.map((s) => (
+                    <div key={s.seguradora} className="flex items-center gap-3 text-sm">
+                      <span className="w-24 shrink-0 font-medium text-slate-800">{s.seguradora}</span>
+                      <span className="w-24 text-right font-semibold tabular-nums">{brl(s.atual)}</span>
+                      <VariacaoBadge atual={s.atual} anterior={s.anterior} />
+                    </div>
+                  ))}
+                </div>
+
+                <p className="mb-2 mt-5 text-xs font-medium uppercase text-slate-400">Tipo de receita</p>
+                <div className="space-y-1.5">
+                  {[['recorrente', 'Recorrente (carteira)'], ['venda_nova', 'Venda nova'], ['campanha', 'Campanhas']].map(([k, rotulo]) => (
+                    (inteligencia.recAtual[k] !== 0 || inteligencia.recAnt[k] !== 0) && (
+                      <div key={k} className="flex items-center gap-3 text-sm">
+                        <span className="w-40 shrink-0 text-slate-600">{rotulo}</span>
+                        <span className="w-24 text-right font-semibold tabular-nums">{brl(inteligencia.recAtual[k] ?? 0)}</span>
+                        <VariacaoBadge atual={inteligencia.recAtual[k] ?? 0} anterior={inteligencia.recAnt[k] ?? 0} />
+                      </div>
+                    )
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-xs font-medium uppercase text-slate-400">
+                  Top 5 clientes do mês · concentram {inteligencia.concentracao}% da receita
+                </p>
+                <div className="space-y-2">
+                  {inteligencia.topClientes.map(([cliente, v], i) => (
+                    <div key={cliente} className="flex items-center gap-3">
+                      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                        i === 0 ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-500'}`}>{i + 1}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-slate-800">{cliente}</p>
+                        <div className="mt-0.5 h-1.5 rounded bg-slate-100">
+                          <div className="h-1.5 rounded bg-violet-400"
+                            style={{ width: `${Math.max((v / (inteligencia.topClientes[0]?.[1] || 1)) * 100, 4)}%` }} />
+                        </div>
+                      </div>
+                      <span className="text-sm font-semibold tabular-nums text-slate-900">{brl(v)}</span>
+                    </div>
+                  ))}
+                </div>
+                {inteligencia.concentracao >= 40 && (
+                  <p className="mt-3 text-xs text-slate-400">
+                    ⚠ Quase metade da receita vem de poucos clientes — vale reforçar a retenção deles no Pós-Venda.
+                  </p>
+                )}
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Fechamento para o financeiro — repasse por assessor */}
         <Card className="xl:col-span-2">

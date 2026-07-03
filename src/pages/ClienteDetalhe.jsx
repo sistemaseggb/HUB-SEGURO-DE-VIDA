@@ -12,7 +12,7 @@ import {
 } from '../components/ui'
 import { useToast } from '../components/Toast'
 
-const ABAS = ['Planejamento', 'Interações', 'Reuniões', 'Apólices', 'Documentos', 'Formulário', 'Tarefas', 'Histórico']
+const ABAS = ['Planejamento', 'Interações', 'Reuniões', 'Apólices', 'Comissões', 'Documentos', 'Formulário', 'Tarefas', 'Histórico']
 
 export default function ClienteDetalhe() {
   const { id } = useParams()
@@ -212,6 +212,7 @@ export default function ClienteDetalhe() {
       {aba === 'Interações' && <AbaInteracoes idCliente={id} onMudanca={carregar} />}
       {aba === 'Reuniões' && <AbaReunioes idCliente={id} onMudanca={carregar} />}
       {aba === 'Apólices' && <AbaApolices idCliente={id} onMudanca={carregar} />}
+      {aba === 'Comissões' && <AbaComissoes idCliente={id} cliente={cliente} />}
       {aba === 'Documentos' && <AbaDocumentos idCliente={id} />}
       {aba === 'Formulário' && <AbaFormulario idCliente={id} cliente={cliente} />}
       {aba === 'Tarefas' && <AbaTarefas idCliente={id} />}
@@ -909,6 +910,96 @@ function AbaTarefas({ idCliente }) {
             ))}
           </ul>
         )}
+    </Card>
+  )
+}
+
+// ─── COMISSÕES: extrato real do que o cliente gerou (planilhas importadas) ───
+// Busca pelo vínculo direto (id_cliente) e também pelo nome, para pegar
+// lançamentos importados antes do cliente existir no cadastro.
+function AbaComissoes({ idCliente, cliente }) {
+  const [linhas, setLinhas] = useState(null)
+
+  useEffect(() => {
+    async function carregar() {
+      const [porId, porNome] = await Promise.all([
+        supabase.from('comissoes_importadas')
+          .select('competencia, seguradora, segmento, tipo_receita, producao, valor')
+          .eq('id_cliente', idCliente),
+        cliente?.nome
+          ? supabase.from('comissoes_importadas')
+              .select('competencia, seguradora, segmento, tipo_receita, producao, valor')
+              .is('id_cliente', null).ilike('cliente_nome', cliente.nome.trim())
+          : Promise.resolve({ data: [] }),
+      ])
+      setLinhas([...(porId.data ?? []), ...(porNome.data ?? [])])
+    }
+    carregar()
+  }, [idCliente, cliente?.nome])
+
+  if (!linhas) return <Spinner />
+  if (linhas.length === 0) {
+    return (
+      <Card className="p-5">
+        <p className="py-6 text-center text-sm text-slate-400">
+          Nenhuma comissão importada para este cliente ainda. Elas aparecem aqui quando as
+          planilhas das seguradoras forem importadas em <strong>Importar → Comissões</strong>.
+        </p>
+      </Card>
+    )
+  }
+
+  const total = linhas.reduce((s, l) => s + Number(l.valor), 0)
+  const porMes = new Map()
+  for (const l of linhas) {
+    const m = String(l.competencia).slice(0, 7)
+    const acc = porMes.get(m) ?? { total: 0, n: 0, seguradoras: new Set() }
+    acc.total += Number(l.valor)
+    acc.n += 1
+    acc.seguradoras.add(l.seguradora)
+    porMes.set(m, acc)
+  }
+  const meses = [...porMes.entries()].sort((a, b) => b[0].localeCompare(a[0]))
+  const mediaMensal = total / meses.length
+  const mesBRLocal = (m) => new Date(`${m}-15`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+
+  return (
+    <Card className="p-5">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <h3 className="font-semibold text-slate-900">Comissões geradas por este cliente</h3>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <Badge tom="blue">Total: {brl(total)}</Badge>
+          <Badge tom="green">Média mensal: {brl(mediaMensal)}</Badge>
+          <Badge>{meses.length} mês(es) com movimento</Badge>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[480px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
+              <th className="py-2 font-medium">Mês</th>
+              <th className="py-2 font-medium">Seguradora(s)</th>
+              <th className="py-2 text-right font-medium">Lançamentos</th>
+              <th className="py-2 text-right font-medium">Comissão</th>
+            </tr>
+          </thead>
+          <tbody>
+            {meses.map(([m, acc]) => (
+              <tr key={m} className="border-b border-slate-50">
+                <td className="py-2.5 font-medium capitalize text-slate-800">{mesBRLocal(m)}</td>
+                <td className="py-2.5 text-slate-500">{[...acc.seguradoras].join(', ')}</td>
+                <td className="py-2.5 text-right text-slate-500">{acc.n}</td>
+                <td className={`py-2.5 text-right font-semibold ${acc.total < 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                  {brl(acc.total)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-xs text-slate-400">
+        Extrato real vindo das planilhas das seguradoras. Valores negativos são estornos.
+      </p>
     </Card>
   )
 }
