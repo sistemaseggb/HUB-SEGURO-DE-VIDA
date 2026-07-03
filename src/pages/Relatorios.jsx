@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Download, TrendingDown, Timer, Wallet, Database, Landmark, HandCoins,
-  CheckCircle2, AlertTriangle, Printer, Sparkles, ArrowUpRight, ArrowDownRight,
+  Download, TrendingDown, TrendingUp, Timer, Wallet, Database, Landmark, HandCoins,
+  CheckCircle2, AlertTriangle, Printer, Sparkles, ArrowUpRight, ArrowDownRight, MessageCircle,
 } from 'lucide-react'
 
 // Badge de variação percentual vs mês anterior (▲ verde / ▼ vermelho)
@@ -253,13 +253,48 @@ export default function Relatorios() {
     const topClientes = [...porCliente.entries()].sort((x, y) => y[1] - x[1]).slice(0, 5)
     const somaTop = topClientes.reduce((s, [, v]) => s + v, 0)
 
+    // Projeção de receita recorrente: média dos últimos 3 meses com carteira
+    // (estimativa conservadora — não inclui vendas novas nem campanhas)
+    const recPorMes = new Map()
+    for (const r of resumoImportadas) {
+      if (r.tipo_receita !== 'recorrente') continue
+      const mm = String(r.competencia).slice(0, 7)
+      recPorMes.set(mm, (recPorMes.get(mm) ?? 0) + Number(r.total))
+    }
+    const baseProjecao = [...recPorMes.entries()].sort().slice(-3)
+    const projecao = baseProjecao.length >= 2
+      ? {
+          media: baseProjecao.reduce((s, [, v]) => s + v, 0) / baseProjecao.length,
+          meses: baseProjecao.map(([mm]) => mm),
+        }
+      : null
+
     return {
       mesAnterior, seguradoras, recAtual, recAnt, totalAtual, totalAnterior, faltando,
-      topClientes,
+      topClientes, projecao,
       concentracao: totalAtual > 0 ? Math.round((somaTop / totalAtual) * 100) : 0,
       temAnterior: totalAnterior > 0,
     }
   }, [resumoImportadas, importadas, mes])
+
+  // Resumo do fechamento pronto para mandar ao líder pelo WhatsApp
+  function enviarResumoWhatsApp() {
+    const texto = [
+      `*Fechamento de comissões — ${mesBR(mes + '-01')}*`,
+      `Total: ${brl(imp.total)}${fechamento.confere ? ' ✅ conferido' : ''}`,
+      `Natália: ${brl(imp.nati)} · Bruno: ${brl(imp.bruno)}`,
+      '',
+      '*Por seguradora:*',
+      ...imp.porSeguradora.map((s) => `• ${s.chave}: ${brl(s.total)}`),
+      '',
+      '*Assessores (total a repassar):*',
+      ...fechamento.linhas.slice(0, 8).map((a) => `• ${a.codigo}${a.nome ? ` — ${a.nome}` : ''}: ${brl(a.total)}`),
+      fechamento.linhas.length > 8 ? `… e mais ${fechamento.linhas.length - 8} (planilha completa em anexo)` : '',
+      '',
+      '_Gerado pelo Hub Seguro de Vida_',
+    ].filter((l) => l !== '').join('\n')
+    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank', 'noreferrer')
+  }
 
   // Fechamento em PDF: abre uma janela de impressão com layout limpo —
   // o navegador salva em PDF (mesmo caminho da Proposta).
@@ -661,6 +696,20 @@ export default function Relatorios() {
                 )}
               </div>
             </div>
+
+            {inteligencia.projecao && (
+              <div className="mt-5 flex flex-wrap items-center gap-2 rounded-lg border border-blue-100 bg-blue-50/70 p-3 text-sm text-slate-700">
+                <TrendingUp size={16} className="shrink-0 text-blue-600" />
+                <span>
+                  <strong>Projeção de receita recorrente:</strong> ≈ {brl(inteligencia.projecao.media)}/mês
+                  nos próximos meses, mantida a carteira atual.
+                </span>
+                <span className="text-xs text-slate-400">
+                  Estimativa pela média recorrente de {inteligencia.projecao.meses.map((m) => mesBR(`${m}-01`)).join(', ')} —
+                  não inclui vendas novas nem campanhas.
+                </span>
+              </div>
+            )}
           </Card>
         )}
 
@@ -682,6 +731,10 @@ export default function Relatorios() {
               </Button>
               <Button variant="secondary" disabled={importadas.length === 0} onClick={imprimirFechamento}>
                 <Printer size={15} /> Imprimir / PDF
+              </Button>
+              <Button variant="secondary" disabled={importadas.length === 0} onClick={enviarResumoWhatsApp}
+                title="Abre o WhatsApp com o resumo do fechamento pronto — escolha o contato do líder e envie">
+                <MessageCircle size={15} /> Enviar resumo (WhatsApp)
               </Button>
               <Button variant="secondary" disabled={importadas.length === 0} onClick={exportarFechamentoDetalhado}>
                 <Download size={15} /> Detalhado com códigos (CSV)

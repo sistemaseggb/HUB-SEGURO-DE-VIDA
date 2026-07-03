@@ -67,6 +67,19 @@ No card **Fechamento para o financeiro**:
 > no Supabase e defina o valor em Cadastros — o Dashboard passa a mostrar a
 > barra "Comissão recebida (seguradoras)" nas Metas do mês.
 
+## Extras
+
+- **Enviar resumo (WhatsApp)** no card do fechamento: abre o WhatsApp com o
+  resumo do mês pronto (total conferido, Natália × Bruno, por seguradora e
+  repasse por assessor) — é só escolher o contato do líder e enviar.
+- **Projeção de receita recorrente** no card Inteligência do mês: média da
+  carteira recorrente dos últimos meses, claramente marcada como estimativa.
+- **Histórico 2023–2024**: o arquivo `HISTORICO-2023-2024-Arrastar-em-Comissoes.csv`
+  (gerado da matriz "Comissão Mês" da planilha geral) entra pelo mesmo
+  arrastar-e-soltar. Lançamentos sem seguradora identificável entram como
+  "Histórico" e os sem produção caem nas pendências para classificar com
+  1 clique.
+
 No card "Comissões recebidas": **Matriz cliente × mês** exporta a visão da
 antiga aba "Comissão Mês" da planilha geral, agora sempre atualizada.
 
