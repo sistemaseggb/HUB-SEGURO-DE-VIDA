@@ -33,6 +33,19 @@ const MODELOS = {
       ['CLI-1001', 'Maria Souza', '(41) 99999-0000', 'maria@email.com', '15/07/1985', 'ASS-01', 'João Pedro', 'Fechado', 'Médica, 2 filhos'],
     ],
   },
+  assessores: {
+    rotulo: 'Assessores (lista do escritório)',
+    colunas: {
+      nome:     { apelidos: ['nome'], obrigatorio: true },
+      codigo:   { apelidos: ['codigo', 'cod'], obrigatorio: true },
+      email:    { apelidos: ['email', 'e-mail'] },
+      telefone: { apelidos: ['whatsapp', 'telefone', 'celular'] },
+    },
+    exemplo: [
+      ['Nome', 'Código', 'E-mail', 'Whatsapp'],
+      ['ARLISON SALGADO SOARES', 'A2157', 'arlison@escritorio.com', '(21)98685-1102'],
+    ],
+  },
   apolices: {
     rotulo: 'Apólices (vendas já feitas)',
     colunas: {
@@ -89,8 +102,8 @@ export default function Importar() {
 
   async function importar() {
     setImportando(true)
-    const r = modo === 'clientes'
-      ? await importarClientes(analise)
+    const r = modo === 'clientes' ? await importarClientes(analise)
+      : modo === 'assessores' ? await importarAssessores(analise)
       : await importarApolices(analise)
     setResultado(r)
     setImportando(false)
@@ -332,14 +345,12 @@ function ImportarComissoes({ onVoltar }) {
 
       <Card className="p-5">
         <div className="mb-4 flex gap-2">
-          <button onClick={() => onVoltar('clientes')}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
-            Clientes / Leads
-          </button>
-          <button onClick={() => onVoltar('apolices')}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
-            Apólices (vendas já feitas)
-          </button>
+          {Object.entries(MODELOS).map(([id, m]) => (
+            <button key={id} onClick={() => onVoltar(id)}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+              {m.rotulo}
+            </button>
+          ))}
           <button className="rounded-lg border border-blue-600 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700">
             Comissões (planilhas das seguradoras)
           </button>
@@ -532,6 +543,55 @@ async function importarComissoes(registros) {
     else ok += data.length
   }
   return { ok, substituidos, erros }
+}
+
+// ─── Importação de ASSESSORES (lista oficial do escritório) ─────────────────
+// Upsert por código: quem já existe é atualizado (nome/e-mail/telefone), quem
+// não existe é criado. Depois religa os lançamentos de comissão que estavam
+// com código sem cadastro — os nomes aparecem no fechamento na hora.
+async function importarAssessores({ linhas, mapa }) {
+  const erros = []
+  const { data: existentes } = await supabase.from('assessores').select('id, nome, codigo')
+  const porCod = new Map((existentes ?? []).filter((a) => a.codigo).map((a) => [normalizar(a.codigo), a]))
+  const porNome = new Map((existentes ?? []).map((a) => [normalizar(a.nome), a]))
+
+  let criadosN = 0, atualizados = 0
+  const finais = []
+  for (const [i, l] of linhas.entries()) {
+    const nome = (l[mapa.nome] ?? '').trim()
+    const codigo = (l[mapa.codigo] ?? '').trim()
+    if (!nome) { erros.push(`Linha ${i + 2}: sem nome`); continue }
+    const payload = {
+      nome,
+      ...(codigo && { codigo }),
+      ...(mapa.email !== undefined && l[mapa.email]?.trim() && { email: l[mapa.email].trim().toLowerCase() }),
+      ...(mapa.telefone !== undefined && l[mapa.telefone]?.trim() && { telefone: l[mapa.telefone].trim() }),
+    }
+    const alvo = (codigo && porCod.get(normalizar(codigo))) || porNome.get(normalizar(nome))
+    if (alvo) {
+      const { error } = await supabase.from('assessores').update(payload).eq('id', alvo.id)
+      if (error) erros.push(`Linha ${i + 2} (${nome}): ${error.message}`)
+      else { atualizados += 1; finais.push({ id: alvo.id, codigo: codigo || alvo.codigo }) }
+    } else {
+      const { data, error } = await supabase.from('assessores').insert(payload).select('id').single()
+      if (error) erros.push(`Linha ${i + 2} (${nome}): ${error.message}`)
+      else { criadosN += 1; finais.push({ id: data.id, codigo }) }
+    }
+  }
+
+  // religa lançamentos importados antes deste cadastro (id_assessor vazio)
+  let vinculados = 0
+  for (const a of finais) {
+    if (!a.codigo) continue
+    const { count } = await supabase.from('comissoes_importadas')
+      .update({ id_assessor: a.id }, { count: 'exact' })
+      .is('id_assessor', null).ilike('codigo_assessor', a.codigo)
+    vinculados += count ?? 0
+  }
+
+  const criados = [`${criadosN} novo(s) · ${atualizados} atualizado(s)`]
+  if (vinculados) criados.push(`${vinculados} lançamento(s) de comissão religado(s) ao nome`)
+  return { ok: criadosN + atualizados, erros, criados }
 }
 
 // ─── Importação de CLIENTES ──────────────────────────────────────────────────
