@@ -51,11 +51,21 @@ Abra **Relatórios** e selecione o mês no canto superior direito:
 
 No card **Fechamento para o financeiro**:
 
+- **Pendências de classificação** (se aparecer o bloco amarelo): clique em
+  "É da Nati"/"É do Bruno" para clientes sem produção e vincule o assessor
+  nos que estão sem código — a correção vale para todos os meses daquele
+  cliente, de uma vez.
 - **Fechamento (CSV)** → a planilha do líder: uma linha por assessor
   (código, nome, produção, clientes, lançamentos, estornos, total a repassar)
   com linha de total geral.
+- **Imprimir / PDF** → o mesmo fechamento em página limpa para imprimir ou
+  salvar em PDF (o navegador abre a janela de impressão sozinho).
 - **Detalhado com códigos (CSV)** → cada lançamento com código do assessor E
   código do cliente — para auditoria e tirar dúvidas de pagamento.
+
+> Meta de comissão recebida: rode a migração `010_meta_comissao_recebida.sql`
+> no Supabase e defina o valor em Cadastros — o Dashboard passa a mostrar a
+> barra "Comissão recebida (seguradoras)" nas Metas do mês.
 
 No card "Comissões recebidas": **Matriz cliente × mês** exporta a visão da
 antiga aba "Comissão Mês" da planilha geral, agora sempre atualizada.

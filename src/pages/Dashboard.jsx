@@ -303,7 +303,7 @@ export default function Dashboard() {
       supabase.from('vw_central_dia').select('*').limit(20),
       supabase.from('vw_funil_contagem').select('*'),
       supabase.from('vw_kpis_gerais').select('*').single(),
-      supabase.from('configuracoes').select('meta_premio_mensal, meta_reunioes_mensal, meta_apolices_mensal').single(),
+      supabase.from('configuracoes').select('*').single(),
       supabase.from('vw_prioridades_classificadas').select('*').limit(6),
       supabase.from('vw_conversao_mensal').select('*').limit(6),
       supabase.from('vw_comissoes_importadas_resumo').select('*'),
@@ -366,6 +366,7 @@ export default function Dashboard() {
     return {
       ref,
       doMes: porMes.get(ref) ?? { total: 0, nati: 0, bruno: 0 },
+      doMesAtual: porMes.get(atual) ?? { total: 0, nati: 0, bruno: 0 },
       evolucao: meses.slice(-6).map((m) => ({ rotulo: mesBR(`${m}-01`), valor: porMes.get(m).total })),
     }
   }, [recebidas])
@@ -418,12 +419,13 @@ export default function Dashboard() {
       </div>
 
       {/* Metas do mês */}
-      {(Number(metas.meta_premio_mensal) > 0 || Number(metas.meta_reunioes_mensal) > 0 || Number(metas.meta_apolices_mensal) > 0) && (
+      {(Number(metas.meta_premio_mensal) > 0 || Number(metas.meta_reunioes_mensal) > 0
+        || Number(metas.meta_apolices_mensal) > 0 || Number(metas.meta_comissao_mensal) > 0) && (
         <Card className="mb-6 p-5">
           <h2 className="mb-4 flex items-center gap-2 font-semibold text-slate-900">
             <Target size={18} className="text-blue-600" /> Metas do mês
           </h2>
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             {Number(metas.meta_premio_mensal) > 0 && (
               <BarraMeta rotulo="Prêmio vendido"
                 atual={Number(mesAtual.dash.premio_mensal_vendido ?? 0)}
@@ -438,6 +440,11 @@ export default function Dashboard() {
               <BarraMeta rotulo="Apólices vendidas"
                 atual={Number(mesAtual.dash.apolices_vendidas ?? 0)}
                 meta={Number(metas.meta_apolices_mensal)} />
+            )}
+            {Number(metas.meta_comissao_mensal) > 0 && (
+              <BarraMeta rotulo="Comissão recebida (seguradoras)"
+                atual={recebidasMes.doMesAtual.total}
+                meta={Number(metas.meta_comissao_mensal)} formato={brlCompacto} />
             )}
           </div>
         </Card>
