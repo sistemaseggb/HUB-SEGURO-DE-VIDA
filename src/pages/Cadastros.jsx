@@ -262,6 +262,8 @@ function PainelSplit() {
       meta_premio_mensal: cfg.meta_premio_mensal || 0,
       meta_reunioes_mensal: cfg.meta_reunioes_mensal || 0,
       meta_apolices_mensal: cfg.meta_apolices_mensal || 0,
+      // só existe após a migração 010 — incluir antes dela quebraria o salvar
+      ...(cfg.meta_comissao_mensal !== undefined && { meta_comissao_mensal: cfg.meta_comissao_mensal || 0 }),
       dias_sem_contato_alerta: cfg.dias_sem_contato_alerta || 90,
     }).eq('id', 1)
     if (error) { setMsg(`Erro: ${error.message}`); toast.erro('Erro ao salvar configurações.') }
@@ -312,6 +314,11 @@ function PainelSplit() {
           <Campo label="Meta: apólices/mês">
             <Input type="number" min="0" value={cfg.meta_apolices_mensal ?? 0} onChange={set('meta_apolices_mensal')} />
           </Campo>
+          {cfg.meta_comissao_mensal !== undefined && (
+            <Campo label="Meta: comissão recebida/mês (R$)" dica="Medida pelas planilhas de comissão importadas">
+              <Input type="number" step="0.01" min="0" value={cfg.meta_comissao_mensal ?? 0} onChange={set('meta_comissao_mensal')} />
+            </Campo>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <Button type="submit" disabled={soma !== 100}><Save size={15} /> Salvar configurações</Button>

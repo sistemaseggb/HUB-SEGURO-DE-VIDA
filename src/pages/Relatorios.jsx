@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, TrendingDown, Timer, Wallet, Database, Landmark, HandCoins, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Download, TrendingDown, Timer, Wallet, Database, Landmark, HandCoins, CheckCircle2, AlertTriangle, Printer } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, mesBR, dataBR } from '../lib/format'
 import { etapaLabel, CHART } from '../lib/constants'
 import { baixarCSV } from '../lib/csv'
-import { PageHeader, Card, Button, Spinner, Input, Campo, ComoFunciona, Badge } from '../components/ui'
+import { PageHeader, Card, Button, Spinner, Input, Select, Campo, ComoFunciona, Badge } from '../components/ui'
 
 // Busca comissoes_importadas em páginas de 1000 (limite do Supabase por
 // consulta) — meses cheios passam disso com facilidade (MAG sozinha tem 500+).
@@ -47,17 +47,54 @@ export default function Relatorios() {
 
   const [resumoImportadas, setResumoImportadas] = useState([])
 
-  useEffect(() => {
+  const [assessoresLista, setAssessoresLista] = useState([])
+
+  function carregarComissoesDoMes() {
     buscarComissoesPaginado(
       'seguradora, segmento, tipo_receita, cliente_nome, codigo_cliente, codigo_assessor, producao, parcela, valor, assessores(nome), clientes(codigo)',
       (q) => q.eq('competencia', `${mes}-01`)
     ).then(setImportadas)
-  }, [mes])
+  }
+  useEffect(carregarComissoesDoMes, [mes]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    supabase.from('assessores').select('id, nome, codigo').order('nome')
+      .then(({ data }) => setAssessoresLista(data ?? []))
+  }, [])
+
+  // Pendências de classificação do mês: produção (Nati/Bruno) e assessor.
+  // Corrigir aqui atualiza TODAS as competências daquele cliente que ainda
+  // estejam pendentes — classifica uma vez, vale para sempre.
+  async function classificarProducao(cliente, producao) {
+    await supabase.from('comissoes_importadas').update({ producao })
+      .eq('cliente_nome', cliente).is('producao', null)
+    carregarComissoesDoMes()
+    supabase.from('vw_comissoes_importadas_resumo').select('*')
+      .then(({ data }) => setResumoImportadas(data ?? []))
+  }
+  async function vincularAssessor(cliente, idAssessor) {
+    const a = assessoresLista.find((x) => x.id === idAssessor)
+    if (!a) return
+    await supabase.from('comissoes_importadas')
+      .update({ id_assessor: a.id, codigo_assessor: a.codigo ?? null })
+      .eq('cliente_nome', cliente).is('codigo_assessor', null)
+    carregarComissoesDoMes()
+  }
 
   useEffect(() => {
     supabase.from('vw_comissoes_importadas_resumo').select('*')
       .then(({ data }) => setResumoImportadas(data ?? []))
   }, [])
+
+  // Abre direto no último mês que tem comissões importadas (o mês corrente
+  // costuma estar vazio até as planilhas chegarem) — a menos que a usuária
+  // já tenha escolhido um mês.
+  const [mesEscolhidoPelaUsuaria, setMesEscolhidoPelaUsuaria] = useState(false)
+  useEffect(() => {
+    if (mesEscolhidoPelaUsuaria || resumoImportadas.length === 0) return
+    const meses = [...new Set(resumoImportadas.map((r) => String(r.competencia).slice(0, 7)))].sort()
+    if (!meses.includes(mes)) setMes(meses[meses.length - 1])
+  }, [resumoImportadas, mesEscolhidoPelaUsuaria, mes])
 
   const doMes = useMemo(
     () => (comissoes ?? []).filter((c) => String(c.mes).startsWith(mes)),
@@ -123,6 +160,25 @@ export default function Relatorios() {
 
   const codCliente = (r) => r.codigo_cliente || r.clientes?.codigo || ''
 
+  const pendencias = useMemo(() => {
+    const semProducao = new Map()
+    const semAssessor = new Map()
+    for (const r of importadas) {
+      if (!r.producao) {
+        const c = semProducao.get(r.cliente_nome) ?? { n: 0, total: 0 }
+        c.n += 1; c.total += Number(r.valor)
+        semProducao.set(r.cliente_nome, c)
+      }
+      if (!r.codigo_assessor) {
+        const c = semAssessor.get(r.cliente_nome) ?? { n: 0, total: 0 }
+        c.n += 1; c.total += Number(r.valor)
+        semAssessor.set(r.cliente_nome, c)
+      }
+    }
+    const ordena = (m) => [...m.entries()].sort((a, b) => b[1].total - a[1].total)
+    return { semProducao: ordena(semProducao), semAssessor: ordena(semAssessor) }
+  }, [importadas])
+
   function exportarFechamento() {
     baixarCSV(`fechamento-financeiro-${mes}.csv`,
       ['Cód. assessor', 'Assessor', 'Produção', 'Clientes', 'Lançamentos', 'Estornos', 'Total a repassar'],
@@ -141,6 +197,67 @@ export default function Relatorios() {
         .map((r) => [r.codigo_assessor ?? '', r.assessores?.nome ?? '', codCliente(r), r.cliente_nome,
           r.seguradora, r.segmento, r.producao ?? 'A classificar', r.parcela ?? '', r.tipo_receita,
           Number(r.valor).toFixed(2).replace('.', ',')]))
+  }
+
+  // Fechamento em PDF: abre uma janela de impressão com layout limpo —
+  // o navegador salva em PDF (mesmo caminho da Proposta).
+  function imprimirFechamento() {
+    const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const linhas = fechamento.linhas.map((a, i) => `
+      <tr>
+        <td class="mudo">${i + 1}º</td>
+        <td><code>${esc(a.codigo)}</code></td>
+        <td class="nome">${esc(a.nome ?? '— cadastrar —')}</td>
+        <td>${esc([...a.producoes].join(' / ') || '—')}</td>
+        <td class="num">${a.clientes.size}</td>
+        <td class="num">${a.lancamentos}</td>
+        <td class="num ${a.estornos < 0 ? 'neg' : 'mudo'}">${a.estornos < 0 ? brl(a.estornos) : '—'}</td>
+        <td class="num total">${brl(a.total)}</td>
+      </tr>`).join('')
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+      <title>Fechamento de comissões — ${mesBR(mes + '-01')}</title>
+      <style>
+        * { box-sizing: border-box; margin: 0; }
+        body { font: 13px/1.5 -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; color: #0f172a; padding: 36px; }
+        h1 { font-size: 20px; margin-bottom: 2px; }
+        .sub { color: #64748b; font-size: 12px; margin-bottom: 18px; }
+        .confere { border: 1px solid ${fechamento.confere ? '#a7f3d0' : '#fecaca'}; background: ${fechamento.confere ? '#ecfdf5' : '#fef2f2'};
+          color: ${fechamento.confere ? '#065f46' : '#991b1b'}; border-radius: 8px; padding: 10px 14px; font-size: 12px; margin-bottom: 18px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #64748b;
+          border-bottom: 2px solid #e2e8f0; padding: 6px 8px; }
+        th.num { text-align: right; }
+        td { padding: 7px 8px; border-bottom: 1px solid #f1f5f9; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        td.total { font-weight: 700; }
+        td.nome { font-weight: 600; }
+        td.mudo, .mudo { color: #94a3b8; }
+        td.neg { color: #dc2626; }
+        code { background: #f1f5f9; border-radius: 4px; padding: 1px 6px; font-size: 11px; }
+        tr.geral td { border-top: 2px solid #e2e8f0; font-weight: 700; font-size: 14px; }
+        .rodape { margin-top: 22px; color: #94a3b8; font-size: 10px; }
+        @media print { body { padding: 0; } }
+      </style></head><body>
+      <h1>Fechamento de comissões — ${mesBR(mes + '-01')}</h1>
+      <p class="sub">Repasse por assessor · gerado pelo Hub Seguro de Vida em ${new Date().toLocaleDateString('pt-BR')}</p>
+      <p class="confere">${fechamento.confere
+        ? `✓ Conferido: a soma dos assessores (${brl(fechamento.totalGeral)}) bate com o total importado do mês, centavo a centavo.`
+        : `⚠ Atenção: a soma dos assessores (${brl(fechamento.totalGeral)}) difere do total do mês (${brl(imp.total)}).`}</p>
+      <table>
+        <thead><tr><th>#</th><th>Cód. assessor</th><th>Assessor</th><th>Produção</th>
+          <th class="num">Clientes</th><th class="num">Lançamentos</th><th class="num">Estornos</th><th class="num">Total a repassar</th></tr></thead>
+        <tbody>${linhas}
+          <tr class="geral"><td colspan="7">Total geral do mês</td><td class="num">${brl(fechamento.totalGeral)}</td></tr>
+        </tbody>
+      </table>
+      <p class="rodape">Estornos entram com valor negativo e já estão abatidos dos totais. Seguros com pagamento anual
+        aparecem no mês em que a seguradora pagou a comissão; os mensais aparecem todo mês.</p>
+      <script>window.onload = () => window.print()</script>
+      </body></html>`
+    const w = window.open('', '_blank')
+    if (!w) return
+    w.document.write(html)
+    w.document.close()
   }
 
   // Evolução de todos os meses importados (Natália × Bruno × total)
@@ -210,7 +327,8 @@ export default function Relatorios() {
       <PageHeader titulo="Relatórios" subtitulo="Fechamento de comissões e análises do funil">
         <div className="w-44">
           <Campo label="Mês de referência">
-            <Input type="month" value={mes} onChange={(e) => setMes(e.target.value)} />
+            <Input type="month" value={mes}
+              onChange={(e) => { setMes(e.target.value); setMesEscolhidoPelaUsuaria(true) }} />
           </Campo>
         </div>
       </PageHeader>
@@ -417,9 +535,12 @@ export default function Relatorios() {
                 Envie o CSV para o líder.
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button disabled={importadas.length === 0} onClick={exportarFechamento}>
                 <Download size={15} /> Fechamento (CSV)
+              </Button>
+              <Button variant="secondary" disabled={importadas.length === 0} onClick={imprimirFechamento}>
+                <Printer size={15} /> Imprimir / PDF
               </Button>
               <Button variant="secondary" disabled={importadas.length === 0} onClick={exportarFechamentoDetalhado}>
                 <Download size={15} /> Detalhado com códigos (CSV)
@@ -442,11 +563,69 @@ export default function Relatorios() {
                   : <>Atenção: a soma dos assessores ({brl(fechamento.totalGeral)}) difere do total do mês ({brl(imp.total)}) — verifique antes de pagar.</>}
               </div>
 
-              {fechamento.linhas.some((a) => a.codigo === '(sem código)' || !a.nome) && (
+              {(pendencias.semProducao.length > 0 || pendencias.semAssessor.length > 0) && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/70 p-4">
+                  <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-amber-800">
+                    <AlertTriangle size={15} /> Pendências de classificação — resolva aqui mesmo, antes de enviar ao líder
+                  </p>
+
+                  {pendencias.semProducao.length > 0 && (
+                    <div className="mb-4">
+                      <p className="mb-2 text-xs font-medium uppercase text-amber-700">
+                        Produção não identificada — de quem é cada cliente?
+                      </p>
+                      <div className="space-y-2">
+                        {pendencias.semProducao.map(([cliente, c]) => (
+                          <div key={cliente} className="flex flex-wrap items-center gap-2 rounded-lg bg-white/70 px-3 py-2 text-sm">
+                            <span className="font-medium text-slate-800">{cliente}</span>
+                            <span className="text-xs text-slate-500">{c.n} lançamento(s) · {brl(c.total)}</span>
+                            <div className="ml-auto flex gap-1.5">
+                              <button onClick={() => classificarProducao(cliente, 'Nati')}
+                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+                                É da Nati
+                              </button>
+                              <button onClick={() => classificarProducao(cliente, 'Bruno')}
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                                É do Bruno
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {pendencias.semAssessor.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-xs font-medium uppercase text-amber-700">
+                        Sem código de assessor — escolha quem indicou
+                      </p>
+                      <div className="space-y-2">
+                        {pendencias.semAssessor.map(([cliente, c]) => (
+                          <div key={cliente} className="flex flex-wrap items-center gap-2 rounded-lg bg-white/70 px-3 py-2 text-sm">
+                            <span className="font-medium text-slate-800">{cliente}</span>
+                            <span className="text-xs text-slate-500">{c.n} lançamento(s) · {brl(c.total)}</span>
+                            <div className="ml-auto w-60">
+                              <Select defaultValue="" onChange={(e) => e.target.value && vincularAssessor(cliente, e.target.value)}>
+                                <option value="">Vincular assessor...</option>
+                                {assessoresLista.map((a) => (
+                                  <option key={a.id} value={a.id}>{a.nome}{a.codigo ? ` (${a.codigo})` : ''}</option>
+                                ))}
+                              </Select>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {fechamento.linhas.some((a) => a.codigo !== '(sem código)' && !a.nome) && (
                 <p className="mb-4 flex items-center gap-2 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
                   <AlertTriangle size={14} className="shrink-0" />
-                  Há lançamentos sem código de assessor ou com código ainda não cadastrado (nome em branco).
-                  Cadastre os códigos em <strong>Cadastros → Assessores</strong> para o nome aparecer no fechamento.
+                  Há códigos de assessor ainda sem cadastro (nome em branco na tabela).
+                  Cadastre-os em <strong>Cadastros → Assessores</strong> para o nome aparecer no fechamento.
                 </p>
               )}
 

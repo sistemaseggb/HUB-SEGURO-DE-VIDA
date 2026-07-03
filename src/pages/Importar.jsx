@@ -510,13 +510,16 @@ async function importarComissoes(registros) {
     origem: 'importador',
   }))
 
-  // substitui o que já existia para as mesmas competência+seguradora
-  const pares = [...new Set(linhas.map((l) => `${l.competencia}|${l.seguradora}`))]
+  // Substitui o que já existia para as mesmas competência+seguradora+segmento.
+  // O segmento PRECISA fazer parte da chave: comissões e campanhas da Azos (ou
+  // Icatu individual e empresarial) do mesmo mês convivem — importar um não
+  // pode apagar o outro.
+  const pares = [...new Set(linhas.map((l) => `${l.competencia}|${l.seguradora}|${l.segmento}`))]
   let substituidos = 0
   for (const par of pares) {
-    const [comp, seg] = par.split('|')
+    const [comp, seg, segmento] = par.split('|')
     const { count, error } = await supabase.from('comissoes_importadas')
-      .delete({ count: 'exact' }).eq('competencia', comp).eq('seguradora', seg)
+      .delete({ count: 'exact' }).eq('competencia', comp).eq('seguradora', seg).eq('segmento', segmento)
     if (error) return { ok: 0, substituidos: 0, erros: [`Falha ao limpar dados antigos: ${error.message}`] }
     substituidos += count ?? 0
   }
