@@ -57,12 +57,13 @@ const MODELOS = {
       vigencia:   { apelidos: ['vigencia', 'inicio', 'emissao', 'data'], obrigatorio: true },
       percentual: { apelidos: ['percentual', 'comissao', '%'] },
       numero:     { apelidos: ['numero', 'apolice', 'contrato'] },
+      tipo:       { apelidos: ['tipoproduto', 'produto', 'tipo'] },
       status:     { apelidos: ['status', 'situacao'] },
       motivo:     { apelidos: ['motivocancelamento', 'motivo'] },
     },
     exemplo: [
-      ['Cliente', 'Seguradora', 'Prêmio mensal', 'Capital', 'Vigência', '% Comissão', 'Nº apólice', 'Status', 'Motivo cancelamento'],
-      ['Maria Souza', 'Prudential do Brasil', 'R$ 500,00', 'R$ 1.000.000,00', '01/03/2024', '40', 'AP-12345', 'ATIVO', ''],
+      ['Cliente', 'Seguradora', 'Prêmio mensal', 'Capital', 'Vigência', '% Comissão', 'Nº apólice', 'Tipo produto', 'Status', 'Motivo cancelamento'],
+      ['Maria Souza', 'Prudential do Brasil', 'R$ 500,00', 'R$ 1.000.000,00', '01/03/2024', '40', 'AP-12345', 'Seguro Temporário', 'ATIVO', ''],
     ],
   },
 }
@@ -723,6 +724,9 @@ async function importarApolices({ linhas, mapa }) {
       // coluna da migração 012 — só entra se a planilha trouxer motivo
       ...(mapa.motivo !== undefined && (l[mapa.motivo] ?? '').trim() !== ''
         && { motivo_cancelamento: l[mapa.motivo].trim() }),
+      // coluna da migração 013 — só entra se a planilha trouxer o produto
+      ...(mapa.tipo !== undefined && (l[mapa.tipo] ?? '').trim() !== ''
+        && { tipo_produto: l[mapa.tipo].trim() }),
       importada: true,
     })
   })
