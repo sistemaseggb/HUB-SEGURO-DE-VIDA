@@ -90,6 +90,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 11. [`supabase/migrations/011_fechamento_liquido.sql`](supabase/migrations/011_fechamento_liquido.sql)
 12. [`supabase/migrations/012_historico_apolices.sql`](supabase/migrations/012_historico_apolices.sql)
 13. [`supabase/migrations/013_tipo_produto_apolice.sql`](supabase/migrations/013_tipo_produto_apolice.sql)
+14. [`supabase/migrations/014_planejamento_detalhado.sql`](supabase/migrations/014_planejamento_detalhado.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -193,6 +194,16 @@ npm run dev
 - [x] Extrato de comissões no Cliente 360 (aba Comissões) e no Assessor 360
       (últimos meses + clientes que mais geram)
 - [x] Meta de comissão recebida (migração 010) no card Metas do Dashboard
+- [x] Planejamento por **5 pilares** (migração 014): família, invalidez,
+      doenças graves, DIT e sucessão/inventário — sugestões calculadas, gap
+      vs cobertura atual e resumo ao vivo
+- [x] Apresentação renovada: logo do escritório (public/logo.png), slide de
+      diagnóstico, blindagem patrimonial (custo do inventário), gap de
+      cobertura e próximos passos
+- [x] DPS completa no formulário público (padrão das seguradoras) com
+      impressão limpa para transcrever ao portal + destaque dos "sim"
+- [x] Dossiê 1-página do cliente: estudo, apólices, últimas conversas e
+      pendências — a folha da consultora antes de cada reunião
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
 - [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)
