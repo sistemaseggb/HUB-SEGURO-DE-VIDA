@@ -34,7 +34,21 @@ comissão BRUTA (planilha da seguradora)
    (300 clientes da planilha geral, com códigos — os assessores são criados
    automaticamente com seus códigos).
 3. **Importar → Apólices**: cole o conteúdo de `cadastro-apolices.csv`
-   (349 apólices ativas da geral, com seguradora, prêmio, vigência, % e nº).
+   (**361 apólices** da geral: seguradora normalizada, prêmio mensal, data de
+   emissão/vigência, % de comissão, nº, **tipo de produto** — Temporário,
+   Vitalício, Resgatável, RC, D&O... —, **Status** ATIVO/INATIVO e **Motivo
+   cancelamento**). Apólices inativas entram como `cancelada` com o motivo, só
+   como histórico, sem disparar pós-venda. **Rode antes** as migrações
+   `012_historico_apolices.sql` (status + motivo) e `013_tipo_produto_apolice.sql`
+   (tipo de produto). A data de emissão vira o "aniversário da apólice": o
+   sistema puxa sozinho a mensagem de renovação todo ano e a tarefa de revisão
+   11 meses depois.
+
+   > **4 pontos para revisar depois** (o Hub já importa tudo; são só campos
+   > que a geral não trazia): 3 apólices entraram com prêmio 0 (ROSÂNGELA
+   > BIACHII, Henrique Batistello, GIOVANNA HEPFNER AULER — sem valor na
+   > planilha) e 1 com seguradora "A definir" (Leticia Galbier Ricetto
+   > Pegorari). Complete em Cliente 360 → Apólices quando tiver o dado.
 4. **Importar → Comissões**: cole o conteúdo de
    `comissoes-consolidadas-mai-jun-2026.csv` — maio e junho inteiros entram de
    uma vez (o sistema reconhece o formato "Hub — consolidado": mês e

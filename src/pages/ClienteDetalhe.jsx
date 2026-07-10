@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, MessageCircle, Presentation, Copy, Check,
+  ArrowLeft, MessageCircle, Presentation, Copy, Check, Printer,
   CalendarPlus, FileSignature, ClipboardList, Zap, Upload, FileText, Download, Trash2, Pencil,
 } from 'lucide-react'
+import { ETAPAS_FORM, ROTULOS_FORM } from '../lib/formularioConfig'
 import { supabase } from '../lib/supabase'
 import { ETAPAS, etapaLabel, STATUS_REUNIAO, TIPO_TAREFA_ICONE } from '../lib/constants'
-import { brl, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib/format'
+import { brl, brlCompacto, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib/format'
+import { calcularEstudo, PILARES } from '../lib/estudo'
 import {
   Button, Card, Input, Select, Textarea, Campo, Modal, Badge, Spinner,
 } from '../components/ui'
@@ -125,6 +127,10 @@ export default function ClienteDetalhe() {
             <Link to={`/proposta/${id}`}>
               <Button variant="secondary"><Presentation size={16} /> Gerar proposta</Button>
             </Link>
+            <Button variant="secondary" onClick={() => imprimirDossie(cliente, contato)}
+              title="1 página com tudo: planejamento, apólices, últimas conversas e pendências — leve para a reunião">
+              <FileText size={16} /> Dossiê
+            </Button>
             <button onClick={abrirEdicao} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-blue-600" title="Editar cliente">
               <Pencil size={17} />
             </button>
@@ -261,7 +267,11 @@ function AbaHistorico({ idCliente, cliente }) {
   )
 }
 
-// ─── PLANEJAMENTO: os dados da reunião viram o estudo e a proposta ───────────
+// ─── PLANEJAMENTO: o estudo completo por pilares que vira a proposta ─────────
+// Seções: família → vida financeira → 5 pilares (com sugestão calculada e
+// botão "usar") → sucessão/inventário → objetivos. Tudo alimenta os slides.
+const SECAO = 'mb-2 mt-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400 first:mt-0'
+
 function AbaPlanejamento({ idCliente }) {
   const toast = useToast()
   const [plano, setPlano] = useState(null)
@@ -279,12 +289,17 @@ function AbaPlanejamento({ idCliente }) {
 
   if (!plano) return <Spinner />
 
+  const estudo = calcularEstudo(plano)
   const set = (k) => (e) => setPlano({ ...plano, [k]: e.target.value })
+  // Colunas da migração 014: só enviamos ao banco se já existirem no registro
+  const tem014 = 'capital_invalidez' in plano
 
   async function salvar(e) {
     e.preventDefault()
     const payload = {
-      ...plano,
+      id_cliente: idCliente,
+      profissao: plano.profissao || null,
+      estado_civil: plano.estado_civil || null,
       renda_mensal: plano.renda_mensal || null,
       custo_vida_mensal: plano.custo_vida_mensal || null,
       patrimonio_total: plano.patrimonio_total || null,
@@ -292,61 +307,188 @@ function AbaPlanejamento({ idCliente }) {
       capital_sugerido: plano.capital_sugerido || null, // vazio = banco calcula sozinho
       num_dependentes: plano.num_dependentes || 0,
       anos_protecao: plano.anos_protecao || 10,
+      objetivos: plano.objetivos || null,
+      observacoes_reuniao: plano.observacoes_reuniao || null,
+      ...(tem014 && {
+        capital_invalidez: plano.capital_invalidez || null,
+        capital_doencas_graves: plano.capital_doencas_graves || null,
+        dit_diaria: plano.dit_diaria || null,
+        verba_sucessoria: plano.verba_sucessoria || null,
+        cobertura_atual: plano.cobertura_atual || 0,
+        itcmd_pct: plano.itcmd_pct ?? 4,
+        custas_pct: plano.custas_pct ?? 8,
+        conjuge_nome: plano.conjuge_nome || null,
+        filhos_idades: plano.filhos_idades || null,
+      }),
     }
-    const { data } = await supabase.from('planejamentos').upsert(payload, { onConflict: 'id_cliente' })
+    const { data, error } = await supabase.from('planejamentos').upsert(payload, { onConflict: 'id_cliente' })
       .select().single()
+    if (error) return toast.erro(`Erro ao salvar: ${error.message}`)
     if (data) setPlano(data)
     setSalvo(true)
     toast.ok('Planejamento salvo.')
     setTimeout(() => setSalvo(false), 2500)
   }
 
+  // Campo de pilar: input + sugestão calculada com botão "usar"
+  const CampoPilar = ({ pilar }) => {
+    const sugestao = estudo.sugestoes[pilar.id]
+    const valorForm = plano[pilar.campo]
+    return (
+      <div className="rounded-xl border border-slate-200/70 bg-white p-4">
+        <p className="font-medium text-slate-800">{pilar.rotulo}</p>
+        <p className="mb-3 mt-0.5 text-xs text-slate-400">{pilar.descricao}</p>
+        <Input type="number" step="0.01" min="0" value={valorForm ?? ''}
+          placeholder={sugestao > 0 ? String(Math.round(sugestao)) : '0'}
+          onChange={set(pilar.campo)} />
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+          <span className="text-slate-400" title={pilar.comoCalcula}>
+            Sugestão: <strong className="text-slate-600">{pilar.porDia ? `${brl(sugestao)}/dia` : brlCompacto(sugestao)}</strong>
+          </span>
+          {sugestao > 0 && String(valorForm ?? '') === '' && (
+            <span className="text-slate-300">em branco = usa a sugestão</span>
+          )}
+          {sugestao > 0 && String(valorForm ?? '') !== '' && Number(valorForm) !== Math.round(sugestao * 100) / 100 && (
+            <button type="button" className="font-semibold text-blue-600 hover:underline"
+              onClick={() => setPlano({ ...plano, [pilar.campo]: Math.round(sugestao * 100) / 100 })}>
+              usar sugestão
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <Card className="p-5">
-      <p className="mb-4 text-sm text-slate-500">
-        Preencha com o que foi coletado na reunião. Se deixar o capital em branco,
-        o sistema sugere automaticamente: <em>custo de vida × 12 × anos de proteção + dívidas</em>.
-      </p>
-      <form onSubmit={salvar} className="grid gap-4 md:grid-cols-3">
-        <Campo label="Profissão"><Input value={plano.profissao ?? ''} onChange={set('profissao')} /></Campo>
-        <Campo label="Estado civil">
-          <Select value={plano.estado_civil ?? ''} onChange={set('estado_civil')}>
-            <option value="">—</option>
-            {['Solteiro(a)', 'Casado(a)', 'União estável', 'Divorciado(a)', 'Viúvo(a)'].map((o) => (
-              <option key={o} value={o}>{o}</option>
-            ))}
-          </Select>
-        </Campo>
-        <Campo label="Nº de dependentes">
-          <Input type="number" min="0" value={plano.num_dependentes ?? 0} onChange={set('num_dependentes')} />
-        </Campo>
-        <Campo label="Renda mensal (R$)"><Input type="number" step="0.01" value={plano.renda_mensal ?? ''} onChange={set('renda_mensal')} /></Campo>
-        <Campo label="Custo de vida mensal (R$)"><Input type="number" step="0.01" value={plano.custo_vida_mensal ?? ''} onChange={set('custo_vida_mensal')} /></Campo>
-        <Campo label="Dívidas totais (R$)"><Input type="number" step="0.01" value={plano.dividas_total ?? ''} onChange={set('dividas_total')} /></Campo>
-        <Campo label="Patrimônio total (R$)"><Input type="number" step="0.01" value={plano.patrimonio_total ?? ''} onChange={set('patrimonio_total')} /></Campo>
-        <Campo label="Anos de proteção" dica="Horizonte usado no cálculo do capital">
-          <Input type="number" min="1" value={plano.anos_protecao ?? 10} onChange={set('anos_protecao')} />
-        </Campo>
-        <Campo label="Capital segurado (R$)" dica="Deixe vazio para o cálculo automático">
-          <Input type="number" step="0.01" value={plano.capital_sugerido ?? ''} onChange={set('capital_sugerido')} />
-        </Campo>
-        <div className="md:col-span-3">
+      <form onSubmit={salvar}>
+        <p className={SECAO}>👨‍👩‍👧 Família e perfil</p>
+        <div className="grid gap-4 md:grid-cols-3">
+          <Campo label="Profissão"><Input value={plano.profissao ?? ''} onChange={set('profissao')} /></Campo>
+          <Campo label="Estado civil">
+            <Select value={plano.estado_civil ?? ''} onChange={set('estado_civil')}>
+              <option value="">—</option>
+              {['Solteiro(a)', 'Casado(a)', 'União estável', 'Divorciado(a)', 'Viúvo(a)'].map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </Select>
+          </Campo>
+          <Campo label="Nº de dependentes">
+            <Input type="number" min="0" value={plano.num_dependentes ?? 0} onChange={set('num_dependentes')} />
+          </Campo>
+          {tem014 && (
+            <>
+              <Campo label="Cônjuge" dica="Aparece no estudo">
+                <Input value={plano.conjuge_nome ?? ''} onChange={set('conjuge_nome')} />
+              </Campo>
+              <Campo label="Idades dos filhos" dica={'Ex.: "3, 7 e 12 anos"'}>
+                <Input value={plano.filhos_idades ?? ''} onChange={set('filhos_idades')} />
+              </Campo>
+            </>
+          )}
+        </div>
+
+        <p className={SECAO}>💰 Vida financeira</p>
+        <div className="grid gap-4 md:grid-cols-3">
+          <Campo label="Renda mensal (R$)"><Input type="number" step="0.01" value={plano.renda_mensal ?? ''} onChange={set('renda_mensal')} /></Campo>
+          <Campo label="Custo de vida mensal (R$)"><Input type="number" step="0.01" value={plano.custo_vida_mensal ?? ''} onChange={set('custo_vida_mensal')} /></Campo>
+          <Campo label="Dívidas totais (R$)"><Input type="number" step="0.01" value={plano.dividas_total ?? ''} onChange={set('dividas_total')} /></Campo>
+          <Campo label="Patrimônio total (R$)" dica="Base do cálculo de inventário">
+            <Input type="number" step="0.01" value={plano.patrimonio_total ?? ''} onChange={set('patrimonio_total')} />
+          </Campo>
+          <Campo label="Anos de proteção" dica="Horizonte do estudo">
+            <Input type="number" min="1" value={plano.anos_protecao ?? 10} onChange={set('anos_protecao')} />
+          </Campo>
+          {tem014 && (
+            <Campo label="Cobertura que já possui (R$)" dica="Seguros atuais — o estudo mostra o gap">
+              <Input type="number" step="0.01" value={plano.cobertura_atual ?? ''} onChange={set('cobertura_atual')} />
+            </Campo>
+          )}
+        </div>
+
+        <p className={SECAO}>🛡️ Os 5 pilares da proteção</p>
+        {!tem014 && (
+          <p className="mb-3 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
+            Rode a migração <strong>014_planejamento_detalhado.sql</strong> no Supabase para liberar
+            invalidez, doenças graves, DIT, sucessão e o gap de cobertura.
+          </p>
+        )}
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <CampoPilar pilar={PILARES[0]} />
+          {tem014 && PILARES.slice(1).map((p) => <CampoPilar key={p.id} pilar={p} />)}
+        </div>
+
+        {tem014 && (
+          <>
+            <p className={SECAO}>🏛️ Sucessão — o custo do inventário</p>
+            <div className="grid items-end gap-4 md:grid-cols-4">
+              <Campo label="ITCMD do estado (%)" dica="RS 6 · PR 4 · SC até 8">
+                <Input type="number" step="0.5" min="0" max="20" value={plano.itcmd_pct ?? 4} onChange={set('itcmd_pct')} />
+              </Campo>
+              <Campo label="Custas + honorários (%)" dica="Tipicamente 6–12%">
+                <Input type="number" step="0.5" min="0" max="30" value={plano.custas_pct ?? 8} onChange={set('custas_pct')} />
+              </Campo>
+              <div className="rounded-xl border border-slate-200/70 bg-slate-50 p-3 md:col-span-2">
+                <p className="text-xs uppercase text-slate-400">Custo estimado do inventário</p>
+                <p className="font-display text-xl font-semibold text-slate-900 tabular-nums">
+                  {brl(estudo.custoInventario)}
+                  <span className="ml-2 text-sm font-normal text-slate-400">
+                    ({(estudo.itcmd + estudo.custas).toFixed(1).replace('.', ',')}% de {brlCompacto(estudo.patrimonio)})
+                  </span>
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  É a liquidez que a família precisa ter <strong>em dinheiro</strong> para destravar os bens.
+                  O seguro paga direto ao beneficiário, fora do inventário.
+                </p>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Resumo vivo do estudo */}
+        <div className="mt-6 rounded-xl border border-brand-100 bg-brand-50/50 p-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-700">Resumo do estudo (ao vivo)</p>
+          <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p className="text-xs text-slate-400">Proteção da família</p>
+              <p className="font-semibold tabular-nums text-slate-900">{brlCompacto(estudo.valores.morte)}</p>
+              {estudo.mesesProtegidos > 0 && (
+                <p className="text-xs text-slate-500">{estudo.mesesProtegidos} meses de padrão de vida</p>
+              )}
+            </div>
+            {tem014 && (
+              <>
+                <div>
+                  <p className="text-xs text-slate-400">+ Sucessão (inventário)</p>
+                  <p className="font-semibold tabular-nums text-slate-900">{brlCompacto(estudo.valores.sucessao)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">Já possui de cobertura</p>
+                  <p className="font-semibold tabular-nums text-slate-900">{brlCompacto(estudo.coberturaAtual)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">Gap de proteção</p>
+                  <p className={`font-semibold tabular-nums ${estudo.gap > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                    {estudo.gap > 0 ? brlCompacto(estudo.gap) : 'Coberto ✓'}
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4">
           <Campo label="Objetivos do cliente">
             <Textarea value={plano.objetivos ?? ''} onChange={set('objetivos')}
               placeholder="Ex.: garantir a faculdade dos filhos, proteger a empresa, planejamento sucessório..." />
           </Campo>
-        </div>
-        <div className="md:col-span-3">
           <Campo label="Notas da reunião">
             <Textarea value={plano.observacoes_reuniao ?? ''} onChange={set('observacoes_reuniao')} rows={4} />
           </Campo>
         </div>
-        <div className="flex items-center gap-3 md:col-span-3">
+        <div className="mt-4 flex items-center gap-3">
           <Button type="submit">Salvar planejamento</Button>
           {salvo && <span className="flex items-center gap-1 text-sm text-emerald-600"><Check size={15} /> Salvo!</span>}
-          {plano.capital_sugerido && (
-            <span className="text-sm text-slate-500">Capital sugerido: <strong>{brl(plano.capital_sugerido)}</strong></span>
-          )}
         </div>
       </form>
     </Card>
@@ -524,7 +666,14 @@ function AbaReunioes({ idCliente, onMudanca }) {
 const APOLICE_VAZIA = {
   id_seguradora: '', numero_apolice: '', valor_premio_mensal: '',
   capital_segurado: '', percentual_comissao: '', data_vigencia: '',
+  status: 'ativa', motivo_cancelamento: '',
 }
+
+const STATUS_APOLICE = [
+  { id: 'ativa', label: 'Ativa', tom: 'green' },
+  { id: 'suspensa', label: 'Suspensa', tom: 'yellow' },
+  { id: 'cancelada', label: 'Cancelada', tom: 'red' },
+]
 
 function AbaApolices({ idCliente, onMudanca }) {
   const toast = useToast()
@@ -552,6 +701,7 @@ function AbaApolices({ idCliente, onMudanca }) {
       id_seguradora: a.id_seguradora, numero_apolice: a.numero_apolice ?? '',
       valor_premio_mensal: a.valor_premio_mensal, capital_segurado: a.capital_segurado,
       percentual_comissao: a.percentual_comissao ?? '', data_vigencia: a.data_vigencia,
+      status: a.status ?? 'ativa', motivo_cancelamento: a.motivo_cancelamento ?? '',
     })
     setModal(true)
   }
@@ -565,6 +715,10 @@ function AbaApolices({ idCliente, onMudanca }) {
       capital_segurado: form.capital_segurado,
       percentual_comissao: form.percentual_comissao || null,
       data_vigencia: form.data_vigencia,
+      status: form.status,
+      // coluna da migração 012 — só envia quando ela já existe no banco
+      ...(apolices.some((a) => 'motivo_cancelamento' in a)
+        && { motivo_cancelamento: form.status === 'cancelada' ? (form.motivo_cancelamento || null) : null }),
     }
     // Na edição NÃO reenviamos id_cliente (evita re-disparar a esteira de pós-venda)
     if (editando) {
@@ -600,7 +754,7 @@ function AbaApolices({ idCliente, onMudanca }) {
       {apolices.length === 0
         ? <p className="py-6 text-center text-sm text-slate-400">Nenhuma apólice ainda.</p>
         : (
-          <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm">
+          <div className="overflow-x-auto"><table className="w-full min-w-[880px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
                 <th className="py-2 pr-3 font-medium">Seguradora</th>
@@ -608,13 +762,14 @@ function AbaApolices({ idCliente, onMudanca }) {
                 <th className="py-2 pr-3 font-medium">Capital</th>
                 <th className="py-2 pr-3 font-medium">Comissão total</th>
                 <th className="py-2 pr-3 font-medium">Natália / Assessor / Escritório</th>
-                <th className="py-2 pr-3 font-medium">Vigência</th>
+                <th className="py-2 pr-3 font-medium">Emissão / Vigência</th>
+                <th className="py-2 pr-3 font-medium">Status</th>
                 <th className="py-2 font-medium"></th>
               </tr>
             </thead>
             <tbody>
               {apolices.map((a) => (
-                <tr key={a.id} className="border-b border-slate-50">
+                <tr key={a.id} className={`border-b border-slate-50 ${a.status === 'cancelada' ? 'opacity-60' : ''}`}>
                   <td className="py-3 pr-3 font-medium text-slate-800">{a.seguradoras?.nome}</td>
                   <td className="py-3 pr-3">{brl(a.valor_premio_mensal)}</td>
                   <td className="py-3 pr-3">{brl(a.capital_segurado)}</td>
@@ -623,6 +778,16 @@ function AbaApolices({ idCliente, onMudanca }) {
                     {brl(a.comissao_natalia)} / {brl(a.comissao_assessor)} / {brl(a.comissao_escritorio)}
                   </td>
                   <td className="py-3 pr-3">{dataBR(a.data_vigencia)}</td>
+                  <td className="py-3 pr-3">
+                    <Badge tom={STATUS_APOLICE.find((s) => s.id === a.status)?.tom ?? 'slate'}>
+                      {STATUS_APOLICE.find((s) => s.id === a.status)?.label ?? a.status}
+                    </Badge>
+                    {a.status === 'cancelada' && a.motivo_cancelamento && (
+                      <p className="mt-1 max-w-[180px] truncate text-xs text-slate-400" title={a.motivo_cancelamento}>
+                        {a.motivo_cancelamento}
+                      </p>
+                    )}
+                  </td>
                   <td className="py-3">
                     <div className="flex gap-1">
                       <button onClick={() => abrirEdicao(a)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600" title="Editar">
@@ -668,9 +833,22 @@ function AbaApolices({ idCliente, onMudanca }) {
                 onChange={(e) => setForm({ ...form, percentual_comissao: e.target.value })} />
             </Campo>
           </div>
-          <Campo label="Nº da apólice">
-            <Input value={form.numero_apolice} onChange={(e) => setForm({ ...form, numero_apolice: e.target.value })} />
-          </Campo>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Nº da apólice">
+              <Input value={form.numero_apolice} onChange={(e) => setForm({ ...form, numero_apolice: e.target.value })} />
+            </Campo>
+            <Campo label="Status">
+              <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                {STATUS_APOLICE.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </Select>
+            </Campo>
+          </div>
+          {form.status === 'cancelada' && (
+            <Campo label="Motivo do cancelamento" dica="Fica no histórico do cliente — ajuda o pós-venda">
+              <Input value={form.motivo_cancelamento} placeholder="Ex.: inadimplência, troca de seguradora..."
+                onChange={(e) => setForm({ ...form, motivo_cancelamento: e.target.value })} />
+            </Campo>
+          )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
             <Button type="submit" variant="success">{editando ? 'Salvar alterações' : 'Confirmar venda'}</Button>
@@ -791,6 +969,146 @@ function AbaDocumentos({ idCliente }) {
 }
 
 // ─── FORMULÁRIO: link público de onboarding + respostas recebidas ────────────
+// Dossiê pré-reunião: 1 página com o retrato completo do cliente — perfil,
+// estudo de proteção, apólices, últimas conversas e pendências. É a folha
+// que a consultora imprime (ou abre no celular) antes de qualquer reunião.
+async function imprimirDossie(cliente, contato) {
+  const [pl, ap, inter, tar, forms] = await Promise.all([
+    supabase.from('planejamentos').select('*').eq('id_cliente', cliente.id).maybeSingle(),
+    supabase.from('apolices').select('*, seguradoras(nome)').eq('id_cliente', cliente.id).order('data_vigencia', { ascending: false }),
+    supabase.from('interacoes').select('tipo, descricao, data').eq('id_cliente', cliente.id).order('data', { ascending: false }).limit(5),
+    supabase.from('tarefas').select('titulo, data_vencimento').eq('id_cliente', cliente.id).eq('concluida', false).order('data_vencimento').limit(6),
+    supabase.from('formularios_onboarding').select('status').eq('id_cliente', cliente.id).order('enviado_em', { ascending: false }).limit(1),
+  ])
+  const plano = pl.data
+  const estudo = plano ? calcularEstudo(plano) : null
+  const apolices = ap.data ?? []
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const statusForm = forms.data?.[0]?.status
+  const dpsLabel = statusForm === 'concluido' ? '✓ DPS/formulário concluído'
+    : statusForm ? '⏳ DPS/formulário em preenchimento' : '✗ DPS/formulário ainda não enviado'
+
+  const linhaAp = (a) => `<tr>
+    <td>${esc(a.seguradoras?.nome ?? '—')}</td><td>${esc(a.tipo_produto ?? '—')}</td>
+    <td class="num">${brl(a.valor_premio_mensal)}/mês</td><td>${dataBR(a.data_vigencia)}</td>
+    <td>${a.status === 'ativa' ? 'Ativa' : a.status === 'cancelada' ? `Cancelada${a.motivo_cancelamento ? ` — ${esc(a.motivo_cancelamento)}` : ''}` : 'Suspensa'}</td></tr>`
+
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+    <title>Dossiê — ${esc(cliente.nome)}</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; }
+      body { font: 12px/1.45 -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; color: #0f172a; padding: 30px; }
+      h1 { font-size: 18px; } .sub { color: #64748b; font-size: 11px; margin: 2px 0 12px; }
+      h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #475569;
+        border-bottom: 2px solid #e2e8f0; padding-bottom: 3px; margin: 14px 0 6px; }
+      table { width: 100%; border-collapse: collapse; }
+      td, th { padding: 4px 7px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: top; }
+      th { font-size: 9.5px; text-transform: uppercase; color: #94a3b8; }
+      .num { text-align: right; font-variant-numeric: tabular-nums; }
+      .grade { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+      .celula { border: 1px solid #e2e8f0; border-radius: 8px; padding: 7px 10px; }
+      .celula p { font-size: 10px; text-transform: uppercase; color: #94a3b8; }
+      .celula b { font-size: 13.5px; }
+      .aviso { border: 1px solid #fde68a; background: #fffbeb; border-radius: 8px; padding: 7px 10px; font-size: 11.5px; margin-top: 8px; }
+      .muted { color: #94a3b8; }
+      @media print { body { padding: 0; } }
+    </style></head><body>
+    <h1>Dossiê — ${esc(cliente.nome)} ${cliente.codigo ? `<span class="muted">· ${esc(cliente.codigo)}</span>` : ''}</h1>
+    <p class="sub">
+      ${esc(cliente.assessores?.nome ? `Assessor: ${cliente.assessores.nome}` : 'Sem assessor')}
+      ${cliente.telefone ? ` · ${esc(cliente.telefone)}` : ''}
+      ${cliente.data_nascimento ? ` · Nascimento: ${dataBR(cliente.data_nascimento)}` : ''}
+      · Último contato: ${contato?.dias_sem_contato == null ? 'nunca registrado' : contato.dias_sem_contato === 0 ? 'hoje' : `há ${contato.dias_sem_contato} dia(s)`}
+      · ${dpsLabel}
+    </p>
+
+    ${estudo ? `<h2>Estudo de proteção</h2>
+    <div class="grade">
+      <div class="celula"><p>Renda</p><b>${estudo.renda > 0 ? brl(estudo.renda) : '—'}</b></div>
+      <div class="celula"><p>Custo de vida</p><b>${estudo.custoVida > 0 ? brl(estudo.custoVida) : '—'}</b></div>
+      <div class="celula"><p>Patrimônio</p><b>${estudo.patrimonio > 0 ? brlCompacto(estudo.patrimonio) : '—'}</b></div>
+      <div class="celula"><p>Dívidas</p><b>${estudo.dividas > 0 ? brlCompacto(estudo.dividas) : '—'}</b></div>
+      <div class="celula"><p>Proteção família</p><b>${brlCompacto(estudo.valores.morte)}</b></div>
+      <div class="celula"><p>Doenças graves</p><b>${brlCompacto(estudo.valores.doencas_graves)}</b></div>
+      <div class="celula"><p>Sucessão</p><b>${brlCompacto(estudo.valores.sucessao)}</b></div>
+      <div class="celula"><p>Gap vs atual</p><b>${estudo.gap > 0 ? brlCompacto(estudo.gap) : 'Coberto ✓'}</b></div>
+    </div>
+    ${plano.objetivos ? `<p style="margin-top:6px"><strong>Objetivos:</strong> ${esc(plano.objetivos)}</p>` : ''}
+    ${plano.observacoes_reuniao ? `<p style="margin-top:3px"><strong>Notas da última reunião:</strong> ${esc(plano.observacoes_reuniao)}</p>` : ''}`
+    : '<div class="aviso">Planejamento ainda não preenchido — colete os dados na reunião (renda, custo de vida, patrimônio, dívidas, família).</div>'}
+
+    <h2>Apólices (${apolices.length})</h2>
+    ${apolices.length ? `<table><tr><th>Seguradora</th><th>Produto</th><th>Prêmio</th><th>Emissão</th><th>Status</th></tr>
+      ${apolices.map(linhaAp).join('')}</table>` : '<p class="muted">Nenhuma apólice ainda — cliente em prospecção.</p>'}
+
+    <h2>Últimas conversas</h2>
+    ${(inter.data ?? []).length ? `<table>${inter.data.map((i) => `<tr>
+      <td style="white-space:nowrap">${dataBR(i.data)}</td><td>${esc(i.tipo)}</td><td>${esc(i.descricao ?? '')}</td></tr>`).join('')}</table>`
+      : '<p class="muted">Nenhuma interação registrada.</p>'}
+
+    <h2>Pendências abertas</h2>
+    ${(tar.data ?? []).length ? `<table>${tar.data.map((t) => `<tr>
+      <td style="white-space:nowrap">${t.data_vencimento ? dataBR(t.data_vencimento) : '—'}</td><td>${esc(t.titulo)}</td></tr>`).join('')}</table>`
+      : '<p class="muted">Nenhuma tarefa pendente. ✓</p>'}
+
+    <p class="sub" style="margin-top:14px">Gerado pelo Hub Seguro de Vida em ${new Date().toLocaleString('pt-BR')} · uso interno</p>
+    <script>window.onload = () => window.print()</script>
+    </body></html>`
+  const w = window.open('', '_blank')
+  if (!w) return
+  w.document.write(html)
+  w.document.close()
+}
+
+// Impressão da DPS: documento limpo, agrupado pelas seções do formulário,
+// com os "sim" destacados — pronto para transcrever ao portal da seguradora.
+function imprimirDPS(cliente, respostas) {
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const fmt = (v) => {
+    if (v === 'sim') return '<strong class="sim">SIM</strong>'
+    if (v === 'nao') return 'Não'
+    if (Array.isArray(v)) return esc(v.map((b) => `${b.nome ?? ''} (${b.relacao ?? ''}, ${b.percentual ?? ''}%)`).join(' · '))
+    return esc(String(v))
+  }
+  const altura = Number(respostas.altura_cm), peso = Number(respostas.peso_kg)
+  const imc = altura > 0 && peso > 0 ? (peso / ((altura / 100) ** 2)).toFixed(1) : null
+  const secoes = ETAPAS_FORM.map((etapa) => {
+    const linhas = etapa.campos
+      .filter((c) => respostas[c.id] !== undefined && respostas[c.id] !== '' && respostas[c.id] !== null)
+      .map((c) => `<tr><td class="q">${esc(c.rotulo ?? c.id)}</td><td>${fmt(respostas[c.id])}</td></tr>`)
+      .join('')
+    return linhas ? `<h2>${esc(etapa.titulo)}</h2><table>${linhas}</table>` : ''
+  }).join('')
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+    <title>DPS — ${esc(cliente.nome)}</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; }
+      body { font: 12.5px/1.5 -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; color: #0f172a; padding: 36px; }
+      h1 { font-size: 19px; }
+      .sub { color: #64748b; font-size: 11px; margin: 3px 0 6px; }
+      .imc { display: inline-block; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 12px; font-size: 12px; margin-bottom: 8px; }
+      h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #475569;
+        border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; margin: 18px 0 6px; }
+      table { width: 100%; border-collapse: collapse; }
+      td { padding: 4.5px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+      td.q { width: 62%; color: #475569; }
+      .sim { color: #dc2626; }
+      .rodape { margin-top: 24px; color: #94a3b8; font-size: 10px; }
+      @media print { body { padding: 0; } }
+    </style></head><body>
+    <h1>Declaração Pessoal de Saúde — ${esc(cliente.nome)}</h1>
+    <p class="sub">Respostas do formulário do Hub · geradas em ${new Date().toLocaleString('pt-BR')} · uso interno para transcrição à seguradora</p>
+    ${imc ? `<span class="imc">Altura ${esc(respostas.altura_cm)} cm · Peso ${esc(respostas.peso_kg)} kg · <strong>IMC ${imc}</strong></span>` : ''}
+    ${secoes}
+    <p class="rodape">Declarações prestadas pelo próprio cliente pelo link seguro do formulário. Respostas "SIM" destacadas em vermelho exigem detalhamento junto à seguradora.</p>
+    <script>window.onload = () => window.print()</script>
+    </body></html>`
+  const w = window.open('', '_blank')
+  if (!w) return
+  w.document.write(html)
+  w.document.close()
+}
+
 function AbaFormulario({ idCliente, cliente }) {
   const [forms, setForms] = useState(null)
   const [copiado, setCopiado] = useState(null)
@@ -852,14 +1170,28 @@ function AbaFormulario({ idCliente, cliente }) {
               )}
             </div>
             {f.status === 'concluido' && (
-              <div className="mt-3 grid gap-1 rounded-lg bg-slate-50 p-3 text-sm md:grid-cols-2">
-                {Object.entries(f.respostas ?? {}).map(([k, v]) => (
-                  <p key={k} className="truncate">
-                    <span className="text-slate-400">{k.replaceAll('_', ' ')}: </span>
-                    <span className="text-slate-700">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
+              <>
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <p className="text-xs text-slate-400">
+                    {Object.keys(f.respostas ?? {}).length} respostas ·{' '}
+                    {Object.values(f.respostas ?? {}).filter((v) => v === 'sim').length} "sim" declarados
                   </p>
-                ))}
-              </div>
+                  <Button variant="secondary" onClick={() => imprimirDPS(cliente, f.respostas ?? {})}
+                    title="Documento limpo para transcrever a DPS ao portal da seguradora">
+                    <Printer size={15} /> Imprimir DPS
+                  </Button>
+                </div>
+                <div className="mt-2 grid gap-1 rounded-lg bg-slate-50 p-3 text-sm md:grid-cols-2">
+                  {Object.entries(f.respostas ?? {}).map(([k, v]) => (
+                    <p key={k} className="truncate" title={ROTULOS_FORM[k] ?? k}>
+                      <span className="text-slate-400">{ROTULOS_FORM[k] ?? k.replaceAll('_', ' ')}: </span>
+                      <span className={v === 'sim' ? 'font-semibold text-red-600' : 'text-slate-700'}>
+                        {typeof v === 'object' ? JSON.stringify(v) : v === 'sim' ? 'SIM' : v === 'nao' ? 'Não' : String(v)}
+                      </span>
+                    </p>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         ))}

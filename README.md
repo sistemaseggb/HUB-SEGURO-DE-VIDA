@@ -63,6 +63,46 @@ e registrar os dados; o sistema cuida do resto.
 
 ---
 
+## ✨ Modo demonstração (sem configurar nada)
+
+Quer ver o sistema funcionando **agora**, ou demonstrá-lo a um interessado?
+
+```bash
+npm install && npm run dev
+```
+
+Sem o arquivo `.env`, o Hub liga sozinho em **modo demonstração**: banco
+simulado com dados 100% fictícios (clientes, apólices, comissões, DPS
+preenchida), login com qualquer e-mail/senha e um selo "✨ Demonstração" no
+topo. Nada é salvo — recarregou, voltou ao início. Para forçar o modo demo
+mesmo com `.env`, use `VITE_DEMO=1 npm run dev`.
+
+### Testes de ponta a ponta
+
+```bash
+npm run build && npm run preview   # terminal 1 (modo demo)
+npm run test:e2e                   # terminal 2
+```
+
+São duas suítes (31 verificações): a **principal** navega o sistema inteiro
+nas duas visões — consultora (login, dashboard, pipeline, cliente 360 com
+planejamento por pilares, apólices, DPS, proposta, relatórios com fechamento,
+pós-venda, agenda, mensagens, cadastros) e cliente (formulário público de DPS
+pelo link); a de **erros de usuário** ataca os caminhos que quebram sistemas:
+link inválido, formulário já concluído, obrigatórios vazios, proposta sem
+planejamento, rota inexistente, venda com comissão automática, popups de
+dossiê/DPS, pendências de classificação, busca, exclusão com confirmação,
+celular (375px) e F5. Capturas em `e2e-shots/`.
+
+### Marca
+
+A logo (monograma GB) vive em `public/`: `logo.png` (fundos claros),
+`logo-branca.png` (fundos escuros — capa da proposta, login) e `logo.svg`
+(fonte vetorial). Os ícones do app (favicon, PWA) usam o mesmo monograma.
+Para trocar a marca, substitua esses arquivos — nenhum código muda.
+
+---
+
 ## 🚀 Setup do zero
 
 ### 1. Clonar e instalar
@@ -88,6 +128,9 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 9. [`supabase/migrations/009_comissoes_importadas.sql`](supabase/migrations/009_comissoes_importadas.sql)
 10. [`supabase/migrations/010_meta_comissao_recebida.sql`](supabase/migrations/010_meta_comissao_recebida.sql)
 11. [`supabase/migrations/011_fechamento_liquido.sql`](supabase/migrations/011_fechamento_liquido.sql)
+12. [`supabase/migrations/012_historico_apolices.sql`](supabase/migrations/012_historico_apolices.sql)
+13. [`supabase/migrations/013_tipo_produto_apolice.sql`](supabase/migrations/013_tipo_produto_apolice.sql)
+14. [`supabase/migrations/014_planejamento_detalhado.sql`](supabase/migrations/014_planejamento_detalhado.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -191,6 +234,16 @@ npm run dev
 - [x] Extrato de comissões no Cliente 360 (aba Comissões) e no Assessor 360
       (últimos meses + clientes que mais geram)
 - [x] Meta de comissão recebida (migração 010) no card Metas do Dashboard
+- [x] Planejamento por **5 pilares** (migração 014): família, invalidez,
+      doenças graves, DIT e sucessão/inventário — sugestões calculadas, gap
+      vs cobertura atual e resumo ao vivo
+- [x] Apresentação renovada: logo do escritório (public/logo.png), slide de
+      diagnóstico, blindagem patrimonial (custo do inventário), gap de
+      cobertura e próximos passos
+- [x] DPS completa no formulário público (padrão das seguradoras) com
+      impressão limpa para transcrever ao portal + destaque dos "sim"
+- [x] Dossiê 1-página do cliente: estudo, apólices, últimas conversas e
+      pendências — a folha da consultora antes de cada reunião
 - [ ] Rodar a importação com as planilhas reais (aguardando arquivos)
 - [ ] Alinhar o formulário com o oficial (aguardando conteúdo — site inacessível daqui)
 - [ ] Envio 100% automático de WhatsApp (requer API oficial Meta/Twilio + Edge Function)

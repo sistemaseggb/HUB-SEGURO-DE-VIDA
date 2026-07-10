@@ -57,10 +57,13 @@ const MODELOS = {
       vigencia:   { apelidos: ['vigencia', 'inicio', 'emissao', 'data'], obrigatorio: true },
       percentual: { apelidos: ['percentual', 'comissao', '%'] },
       numero:     { apelidos: ['numero', 'apolice', 'contrato'] },
+      tipo:       { apelidos: ['tipoproduto', 'produto', 'tipo'] },
+      status:     { apelidos: ['status', 'situacao'] },
+      motivo:     { apelidos: ['motivocancelamento', 'motivo'] },
     },
     exemplo: [
-      ['Cliente', 'Seguradora', 'Prêmio mensal', 'Capital', 'Vigência', '% Comissão', 'Nº apólice'],
-      ['Maria Souza', 'Prudential do Brasil', 'R$ 500,00', 'R$ 1.000.000,00', '01/03/2024', '40', 'AP-12345'],
+      ['Cliente', 'Seguradora', 'Prêmio mensal', 'Capital', 'Vigência', '% Comissão', 'Nº apólice', 'Tipo produto', 'Status', 'Motivo cancelamento'],
+      ['Maria Souza', 'Prudential do Brasil', 'R$ 500,00', 'R$ 1.000.000,00', '01/03/2024', '40', 'AP-12345', 'Seguro Temporário', 'ATIVO', ''],
     ],
   },
 }
@@ -634,12 +637,25 @@ async function importarClientes({ linhas, mapa }) {
     [normalizar(e.id), e.id], [normalizar(e.label), e.id],
   ]))
 
+  // Proteção contra duplicação: quem já existe (mesmo nome ou mesmo código)
+  // é PULADO — reimportar a planilha nunca cria o cliente duas vezes.
+  const { data: jaExistem } = await supabase.from('clientes').select('nome, codigo')
+  const nomesExistentes = new Set((jaExistem ?? []).map((c) => normalizar(c.nome)))
+  const codigosExistentes = new Set((jaExistem ?? []).filter((c) => c.codigo).map((c) => normalizar(c.codigo)))
+  let pulados = 0
+
   const registros = []
   linhas.forEach((l, i) => {
     const nome = (l[mapa.nome] ?? '').trim()
     const assessor = (l[mapa.assessor] ?? '').trim()
     const idAssessor = acharAssessor(l)
     if (!nome) return erros.push(`Linha ${i + 2}: sem nome`)
+    const codigo = mapa.codigo !== undefined ? normalizar(l[mapa.codigo]) : ''
+    if (nomesExistentes.has(normalizar(nome)) || (codigo && codigosExistentes.has(codigo))) {
+      pulados += 1
+      return
+    }
+    nomesExistentes.add(normalizar(nome)) // evita duplicar dentro da própria planilha
     if (idAssessor === undefined) return erros.push(`Linha ${i + 2} (${nome}): assessor "${assessor}" inválido`)
     const etapaBruta = mapa.etapa !== undefined ? normalizar(l[mapa.etapa]) : ''
     registros.push({
@@ -662,6 +678,7 @@ async function importarClientes({ linhas, mapa }) {
     if (error) erros.push(`Lote ${i / 100 + 1}: ${error.message}`)
     else ok += data.length
   }
+  if (pulados > 0) criados.push(`${pulados} cliente(s) já existiam e foram pulados (sem duplicar)`)
   return { ok, erros, criados }
 }
 
@@ -690,6 +707,16 @@ async function importarApolices({ linhas, mapa }) {
     criados.push(`${novas.length} seguradora(s) com comissão 0% — ajuste em Cadastros!`)
   }
 
+  // Proteção contra duplicação: apólice do mesmo cliente + seguradora com o
+  // mesmo nº (ou, sem nº, com a mesma vigência e prêmio) é PULADA no reimport.
+  const { data: apExistentes } = await supabase.from('apolices')
+    .select('id_cliente, id_seguradora, numero_apolice, data_vigencia, valor_premio_mensal')
+  const chaveAp = (a) => a.numero_apolice
+    ? `${a.id_cliente}|${a.id_seguradora}|n:${normalizar(a.numero_apolice)}`
+    : `${a.id_cliente}|${a.id_seguradora}|v:${a.data_vigencia}|${Number(a.valor_premio_mensal)}`
+  const apolicesExistentes = new Set((apExistentes ?? []).map(chaveAp))
+  let pulados = 0
+
   const registros = []
   linhas.forEach((l, i) => {
     const nomeCliente = (l[mapa.cliente] ?? '').trim()
@@ -703,6 +730,20 @@ async function importarApolices({ linhas, mapa }) {
     const vigencia = paraDataISO(l[mapa.vigencia])
     if (premio == null || !vigencia)
       return erros.push(`Linha ${i + 2} (${nomeCliente}): prêmio ou vigência inválidos`)
+    // Histórico completo: a planilha geral traz INATIVO + motivo do
+    // cancelamento — entram como 'cancelada' (as automações de pós-venda só
+    // olham apólices ativas, então nada dispara para elas).
+    const statusBruto = mapa.status !== undefined ? normalizar(l[mapa.status]) : ''
+    const status = /inativ|cancel/.test(statusBruto) ? 'cancelada'
+      : /suspens/.test(statusBruto) ? 'suspensa' : 'ativa'
+    const candidata = {
+      id_cliente: idCliente,
+      id_seguradora: segPorNome.get(normalizar(l[mapa.seguradora])),
+      numero_apolice: mapa.numero !== undefined ? l[mapa.numero] || null : null,
+      data_vigencia: vigencia, valor_premio_mensal: premio,
+    }
+    if (apolicesExistentes.has(chaveAp(candidata))) { pulados += 1; return }
+    apolicesExistentes.add(chaveAp(candidata))
     registros.push({
       id_cliente: idCliente,
       id_seguradora: segPorNome.get(normalizar(l[mapa.seguradora])),
@@ -711,6 +752,13 @@ async function importarApolices({ linhas, mapa }) {
       data_vigencia: vigencia,
       percentual_comissao: mapa.percentual !== undefined ? paraNumero(l[mapa.percentual]) : null,
       numero_apolice: mapa.numero !== undefined ? l[mapa.numero] || null : null,
+      status,
+      // coluna da migração 012 — só entra se a planilha trouxer motivo
+      ...(mapa.motivo !== undefined && (l[mapa.motivo] ?? '').trim() !== ''
+        && { motivo_cancelamento: l[mapa.motivo].trim() }),
+      // coluna da migração 013 — só entra se a planilha trouxer o produto
+      ...(mapa.tipo !== undefined && (l[mapa.tipo] ?? '').trim() !== ''
+        && { tipo_produto: l[mapa.tipo].trim() }),
       importada: true,
     })
   })
@@ -722,5 +770,6 @@ async function importarApolices({ linhas, mapa }) {
     if (error) erros.push(`Lote ${i / 100 + 1}: ${error.message}`)
     else ok += data.length
   }
+  if (pulados > 0) criados.push(`${pulados} apólice(s) já existiam e foram puladas (sem duplicar)`)
   return { ok, erros, criados }
 }

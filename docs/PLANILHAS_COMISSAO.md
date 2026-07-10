@@ -106,6 +106,27 @@ Existem dois tipos de planilha:
 - Maio: 4 linhas, Σ **R$ 3.323,16** | Junho: 1 linha, Σ **R$ 98,67**.
 - Sem coluna de competência (mês só no nome do arquivo).
 
+### Cadastro histórico gerado da geral (jul/2026)
+
+A aba `Propostas fechadas` (361 linhas úteis) foi transformada nos dois
+arquivos de carga do Hub, em `docs/`:
+
+- **`cadastro-clientes.csv`** — 299 clientes únicos (dedupe por nome), com
+  código do cliente, assessor que indicou e código AAI, etapa "Fechado".
+- **`cadastro-apolices.csv`** — 361 apólices, uma por proposta: seguradora
+  normalizada (20 grafias → 10 nomes), prêmio mensal (derivado do anual/12
+  quando o mensal vinha vazio ou `#REF!`), data de emissão, % de comissão
+  (`0,4`→40), nº da apólice, **tipo de produto**, **status** (353 ATIVO / 8
+  INATIVO) e **motivo do cancelamento**.
+
+Normalizações aplicadas na geração: seguradora (MAG 183, Azos 49, Icatu 44,
+Akad 32, Met Life 19, Omint 15, Prudential 12, Pottencial 5, AXA 1, A definir
+1); tipo de produto (Temporário 208, Vitalício 51, Resgatável 26, RC 10,
+VG 3, D&O 2, AP/Empresarial/Garantia 1 cada, sem tipo 58); código de cliente
+(remove `.0`, pega o 1º de compostos `9661552/2599674`, descarta
+`ñ é cliente`). **A revisar** (a geral não trazia): 3 apólices com prêmio 0 e
+1 seguradora "A definir".
+
 ### 9. `PLANILHA GERAL DE SEGUROS NATALIA E BRUNO.xlsx` (a "geral")
 
 Arquivo multi-abas — funciona como o "sistema" atual do escritório:

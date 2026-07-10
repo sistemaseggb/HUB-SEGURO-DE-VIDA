@@ -5,7 +5,8 @@ import {
   Settings, LogOut, ShieldCheck, CalendarDays, MessageSquareText,
   BarChart3, Upload, Menu, X,
 } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, MODO_DEMO } from '../lib/supabase'
+import Logo from './Logo'
 import BuscaGlobal from './BuscaGlobal'
 
 // Menu agrupado por seções — mais didático e organizado
@@ -65,9 +66,7 @@ export default function Layout() {
       }`}>
         <div className="flex items-center justify-between px-5 py-5">
           <div className="flex items-center gap-2.5">
-            <div className="rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 p-2 text-white shadow-sm">
-              <ShieldCheck size={20} />
-            </div>
+            <Logo tamanho={38} />
             <div>
               <p className="font-display text-[0.95rem] font-semibold leading-tight text-slate-900">Hub Seguros</p>
               <p className="text-xs text-slate-400">Natália Maschendorf</p>
@@ -122,6 +121,12 @@ export default function Layout() {
             <Menu size={22} />
           </button>
           <BuscaGlobal />
+          {MODO_DEMO && (
+            <span className="ml-auto shrink-0 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700"
+              title="Banco simulado com dados fictícios — nada é salvo. Configure o .env para conectar ao banco real.">
+              ✨ Demonstração
+            </span>
+          )}
         </header>
         <main className="mx-auto max-w-[1400px] p-4 lg:p-8">
           <Outlet />
