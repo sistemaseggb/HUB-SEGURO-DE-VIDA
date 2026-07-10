@@ -63,6 +63,35 @@ e registrar os dados; o sistema cuida do resto.
 
 ---
 
+## ✨ Modo demonstração (sem configurar nada)
+
+Quer ver o sistema funcionando **agora**, ou demonstrá-lo a um interessado?
+
+```bash
+npm install && npm run dev
+```
+
+Sem o arquivo `.env`, o Hub liga sozinho em **modo demonstração**: banco
+simulado com dados 100% fictícios (clientes, apólices, comissões, DPS
+preenchida), login com qualquer e-mail/senha e um selo "✨ Demonstração" no
+topo. Nada é salvo — recarregou, voltou ao início. Para forçar o modo demo
+mesmo com `.env`, use `VITE_DEMO=1 npm run dev`.
+
+### Testes de ponta a ponta
+
+```bash
+npm run build && npm run preview   # terminal 1 (modo demo)
+npm run test:e2e                   # terminal 2
+```
+
+O roteiro navega o sistema inteiro nas duas visões — **consultora** (login,
+dashboard, pipeline, cliente 360 com planejamento por pilares, apólices, DPS,
+proposta, relatórios com fechamento, pós-venda, agenda, mensagens, cadastros)
+e **cliente** (formulário público de DPS pelo link) — e salva capturas de
+tela em `e2e-shots/`.
+
+---
+
 ## 🚀 Setup do zero
 
 ### 1. Clonar e instalar

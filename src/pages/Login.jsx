@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { ShieldCheck, TrendingUp, HeartHandshake } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { ShieldCheck, TrendingUp, HeartHandshake, Sparkles } from 'lucide-react'
+import { supabase, MODO_DEMO } from '../lib/supabase'
 import { Button, Campo, Input } from '../components/ui'
 
 export default function Login() {
@@ -60,6 +60,14 @@ export default function Login() {
             <h2 className="font-display text-2xl font-semibold text-slate-900">Bem-vinda de volta 👋</h2>
             <p className="mt-1 text-sm text-slate-500">Entre com seus dados de acesso.</p>
           </div>
+
+          {MODO_DEMO && (
+            <p className="mb-4 flex items-start gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2.5 text-sm text-violet-800">
+              <Sparkles size={16} className="mt-0.5 shrink-0" />
+              <span><strong>Modo demonstração</strong> — entre com qualquer e-mail e senha.
+              Os dados são fictícios e nada fica salvo.</span>
+            </p>
+          )}
 
           <form onSubmit={entrar} className="space-y-4">
             <Campo label="E-mail" obrigatorio>
