@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { ShieldCheck, TrendingUp, HeartHandshake, Sparkles } from 'lucide-react'
+import { TrendingUp, HeartHandshake, Sparkles } from 'lucide-react'
 import { supabase, MODO_DEMO } from '../lib/supabase'
 import { Button, Campo, Input } from '../components/ui'
+import Logo from '../components/Logo'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -25,9 +26,7 @@ export default function Login() {
         <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
         <div className="absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-gold-400/10 blur-3xl" />
         <div className="relative flex items-center gap-3">
-          <div className="rounded-xl bg-white/15 p-2 backdrop-blur">
-            <ShieldCheck size={24} />
-          </div>
+          <Logo claro tamanho={56} />
           <span className="font-display text-lg font-semibold">Hub Seguros</span>
         </div>
         <div className="relative">
@@ -50,9 +49,7 @@ export default function Login() {
       <div className="flex flex-1 items-center justify-center p-6">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex flex-col items-center gap-2 text-center lg:hidden">
-            <div className="rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 p-3 text-white shadow-sm">
-              <ShieldCheck size={28} />
-            </div>
+            <Logo tamanho={54} />
             <h1 className="font-display text-xl font-semibold text-slate-900">Hub Seguros</h1>
           </div>
 

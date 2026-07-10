@@ -84,11 +84,22 @@ npm run build && npm run preview   # terminal 1 (modo demo)
 npm run test:e2e                   # terminal 2
 ```
 
-O roteiro navega o sistema inteiro nas duas visões — **consultora** (login,
-dashboard, pipeline, cliente 360 com planejamento por pilares, apólices, DPS,
-proposta, relatórios com fechamento, pós-venda, agenda, mensagens, cadastros)
-e **cliente** (formulário público de DPS pelo link) — e salva capturas de
-tela em `e2e-shots/`.
+São duas suítes (31 verificações): a **principal** navega o sistema inteiro
+nas duas visões — consultora (login, dashboard, pipeline, cliente 360 com
+planejamento por pilares, apólices, DPS, proposta, relatórios com fechamento,
+pós-venda, agenda, mensagens, cadastros) e cliente (formulário público de DPS
+pelo link); a de **erros de usuário** ataca os caminhos que quebram sistemas:
+link inválido, formulário já concluído, obrigatórios vazios, proposta sem
+planejamento, rota inexistente, venda com comissão automática, popups de
+dossiê/DPS, pendências de classificação, busca, exclusão com confirmação,
+celular (375px) e F5. Capturas em `e2e-shots/`.
+
+### Marca
+
+A logo (monograma GB) vive em `public/`: `logo.png` (fundos claros),
+`logo-branca.png` (fundos escuros — capa da proposta, login) e `logo.svg`
+(fonte vetorial). Os ícones do app (favicon, PWA) usam o mesmo monograma.
+Para trocar a marca, substitua esses arquivos — nenhum código muda.
 
 ---
 

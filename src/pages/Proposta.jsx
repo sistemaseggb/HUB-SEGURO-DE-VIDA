@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, Printer, ShieldCheck, Heart, Landmark, GraduationCap, Activity,
+  ArrowLeft, Printer, Heart, Landmark, GraduationCap, Activity,
   Stethoscope, CalendarClock, Scale, ClipboardCheck, Search, FileSignature, Handshake,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -9,26 +9,7 @@ import { brl, brlCompacto } from '../lib/format'
 import { calcularEstudo } from '../lib/estudo'
 import { Spinner, Button } from '../components/ui'
 
-// Logo do escritório: coloque o arquivo em public/logo.png (troca sem mexer
-// em código). Enquanto não existir, o emblema padrão aparece no lugar.
-function Logo({ claro = false, tamanho = 44 }) {
-  const [erro, setErro] = useState(false)
-  if (!erro) {
-    return <img src="/logo.png" alt="Logo do escritório" style={{ height: tamanho }}
-      onError={() => setErro(true)} />
-  }
-  return (
-    <span className={`inline-flex items-center gap-2 ${claro ? 'text-white' : 'text-slate-900'}`}>
-      <span className={`rounded-xl p-2 ring-1 ${claro ? 'bg-white/10 ring-white/25' : 'bg-brand-50 ring-brand-100 text-brand-700'}`}>
-        <ShieldCheck size={tamanho - 22} />
-      </span>
-      <span className="text-left leading-tight">
-        <span className="block font-display text-sm font-semibold tracking-wide">GB Seguros</span>
-        <span className={`block text-[10px] uppercase tracking-[0.22em] ${claro ? 'text-white/60' : 'text-slate-400'}`}>Vida & Patrimônio</span>
-      </span>
-    </span>
-  )
-}
+import Logo from '../components/Logo'
 
 // Gerador de proposta: transforma o estudo por pilares numa apresentação de
 // tela cheia para a reunião (ou PDF pela impressão). Slides:

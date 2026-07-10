@@ -207,6 +207,12 @@ function semear() {
     com(m0, 'Azos', 'Campanha Multiplicazos', 274.00, { receita: 'campanha', segmento: 'campanha', producao: 'Nati', codAssessor: 'CS8868', idAssessor: idNat, parcela: null }),
     com(m0, 'MAG Seguros', 'Helena Struck', -84.12, { producao: 'Bruno', codAssessor: 'A3003', idAssessor: idPedro }),
   )
+  // pendências de classificação (exercitam o fluxo "É da Nati / vincular assessor")
+  const pendente = com(m0, 'Icatu', 'Vera Lúcia Camargo', 67.40, {})
+  pendente.producao = null
+  pendente.codigo_assessor = null
+  pendente.id_assessor = null
+  comissoes_importadas.push(pendente)
 
   const fila_mensagens = [
     { id: idDemo(), id_cliente: carlos.id, tipo: 'aniversario_apolice', telefone: carlos.telefone, mensagem: 'Olá Carlos! Sua apólice está completando mais um ano 🎉 Que tal marcarmos uma revisão?', data_alvo: dia(hoje()), status: 'pendente', enviada_em: null, created_at: iso(hoje()) },
