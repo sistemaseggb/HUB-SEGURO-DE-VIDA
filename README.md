@@ -96,10 +96,14 @@ celular (375px) e F5. Capturas em `e2e-shots/`.
 
 ### Marca
 
-A logo (monograma GB) vive em `public/`: `logo.png` (fundos claros),
-`logo-branca.png` (fundos escuros — capa da proposta, login) e `logo.svg`
-(fonte vetorial). Os ícones do app (favicon, PWA) usam o mesmo monograma.
-Para trocar a marca, substitua esses arquivos — nenhum código muda.
+A logo (monograma GB) vive em `public/logo.png` e é usada em todo o sistema.
+Em fundos escuros (capa da proposta, login) ela aparece dentro de um selo
+branco, então **um único arquivo serve para fundo claro e escuro**.
+
+**Para usar a logo real:** substitua `public/logo.png` pelo arquivo oficial
+(PNG com fundo transparente). Pelo GitHub: abra a pasta `public/` → *Add file*
+→ *Upload files* → arraste o `logo.png` → *Commit*. Nenhum código muda.
+(Opcional: um `public/logo-branca.png` é usado direto no escuro, sem o selo.)
 
 ---
 
@@ -136,6 +140,17 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
 > pg_cron). Sem ela tudo funciona igual — só que pelo botão "Gerar mensagens
 > de hoje" na Central de Mensagens.
+
+### 2b. Carga da base histórica (clientes + apólices)
+
+Depois das migrações, cole no **SQL Editor** o arquivo
+[`supabase/seeds/carga_historica.sql`](supabase/seeds/carga_historica.sql) e
+execute. Ele carrega de uma vez **298 clientes e 361 apólices** da planilha
+geral do escritório, já ligados a assessores e seguradoras e com a comissão
+40/30/30 calculada. É **seguro rodar mais de uma vez** (só insere o que falta)
+e **não gera tarefas/formulários** — as automações ficam desligadas durante a
+carga. O arquivo é gerado por `scripts/gerar-seed-historico.mjs` a partir da
+planilha, então pode ser recriado se a base mudar.
 
 ### 3. Criar o usuário de acesso (login)
 
