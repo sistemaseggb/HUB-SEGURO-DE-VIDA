@@ -6,7 +6,7 @@ export const ETAPAS = [
   { id: 'estudo_em_andamento',  label: 'Estudo em Andamento',  cor: '#2049dc' },
   { id: 'proposta_apresentada', label: 'Proposta Apresentada', cor: '#1c3ab8' },
   { id: 'em_analise',           label: 'Em Análise',           cor: '#1d3494' },
-  { id: 'fechado',              label: 'Fechado ✅',           cor: '#0e9f6e' },
+  { id: 'fechado',              label: 'Fechado',              cor: '#0e9f6e' },
   { id: 'perdido',              label: 'Perdido',              cor: '#94a0b8' },
 ]
 
@@ -19,23 +19,15 @@ export const STATUS_REUNIAO = [
   { id: 'remarcada', label: 'Remarcada' },
 ]
 
-export const TIPO_TAREFA_ICONE = {
-  contato: '📞',
-  agendamento: '📅',
-  planejamento: '📊',
-  formulario: '📋',
-  pos_venda: '🤝',
-  revisao: '🔄',
-  geral: '✔️',
-}
-
-// Paleta dos gráficos (validada para daltonismo — ver skill dataviz)
+// Paleta dos gráficos — ordem categórica FIXA, validada no validador da skill
+// dataviz (banda de luminosidade, croma, separação para daltonismo e
+// contraste: todas as checagens passam sobre superfície clara).
 export const CHART = {
-  serie1: '#2049dc', // azul da marca — Natália
-  serie2: '#1baf7a', // aqua — Assessor
-  serie3: '#eaa119', // âmbar — Escritório
-  grid: '#e8ecf3',
-  eixo: '#cbd2e0',
-  textoMudo: '#94a0b8',
-  sequencial: ['#bcd2ff', '#8eb5ff', '#598cfb', '#3366f0', '#2049dc', '#1c3ab8', '#1d3494', '#1d3175'],
+  serie1: '#d96527', // laranja da marca — Natália
+  serie2: '#1272a8', // azul — Assessor
+  serie3: '#77448c', // ameixa — Escritório
+  grid: '#ececee',
+  eixo: '#cbccd2',
+  textoMudo: '#8f929b',
+  sequencial: ['#fae3d3', '#f5c8a8', '#eda672', '#e28442', '#d96527', '#c2531d', '#a1431a', '#83381b'],
 }

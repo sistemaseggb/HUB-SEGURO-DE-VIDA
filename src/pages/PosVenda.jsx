@@ -129,7 +129,10 @@ export default function PosVenda() {
               <ul className="space-y-2">
                 {regua.map((e, i) => (
                   <li key={i} className="flex items-center gap-3 rounded-lg border border-slate-100 p-3">
-                    <span className="text-xl">{e.tipo_evento === 'aniversario_cliente' ? '🎂' : '📄'}</span>
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                      e.tipo_evento === 'aniversario_cliente' ? 'bg-laranja-50 text-laranja-600' : 'bg-slate-100 text-slate-500'}`}>
+                      {e.tipo_evento === 'aniversario_cliente' ? <Cake size={17} /> : <ShieldCheck size={17} />}
+                    </span>
                     <div className="min-w-0 flex-1">
                       <Link to={`/clientes/${e.id_cliente}`}
                         className="block truncate text-sm font-medium text-slate-800 hover:underline">

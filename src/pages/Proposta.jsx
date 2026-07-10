@@ -58,12 +58,12 @@ export default function Proposta() {
 
       {/* 1 · CAPA */}
       <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-brand-800 via-brand-900 to-slate-900 p-8 text-center text-white print:min-h-0 print:py-24">
-        <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-brand-500/20 blur-3xl print:hidden" />
+        <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-laranja-500/10 blur-3xl print:hidden" />
         <div className="pointer-events-none absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-gold-400/10 blur-3xl print:hidden" />
         <div className="relative"><Logo claro tamanho={64} /></div>
         <p className="relative mt-10 text-sm font-medium uppercase tracking-[0.3em] text-gold-400">Estudo de proteção e blindagem patrimonial</p>
         <h1 className="relative mt-4 max-w-3xl text-4xl font-semibold leading-tight tracking-tight md:text-5xl">
-          Um plano feito para a vida de <span className="text-brand-300">{primeiroNome}</span>
+          Um plano feito para a vida de <span className="text-laranja-400">{primeiroNome}</span>
         </h1>
         <p className="relative mt-6 max-w-xl text-lg text-white/70">
           {plano.objetivos || 'Proteção financeira desenhada sob medida para o que importa para você.'}
@@ -194,7 +194,7 @@ export default function Proposta() {
           </h2>
           <div className="mt-12 w-full max-w-2xl space-y-6">
             <Barra rotulo="Você tem hoje" valor={e.coberturaAtual} max={Math.max(e.valores.morte, e.coberturaAtual)} cor="bg-slate-300" />
-            <Barra rotulo="O plano recomenda" valor={e.valores.morte} max={Math.max(e.valores.morte, e.coberturaAtual)} cor="bg-brand-600" />
+            <Barra rotulo="O plano recomenda" valor={e.valores.morte} max={Math.max(e.valores.morte, e.coberturaAtual)} cor="bg-laranja-500" />
           </div>
           {e.gap > 0 && (
             <p className="mt-12 text-xl text-slate-600">
@@ -264,7 +264,7 @@ function Dado({ rotulo, valor, destaque }) {
 function Pilar({ icone: Icone, titulo, valor, texto }) {
   return (
     <div className="rounded-2xl border border-slate-200/70 bg-white p-6 text-center shadow-card">
-      <div className="mx-auto w-fit rounded-2xl bg-brand-50 p-3.5 text-brand-600"><Icone size={26} /></div>
+      <div className="mx-auto w-fit rounded-2xl bg-laranja-50 p-3.5 text-laranja-600"><Icone size={26} /></div>
       <h3 className="mt-4 font-semibold text-slate-900">{titulo}</h3>
       <p className="mt-2 font-display text-2xl font-semibold text-slate-900 tabular">{valor}</p>
       <p className="mt-2 text-sm text-slate-500">{texto}</p>
@@ -276,7 +276,7 @@ function Passo({ n, icone: Icone, titulo, texto }) {
   return (
     <div className="relative rounded-2xl border border-slate-200/70 bg-white p-6 text-center shadow-card">
       <span className="absolute -top-3 left-1/2 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full bg-gold-400 font-display text-sm font-bold text-slate-900">{n}</span>
-      <div className="mx-auto mt-2 w-fit rounded-2xl bg-brand-50 p-3 text-brand-600"><Icone size={22} /></div>
+      <div className="mx-auto mt-2 w-fit rounded-2xl bg-laranja-50 p-3 text-laranja-600"><Icone size={22} /></div>
       <h3 className="mt-3 text-sm font-semibold text-slate-900">{titulo}</h3>
       <p className="mt-1.5 text-xs text-slate-500">{texto}</p>
     </div>

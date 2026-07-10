@@ -59,7 +59,7 @@ export default function Login() {
           </div>
 
           {MODO_DEMO && (
-            <p className="mb-4 flex items-start gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2.5 text-sm text-violet-800">
+            <p className="mb-4 flex items-start gap-2 rounded-lg border border-laranja-200 bg-laranja-50 px-3 py-2.5 text-sm text-laranja-800">
               <Sparkles size={16} className="mt-0.5 shrink-0" />
               <span><strong>Modo demonstração</strong> — entre com qualquer e-mail e senha.
               Os dados são fictícios e nada fica salvo.</span>

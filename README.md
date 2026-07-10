@@ -96,14 +96,16 @@ celular (375px) e F5. Capturas em `e2e-shots/`.
 
 ### Marca
 
-A logo (monograma GB) vive em `public/logo.png` e é usada em todo o sistema.
-Em fundos escuros (capa da proposta, login) ela aparece dentro de um selo
-branco, então **um único arquivo serve para fundo claro e escuro**.
+A identidade visual segue a logo oficial **GB | XP** (grafite + laranja):
+sidebar escura, laranja como único acento, tipografia Inter + Lexend.
 
-**Para usar a logo real:** substitua `public/logo.png` pelo arquivo oficial
-(PNG com fundo transparente). Pelo GitHub: abra a pasta `public/` → *Add file*
-→ *Upload files* → arraste o `logo.png` → *Commit*. Nenhum código muda.
-(Opcional: um `public/logo-branca.png` é usado direto no escuro, sem o selo.)
+- `public/logo.png` — lockup completo GB | XP (login, proposta, impressos)
+- `public/logo-gb.png` — monograma GB quadrado (sidebar, favicon, PWA)
+- `docs/marca/` — os arquivos originais em alta (PNG e SVG)
+
+Em fundos escuros a marca aparece num selo branco — o mesmo arquivo serve em
+qualquer fundo. Para trocar, substitua os PNGs; nenhum código muda. A paleta
+dos gráficos (laranja/azul/ameixa) foi validada para daltonismo e contraste.
 
 ---
 
@@ -141,16 +143,22 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 > pg_cron). Sem ela tudo funciona igual — só que pelo botão "Gerar mensagens
 > de hoje" na Central de Mensagens.
 
-### 2b. Carga da base histórica (clientes + apólices)
+### 2b. Carga da base histórica (clientes + apólices + comissões)
 
-Depois das migrações, cole no **SQL Editor** o arquivo
-[`supabase/seeds/carga_historica.sql`](supabase/seeds/carga_historica.sql) e
-execute. Ele carrega de uma vez **298 clientes e 361 apólices** da planilha
-geral do escritório, já ligados a assessores e seguradoras e com a comissão
-40/30/30 calculada. É **seguro rodar mais de uma vez** (só insere o que falta)
-e **não gera tarefas/formulários** — as automações ficam desligadas durante a
-carga. O arquivo é gerado por `scripts/gerar-seed-historico.mjs` a partir da
-planilha, então pode ser recriado se a base mudar.
+Depois das migrações, cole no **SQL Editor**, um de cada vez:
+
+1. [`supabase/seeds/carga_historica.sql`](supabase/seeds/carga_historica.sql)
+   — **298 clientes e 361 apólices** da planilha geral, ligados a assessores
+   e seguradoras, com a comissão 40/30/30 calculada.
+2. [`supabase/seeds/carga_comissoes_2023_2024.sql`](supabase/seeds/carga_comissoes_2023_2024.sql)
+   — **histórico de comissões 2023–2024** (249 lançamentos, R$ 41.515,45, da
+   aba "Comissão Mês"): a evolução aparece nos Relatórios e no Controle da
+   Natália desde o início da operação.
+
+Os dois são **seguros de rodar mais de uma vez** (só inserem o que falta) e
+**não geram tarefas/formulários** — as automações ficam desligadas durante a
+carga. São gerados por `scripts/gerar-seed-historico.mjs` e
+`scripts/gerar-seed-comissoes.mjs` a partir da planilha.
 
 ### 3. Criar o usuário de acesso (login)
 

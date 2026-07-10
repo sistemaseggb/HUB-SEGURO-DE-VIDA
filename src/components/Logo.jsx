@@ -1,42 +1,26 @@
 import { useState } from 'react'
-import { ShieldCheck } from 'lucide-react'
 
-// Logo do escritório (monograma GB).
+// Logo oficial do escritório (GB | XP).
 //
-// COMO TROCAR PELA LOGO REAL: basta substituir UM arquivo — public/logo.png.
-// Ele é usado em todo o sistema. Em fundos escuros (capa da proposta, login),
-// a logo aparece dentro de um selo branco arredondado, então o MESMO arquivo
-// serve para fundo claro e escuro — não precisa de versão branca.
-// Opcional: se existir public/logo-branca.png, ela é usada direto no escuro
-// (sem o selo). Se logo.png não existir, um emblema neutro entra no lugar.
-export default function Logo({ claro = false, tamanho = 44 }) {
-  const [erroBranca, setErroBranca] = useState(false)
-  const [erroPng, setErroPng] = useState(false)
+// Arquivos (gerados dos originais em docs/marca/):
+//   public/logo.png     → lockup completo "GB | XP" (login, proposta, impressos)
+//   public/logo-gb.png  → monograma GB quadrado (sidebar, ícones, favicon)
+//
+// `claro` = uso sobre fundo escuro: a marca é preta, então entra num selo
+// branco arredondado — o mesmo arquivo serve em qualquer fundo.
+export default function Logo({ claro = false, tamanho = 44, variante = 'lockup' }) {
+  const [erro, setErro] = useState(false)
+  const src = variante === 'monograma' ? '/logo-gb.png' : '/logo.png'
 
-  // Fundo escuro: tenta a versão branca; senão, a logo normal num selo branco
-  if (claro && !erroBranca) {
-    return <img src="/logo-branca.png" alt="Logo do escritório"
-      style={{ height: tamanho }} onError={() => setErroBranca(true)} />
+  if (erro) {
+    return <span className={`font-display text-sm font-bold ${claro ? 'text-white' : 'text-slate-900'}`}>GB | XP</span>
   }
 
-  if (!erroPng) {
-    const img = <img src="/logo.png" alt="Logo do escritório"
-      style={{ height: claro ? tamanho * 0.82 : tamanho }} onError={() => setErroPng(true)} />
-    return claro
-      ? <span className="inline-flex items-center rounded-xl bg-white px-2.5 py-1.5 shadow-sm">{img}</span>
-      : img
-  }
-
-  // Fallback: emblema neutro (só aparece se não houver nenhum arquivo de logo)
-  return (
-    <span className={`inline-flex items-center gap-2 ${claro ? 'text-white' : 'text-slate-900'}`}>
-      <span className={`rounded-xl p-2 ring-1 ${claro ? 'bg-white/10 ring-white/25' : 'bg-brand-50 ring-brand-100 text-brand-700'}`}>
-        <ShieldCheck size={Math.max(tamanho - 22, 16)} />
-      </span>
-      <span className="text-left leading-tight">
-        <span className="block font-display text-sm font-semibold tracking-wide">GB Seguros</span>
-        <span className={`block text-[10px] uppercase tracking-[0.22em] ${claro ? 'text-white/60' : 'text-slate-400'}`}>Vida &amp; Patrimônio</span>
-      </span>
-    </span>
+  const img = (
+    <img src={src} alt="GB | XP" style={{ height: claro ? tamanho * 0.78 : tamanho }}
+      onError={() => setErro(true)} />
   )
+  return claro
+    ? <span className="inline-flex items-center rounded-2xl bg-white px-3 py-2 shadow-pop">{img}</span>
+    : img
 }

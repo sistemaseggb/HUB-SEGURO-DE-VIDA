@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   CalendarCheck, Wallet, FileSignature, TrendingUp, CheckCircle2,
   MessageCircle, AlertTriangle, Trophy, Cake, Target, Percent, Timer, ShieldCheck, Flame, Rocket,
-  CalendarClock,
+  CalendarClock, Sun, Snowflake,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, mesBR, dataBR, whatsapp } from '../lib/format'
@@ -467,7 +467,7 @@ export default function Dashboard() {
                     {c.nome}
                   </Link>
                   <Badge tom={c.temperatura === 'quente' ? 'red' : c.temperatura === 'morno' ? 'yellow' : 'slate'}>
-                    {c.temperatura === 'quente' ? '🔥' : c.temperatura === 'morno' ? '🌤' : '❄️'} {c.score}
+                    {c.temperatura === 'quente' ? <Flame size={11} /> : c.temperatura === 'morno' ? <Sun size={11} /> : <Snowflake size={11} />} {c.score}
                   </Badge>
                 </div>
                 <p className="mb-2 text-sm text-blue-700">→ {c.proxima_acao}</p>

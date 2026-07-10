@@ -7,9 +7,9 @@ import { PageHeader, Card, Button, Badge, Spinner, EmptyState, ComoFunciona } fr
 import { useToast } from '../components/Toast'
 
 const ROTULO_TIPO = {
-  aniversario_cliente: { texto: 'Aniversário 🎂', tom: 'yellow' },
+  aniversario_cliente: { texto: 'Aniversário', tom: 'yellow' },
   aniversario_apolice: { texto: 'Aniversário da apólice 📄', tom: 'blue' },
-  lead_parado: { texto: 'Reativação de lead 🔥', tom: 'red' },
+  lead_parado: { texto: 'Reativação de lead', tom: 'red' },
   manual: { texto: 'Manual', tom: 'slate' },
 }
 

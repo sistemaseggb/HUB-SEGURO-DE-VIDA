@@ -17,15 +17,15 @@ export function ComoFunciona({ id, titulo = 'Como funciona', children }) {
   }
 
   return (
-    <div className="mb-5 flex items-start gap-3 rounded-2xl border border-brand-100 bg-brand-50/60 p-4">
-      <div className="mt-0.5 shrink-0 rounded-lg bg-brand-100 p-1.5 text-brand-600">
+    <div className="mb-5 flex items-start gap-3 rounded-2xl border border-laranja-200/60 bg-laranja-50/60 p-4">
+      <div className="mt-0.5 shrink-0 rounded-lg bg-laranja-100 p-1.5 text-laranja-600">
         <Lightbulb size={16} />
       </div>
       <div className="min-w-0 flex-1 text-sm text-slate-600">
         <p className="mb-0.5 font-semibold text-slate-800">{titulo}</p>
         {children}
       </div>
-      <button onClick={dispensar} className="shrink-0 rounded-lg p-1 text-brand-400 hover:bg-brand-100 hover:text-brand-600" title="Entendi, não mostrar de novo">
+      <button onClick={dispensar} className="shrink-0 rounded-lg p-1 text-laranja-400 hover:bg-laranja-100 hover:text-laranja-600" title="Entendi, não mostrar de novo">
         <X size={16} />
       </button>
     </div>
@@ -54,16 +54,16 @@ export function PageHeader({ titulo, subtitulo, children }) {
 
 export function Button({ children, variant = 'primary', className = '', ...props }) {
   const estilos = {
-    primary: 'bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800',
-    secondary: 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-400',
+    primary: 'bg-brand-900 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800',
+    secondary: 'border border-slate-300/90 bg-white text-slate-700 shadow-sm hover:border-slate-400 hover:bg-slate-50',
     ghost: 'text-slate-600 hover:bg-slate-100',
     danger: 'bg-red-600 text-white shadow-sm hover:bg-red-700',
     success: 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700',
-    gold: 'bg-gold-500 text-white shadow-sm hover:bg-gold-600',
+    gold: 'bg-laranja-500 text-white shadow-sm hover:bg-laranja-600',
   }
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50 ${estilos[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 ${estilos[variant]} ${className}`}
       {...props}
     >
       {children}
@@ -84,7 +84,7 @@ export function Campo({ label, children, obrigatorio, dica }) {
 }
 
 const inputBase =
-  'w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/12'
+  'w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow focus:border-laranja-400 focus:outline-none focus:ring-4 focus:ring-laranja-500/15'
 
 export function Input(props) {
   return <input className={inputBase} {...props} />
@@ -106,7 +106,7 @@ export function Modal({ aberto, titulo, onFechar, children, largura = 'max-w-lg'
   if (!aberto) return null
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 pt-16 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-brand-900/55 p-4 pt-16 backdrop-blur-sm"
       onMouseDown={(e) => e.target === e.currentTarget && onFechar()}
     >
       <div className={`animar-surgir w-full ${largura} rounded-2xl bg-white shadow-pop`}>
@@ -125,11 +125,11 @@ export function Modal({ aberto, titulo, onFechar, children, largura = 'max-w-lg'
 export function Badge({ children, tom = 'slate' }) {
   const tons = {
     slate: 'bg-slate-100 text-slate-600 ring-slate-200',
-    blue: 'bg-brand-50 text-brand-700 ring-brand-100',
+    blue: 'bg-laranja-50 text-laranja-700 ring-laranja-200/70',
     green: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
     yellow: 'bg-amber-50 text-amber-700 ring-amber-100',
     red: 'bg-red-50 text-red-700 ring-red-100',
-    gold: 'bg-gold-400/15 text-gold-600 ring-gold-400/20',
+    gold: 'bg-[#77448c]/10 text-[#5e3570] ring-[#77448c]/20',
   }
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${tons[tom]}`}>
@@ -153,7 +153,7 @@ export function EmptyState({ icone: Icone, titulo, texto, children }) {
   )
 }
 
-export function StatTile({ rotulo, valor, detalhe, icone: Icone, corIcone = 'text-brand-600 bg-brand-50' }) {
+export function StatTile({ rotulo, valor, detalhe, icone: Icone, corIcone = 'text-laranja-600 bg-laranja-50' }) {
   return (
     <div className="group rounded-2xl border border-slate-200/70 bg-white p-5 shadow-card transition-shadow hover:shadow-card-hover">
       <div className="flex items-start justify-between gap-3">
@@ -175,7 +175,7 @@ export function StatTile({ rotulo, valor, detalhe, icone: Icone, corIcone = 'tex
 export function Spinner() {
   return (
     <div className="flex justify-center py-16">
-      <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-200 border-t-brand-600" />
+      <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-200 border-t-laranja-500" />
     </div>
   )
 }

@@ -1,47 +1,59 @@
 @import "tailwindcss";
 
 /* ============================================================================
-   HUB SEGURO DE VIDA — Sistema de Design
-   Tipografia: Inter (texto) + Lexend (títulos/números). Cores: azul confiança
-   com toque premium (âmbar). Superfícies quentes e sombras suaves.
+   HUB SEGURO DE VIDA — Sistema de Design "GB | XP"
+   Identidade da marca: grafite (tinta) + laranja. Tipografia: Inter (texto)
+   + Lexend (títulos/números). Superfícies claras, sombras suaves, um único
+   acento — o laranja da logo — usado com intenção.
    ============================================================================ */
 
 @theme {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Lexend Variable", "Inter Variable", ui-sans-serif, sans-serif;
 
-  /* Marca — azul (confiança) */
-  --color-brand-50:  #eef4ff;
-  --color-brand-100: #dae6ff;
-  --color-brand-200: #bcd2ff;
-  --color-brand-300: #8eb5ff;
-  --color-brand-400: #598cfb;
-  --color-brand-500: #3366f0;
-  --color-brand-600: #2049dc;
-  --color-brand-700: #1c3ab8;
-  --color-brand-800: #1d3494;
-  --color-brand-900: #1d3175;
+  /* Marca — "tinta": o grafite da logo (ações, navegação, ênfase) */
+  --color-brand-50:  #f6f6f7;
+  --color-brand-100: #ececee;
+  --color-brand-200: #d9dadd;
+  --color-brand-300: #b8bac0;
+  --color-brand-400: #8f929b;
+  --color-brand-500: #63666f;
+  --color-brand-600: #2e3038;
+  --color-brand-700: #232529;
+  --color-brand-800: #1b1c20;
+  --color-brand-900: #131417;
 
-  /* Alinha a paleta "blue" do Tailwind à marca — dá coesão a todas as telas
-     que já usam blue-600/blue-50 etc. sem precisar reescrevê-las. */
-  --color-blue-50:  #eef4ff;
-  --color-blue-100: #dae6ff;
-  --color-blue-200: #bcd2ff;
-  --color-blue-300: #8eb5ff;
-  --color-blue-400: #598cfb;
-  --color-blue-500: #3366f0;
-  --color-blue-600: #2049dc;
-  --color-blue-700: #1c3ab8;
-  --color-blue-800: #1d3494;
-  --color-blue-900: #1d3175;
+  /* As telas antigas usam blue-*: alinha à tinta da marca, sem reescrevê-las */
+  --color-blue-50:  #f6f6f7;
+  --color-blue-100: #ececee;
+  --color-blue-200: #d9dadd;
+  --color-blue-300: #b8bac0;
+  --color-blue-400: #8f929b;
+  --color-blue-500: #63666f;
+  --color-blue-600: #2e3038;
+  --color-blue-700: #232529;
+  --color-blue-800: #1b1c20;
+  --color-blue-900: #131417;
 
-  /* Acento — âmbar/dourado (premium, usado com parcimônia) */
-  --color-gold-400: #f6b93b;
-  --color-gold-500: #eaa119;
-  --color-gold-600: #cf8410;
+  /* Acento — o laranja da logo (destaques, CTAs especiais, foco) */
+  --color-laranja-50:  #fdf3ec;
+  --color-laranja-100: #fae3d3;
+  --color-laranja-200: #f5c8a8;
+  --color-laranja-300: #eda672;
+  --color-laranja-400: #e28442;
+  --color-laranja-500: #d96527;
+  --color-laranja-600: #c2531d;
+  --color-laranja-700: #a1431a;
+  --color-laranja-800: #83381b;
+  --color-laranja-900: #6b3019;
 
-  /* Superfícies quentes */
-  --color-canvas: #f6f7fb;
+  /* Compatibilidade: classes gold-* existentes apontam para o laranja */
+  --color-gold-400: #e28442;
+  --color-gold-500: #d96527;
+  --color-gold-600: #c2531d;
+
+  /* Superfícies */
+  --color-canvas: #f6f6f4;
   --color-surface: #ffffff;
 }
 
@@ -50,7 +62,7 @@
 
   body {
     background-color: var(--color-canvas);
-    color: #1a2233;
+    color: #1c1e24;
     font-family: var(--font-sans);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
@@ -65,31 +77,38 @@
   /* Números grandes ficam elegantes com a Lexend */
   .tabular { font-variant-numeric: tabular-nums; }
 
-  /* Seleção de texto na cor da marca */
-  ::selection { background: color-mix(in srgb, var(--color-brand-500) 22%, transparent); }
+  /* Seleção de texto no acento da marca */
+  ::selection { background: color-mix(in srgb, var(--color-laranja-500) 24%, transparent); }
 
   /* Scrollbars discretas */
-  * { scrollbar-width: thin; scrollbar-color: #cbd2e0 transparent; }
+  * { scrollbar-width: thin; scrollbar-color: #cbccd2 transparent; }
   *::-webkit-scrollbar { width: 9px; height: 9px; }
-  *::-webkit-scrollbar-thumb { background: #cbd2e0; border-radius: 9999px; border: 2px solid transparent; background-clip: content-box; }
-  *::-webkit-scrollbar-thumb:hover { background: #aeb7c9; background-clip: content-box; }
+  *::-webkit-scrollbar-thumb { background: #cbccd2; border-radius: 9999px; border: 2px solid transparent; background-clip: content-box; }
+  *::-webkit-scrollbar-thumb:hover { background: #aaacb5; background-clip: content-box; }
 
-  /* Foco visível e consistente em tudo que é interativo */
+  /* Foco visível e consistente — no laranja da marca */
   a:focus-visible, button:focus-visible, input:focus-visible,
   select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
-    outline: 2px solid var(--color-brand-500);
+    outline: 2px solid var(--color-laranja-500);
     outline-offset: 2px;
     border-radius: 8px;
   }
 }
 
 @layer utilities {
-  /* Sombra suave padrão dos cartões */
-  .shadow-card { box-shadow: 0 1px 2px rgba(16,24,40,0.04), 0 1px 3px rgba(16,24,40,0.06); }
-  .shadow-card-hover { box-shadow: 0 4px 12px rgba(16,24,40,0.08), 0 2px 4px rgba(16,24,40,0.05); }
-  .shadow-pop { box-shadow: 0 10px 30px rgba(16,24,40,0.12), 0 4px 8px rgba(16,24,40,0.06); }
+  /* Sombras dos cartões — em camadas, bem suaves */
+  .shadow-card { box-shadow: 0 1px 2px rgba(19,20,23,0.05), 0 1px 3px rgba(19,20,23,0.06); }
+  .shadow-card-hover { box-shadow: 0 4px 14px rgba(19,20,23,0.09), 0 2px 4px rgba(19,20,23,0.05); }
+  .shadow-pop { box-shadow: 0 12px 32px rgba(19,20,23,0.14), 0 4px 10px rgba(19,20,23,0.07); }
 
   /* Animação de entrada dos modais/toasts */
   @keyframes surgir { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
   .animar-surgir { animation: surgir 0.18s ease-out; }
+
+  /* Traço superior laranja — usado em cartões de destaque */
+  .risco-marca { position: relative; overflow: hidden; }
+  .risco-marca::before {
+    content: ""; position: absolute; inset: 0 auto auto 0; height: 3px; width: 100%;
+    background: linear-gradient(90deg, var(--color-laranja-500), var(--color-laranja-300));
+  }
 }
