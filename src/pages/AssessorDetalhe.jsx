@@ -42,7 +42,7 @@ export default function AssessorDetalhe() {
 
       <Card className="mb-6 p-5">
         <div className="flex flex-wrap items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-violet-100 text-lg font-bold text-violet-700">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-laranja-100 text-lg font-bold text-laranja-700">
             {iniciais(resumo.nome)}
           </div>
           <div className="min-w-0 flex-1">
@@ -71,7 +71,7 @@ export default function AssessorDetalhe() {
         <StatTile rotulo="Apólices geradas" valor={resumo.apolices}
           detalhe={`${brl(resumo.premio_mensal_total)}/mês`} icone={FileSignature} corIcone="text-emerald-600 bg-emerald-50" />
         <StatTile rotulo="Comissão do assessor" valor={brlCompacto(resumo.comissao_assessor_total)}
-          detalhe="total gerado (histórico)" icone={Wallet} corIcone="text-violet-600 bg-violet-50" />
+          detalhe="total gerado (histórico)" icone={Wallet} corIcone="text-laranja-600 bg-laranja-50" />
       </div>
 
       {comissoes.length > 0 && <ExtratoComissoesAssessor comissoes={comissoes} />}
@@ -151,7 +151,7 @@ function ExtratoComissoesAssessor({ comissoes }) {
               <div key={m} className="flex items-center gap-3 text-sm">
                 <span className="w-16 shrink-0 capitalize text-slate-500">{mesRotulo(m)}</span>
                 <div className="h-5 flex-1 rounded bg-slate-50">
-                  <div className="flex h-5 items-center rounded bg-violet-400/80 pl-2"
+                  <div className="flex h-5 items-center rounded bg-laranja-400/90 pl-2"
                     style={{ width: `${Math.max((v / Math.max(...meses.map(([, x]) => x), 1)) * 100, 6)}%` }}>
                     <span className="text-xs font-semibold text-white">{brl(v)}</span>
                   </div>
@@ -166,7 +166,7 @@ function ExtratoComissoesAssessor({ comissoes }) {
             {top.map(([nome, v], i) => (
               <li key={nome} className="flex items-center gap-2 text-sm">
                 <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                  i === 0 ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-500'}`}>{i + 1}</span>
+                  i === 0 ? 'bg-laranja-100 text-laranja-700' : 'bg-slate-100 text-slate-500'}`}>{i + 1}</span>
                 <span className="min-w-0 flex-1 truncate font-medium text-slate-800">{nome}</span>
                 <span className="font-semibold tabular-nums text-slate-900">{brl(v)}</span>
               </li>

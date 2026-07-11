@@ -55,7 +55,7 @@ export default function PosVenda() {
         <StatTile rotulo="Receita anualizada" valor={brlCompacto(carteira.receita_anualizada ?? 0)}
           icone={TrendingUp} corIcone="text-blue-600 bg-blue-50" />
         <StatTile rotulo="Capital total protegido" valor={brlCompacto(carteira.capital_total ?? 0)}
-          icone={ShieldCheck} corIcone="text-violet-600 bg-violet-50" />
+          icone={ShieldCheck} corIcone="text-laranja-600 bg-laranja-50" />
         <StatTile rotulo="Ticket médio" valor={brl(carteira.ticket_medio ?? 0)}
           detalhe="prêmio mensal por apólice" icone={TrendingUp} corIcone="text-amber-600 bg-amber-50" />
       </div>

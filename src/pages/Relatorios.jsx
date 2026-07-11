@@ -838,7 +838,7 @@ export default function Relatorios() {
           <Card className="p-5 xl:col-span-2">
             <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-                <Sparkles size={17} className="text-violet-600" /> Inteligência do mês — {mesBR(mes + '-01')}
+                <Sparkles size={17} className="text-laranja-600" /> Inteligência do mês — {mesBR(mes + '-01')}
               </h2>
               {inteligencia.temAnterior && (
                 <VariacaoBadge atual={inteligencia.totalAtual} anterior={inteligencia.totalAnterior}
@@ -890,11 +890,11 @@ export default function Relatorios() {
                   {inteligencia.topClientes.map(([cliente, v], i) => (
                     <div key={cliente} className="flex items-center gap-3">
                       <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                        i === 0 ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-500'}`}>{i + 1}</span>
+                        i === 0 ? 'bg-laranja-100 text-laranja-700' : 'bg-slate-100 text-slate-500'}`}>{i + 1}</span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-slate-800">{cliente}</p>
                         <div className="mt-0.5 h-1.5 rounded bg-slate-100">
-                          <div className="h-1.5 rounded bg-violet-400"
+                          <div className="h-1.5 rounded bg-laranja-400"
                             style={{ width: `${Math.max((v / (inteligencia.topClientes[0]?.[1] || 1)) * 100, 4)}%` }} />
                         </div>
                       </div>
@@ -1225,7 +1225,7 @@ export default function Relatorios() {
         {/* Tempo médio por etapa */}
         <Card className="p-5">
           <h2 className="mb-1 flex items-center gap-2 font-semibold text-slate-900">
-            <Timer size={17} className="text-violet-600" /> Tempo médio em cada etapa
+            <Timer size={17} className="text-laranja-600" /> Tempo médio em cada etapa
           </h2>
           <p className="mb-4 text-xs text-slate-400">Calculado do histórico automático do funil — mostra gargalos</p>
           {tempos.length === 0

@@ -11,11 +11,12 @@ import { CHART, etapaLabel } from '../lib/constants'
 import { Card, StatTile, Skeleton, Badge, EmptyState } from '../components/ui'
 
 // ─── Gráfico de barras (série única, tooltip por barra) ──────────────────────
-function GraficoBarras({ dados, formatoValor = brlCompacto }) {
+function GraficoBarras({ dados, formatoValor = brlCompacto, meta = 0 }) {
   const [hover, setHover] = useState(null)
-  const max = Math.max(...dados.map((d) => d.valor), 1)
+  const max = Math.max(...dados.map((d) => d.valor), meta, 1)
   const W = 560, H = 180, PAD = 8, EIXO = 22
   const bw = Math.min(36, (W - PAD * 2) / dados.length - 10)
+  const yMeta = meta > 0 ? H - (meta / max) * (H - 24) : null
 
   return (
     <div className="relative">
@@ -25,6 +26,15 @@ function GraficoBarras({ dados, formatoValor = brlCompacto }) {
             stroke={CHART.grid} strokeWidth="1" />
         ))}
         <line x1={PAD} x2={W - PAD} y1={H} y2={H} stroke={CHART.eixo} strokeWidth="1" />
+        {yMeta !== null && (
+          <g>
+            <line x1={PAD} x2={W - PAD} y1={yMeta} y2={yMeta}
+              stroke={CHART.textoMudo} strokeWidth="1.5" strokeDasharray="6 4" />
+            <text x={W - PAD} y={yMeta - 5} textAnchor="end" fontSize="10" fill={CHART.textoMudo}>
+              meta {formatoValor(meta)}
+            </text>
+          </g>
+        )}
         {dados.map((d, i) => {
           const x = PAD + ((W - PAD * 2) / dados.length) * (i + 0.5) - bw / 2
           const h = Math.max((d.valor / max) * (H - 24), d.valor > 0 ? 3 : 0)
@@ -413,7 +423,7 @@ export default function Dashboard() {
         <StatTile rotulo="Apólices vendidas no mês" valor={mesAtual.dash.apolices_vendidas ?? 0}
           icone={FileSignature} corIcone="text-emerald-600 bg-emerald-50" />
         <StatTile rotulo="Prêmio mensal vendido" valor={brlCompacto(mesAtual.dash.premio_mensal_vendido ?? 0)}
-          icone={TrendingUp} corIcone="text-violet-600 bg-violet-50" />
+          icone={TrendingUp} corIcone="text-laranja-600 bg-laranja-50" />
         <StatTile rotulo="Sua comissão do mês" valor={brl(mesAtual.com.comissao_natalia ?? 0)}
           detalhe="parte da Natália na divisão" icone={Wallet} corIcone="text-amber-600 bg-amber-50" />
       </div>
@@ -425,7 +435,7 @@ export default function Dashboard() {
         <StatTile rotulo="Ticket médio (prêmio mensal)" valor={brl(kpis.ticket_medio_premio ?? 0)}
           icone={TrendingUp} corIcone="text-emerald-600 bg-emerald-50" />
         <StatTile rotulo="Dias médios até fechar" valor={kpis.dias_medios_ate_fechar ?? '—'}
-          detalhe="do cadastro do lead à venda" icone={Timer} corIcone="text-violet-600 bg-violet-50" />
+          detalhe="do cadastro do lead à venda" icone={Timer} corIcone="text-laranja-600 bg-laranja-50" />
         <StatTile rotulo="Capital total da carteira" valor={brlCompacto(kpis.capital_total_carteira ?? 0)}
           detalhe="soma das apólices ativas" icone={ShieldCheck} corIcone="text-amber-600 bg-amber-50" />
       </div>
@@ -562,7 +572,7 @@ export default function Dashboard() {
           <p className="mb-4 text-xs text-slate-400">Soma dos prêmios mensais das apólices cadastradas em cada mês</p>
           {evolucao.length === 0
             ? <p className="py-8 text-center text-sm text-slate-400">Cadastre a primeira venda para ver o gráfico.</p>
-            : <GraficoBarras dados={evolucao} />}
+            : <GraficoBarras dados={evolucao} meta={Number(metas.meta_premio_mensal) || 0} />}
         </Card>
 
         {/* Comissões recebidas das seguradoras (planilhas importadas) */}
@@ -588,7 +598,7 @@ export default function Dashboard() {
             ? <p className="py-8 text-center text-sm text-slate-400">
                 Nenhuma planilha de comissão importada ainda. Comece em Importar → Comissões.
               </p>
-            : <GraficoBarras dados={recebidasMes.evolucao} formatoValor={brl} />}
+            : <GraficoBarras dados={recebidasMes.evolucao} formatoValor={brl} meta={Number(metas.meta_comissao_mensal) || 0} />}
         </Card>
 
         {/* Conversão: leads x fechados */}
