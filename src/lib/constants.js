@@ -1,13 +1,15 @@
-// Etapas do funil de vendas — a ordem aqui define a ordem das colunas do Kanban
+// Etapas do funil de vendas — a ordem aqui define a ordem das colunas do
+// Kanban. As cores contam a história: o lead "esquenta" do grafite ao laranja
+// da marca conforme se aproxima do fechamento; fechado é verde, perdido cinza.
 export const ETAPAS = [
-  { id: 'lead_recebido',        label: 'Lead Recebido',        cor: '#8eb5ff' },
-  { id: 'agendamento',          label: 'Agendamento',          cor: '#598cfb' },
-  { id: 'reuniao_realizada',    label: 'Reunião Realizada',    cor: '#3366f0' },
-  { id: 'estudo_em_andamento',  label: 'Estudo em Andamento',  cor: '#2049dc' },
-  { id: 'proposta_apresentada', label: 'Proposta Apresentada', cor: '#1c3ab8' },
-  { id: 'em_analise',           label: 'Em Análise',           cor: '#1d3494' },
+  { id: 'lead_recebido',        label: 'Lead Recebido',        cor: '#b8bac0' },
+  { id: 'agendamento',          label: 'Agendamento',          cor: '#8f929b' },
+  { id: 'reuniao_realizada',    label: 'Reunião Realizada',    cor: '#eda672' },
+  { id: 'estudo_em_andamento',  label: 'Estudo em Andamento',  cor: '#e28442' },
+  { id: 'proposta_apresentada', label: 'Proposta Apresentada', cor: '#d96527' },
+  { id: 'em_analise',           label: 'Em Análise',           cor: '#c2531d' },
   { id: 'fechado',              label: 'Fechado',              cor: '#0e9f6e' },
-  { id: 'perdido',              label: 'Perdido',              cor: '#94a0b8' },
+  { id: 'perdido',              label: 'Perdido',              cor: '#a3a6ad' },
 ]
 
 export const etapaLabel = (id) => ETAPAS.find((e) => e.id === id)?.label ?? id

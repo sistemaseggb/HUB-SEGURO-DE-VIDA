@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { etapaLabel } from '../lib/constants'
 
 // Busca global do topo: acha clientes e assessores por nome, código ou telefone.
-// Atalho: tecla "/" foca a busca de qualquer lugar do sistema.
+// Atalhos: "/" ou Ctrl+K (⌘K no Mac) focam a busca de qualquer lugar.
 export default function BuscaGlobal() {
   const navigate = useNavigate()
   const [termo, setTermo] = useState('')
@@ -18,9 +18,11 @@ export default function BuscaGlobal() {
   // Atalho "/" para focar a busca
   useEffect(() => {
     function onKey(e) {
-      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+      const ehCampo = document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA'
+      if ((e.key === '/' && !ehCampo) || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) {
         e.preventDefault()
         inputRef.current?.focus()
+        inputRef.current?.select()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -77,9 +79,12 @@ export default function BuscaGlobal() {
         onChange={(e) => setTermo(e.target.value)}
         onKeyDown={onKeyDown}
         onFocus={() => resultados.length && setAberto(true)}
-        placeholder="Buscar cliente ou assessor por nome, código ou telefone…  ( / )"
-        className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+        placeholder="Buscar cliente ou assessor por nome, código ou telefone…"
+        className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-14 text-sm text-slate-700 placeholder:text-slate-400 focus:border-laranja-400 focus:outline-none focus:ring-2 focus:ring-laranja-500/15"
       />
+      <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-slate-400 sm:block">
+        Ctrl K
+      </kbd>
 
       {aberto && resultados.length > 0 && (
         <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
@@ -89,12 +94,12 @@ export default function BuscaGlobal() {
               onMouseEnter={() => setIndice(i)}
               onClick={() => abrir(item)}
               className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm ${
-                i === indice ? 'bg-blue-50' : 'hover:bg-slate-50'
+                i === indice ? 'bg-laranja-50' : 'hover:bg-slate-50'
               }`}
             >
               {item.tipo === 'cliente'
-                ? <User size={16} className="shrink-0 text-blue-500" />
-                : <UserCog size={16} className="shrink-0 text-violet-500" />}
+                ? <User size={16} className="shrink-0 text-laranja-600" />
+                : <UserCog size={16} className="shrink-0 text-slate-500" />}
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-slate-800">
                   {item.nome} {item.codigo && <span className="text-xs text-slate-400">· {item.codigo}</span>}

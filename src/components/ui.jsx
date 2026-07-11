@@ -172,6 +172,12 @@ export function StatTile({ rotulo, valor, detalhe, icone: Icone, corIcone = 'tex
   )
 }
 
+// Bloco de carregamento com pulso — usado no lugar do conteúdo enquanto
+// os dados chegam (percepção de velocidade muito melhor que um spinner)
+export function Skeleton({ className = '' }) {
+  return <div className={`animate-pulse rounded-2xl bg-slate-200/60 ${className}`} />
+}
+
 export function Spinner() {
   return (
     <div className="flex justify-center py-16">

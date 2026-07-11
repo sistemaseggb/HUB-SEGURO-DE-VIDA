@@ -8,14 +8,14 @@ import {
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, mesBR, dataBR, whatsapp } from '../lib/format'
 import { CHART, etapaLabel } from '../lib/constants'
-import { Card, StatTile, Spinner, Badge, EmptyState } from '../components/ui'
+import { Card, StatTile, Skeleton, Badge, EmptyState } from '../components/ui'
 
 // ─── Gráfico de barras (série única, tooltip por barra) ──────────────────────
 function GraficoBarras({ dados, formatoValor = brlCompacto }) {
   const [hover, setHover] = useState(null)
   const max = Math.max(...dados.map((d) => d.valor), 1)
   const W = 560, H = 180, PAD = 8, EIXO = 22
-  const bw = Math.min(48, (W - PAD * 2) / dados.length - 8)
+  const bw = Math.min(36, (W - PAD * 2) / dados.length - 10)
 
   return (
     <div className="relative">
@@ -27,7 +27,7 @@ function GraficoBarras({ dados, formatoValor = brlCompacto }) {
         <line x1={PAD} x2={W - PAD} y1={H} y2={H} stroke={CHART.eixo} strokeWidth="1" />
         {dados.map((d, i) => {
           const x = PAD + ((W - PAD * 2) / dados.length) * (i + 0.5) - bw / 2
-          const h = Math.max((d.valor / max) * (H - 12), d.valor > 0 ? 3 : 0)
+          const h = Math.max((d.valor / max) * (H - 24), d.valor > 0 ? 3 : 0)
           return (
             <g key={d.rotulo}>
               {/* alvo de hover maior que a barra */}
@@ -255,21 +255,21 @@ function PrimeirosPassos() {
   if (feitos === passos.length) return null
 
   return (
-    <Card className="mb-6 border-blue-100 bg-blue-50/40 p-5">
+    <Card className="risco-marca mb-6 p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-          <Rocket size={18} className="text-blue-600" /> Primeiros passos
+          <Rocket size={18} className="text-laranja-600" /> Primeiros passos
         </h2>
         <span className="text-sm text-slate-500">{feitos} de {passos.length}</span>
       </div>
       <div className="mb-4 h-2 rounded-full bg-slate-200">
-        <div className="h-2 rounded-full bg-blue-600 transition-all" style={{ width: `${(feitos / passos.length) * 100}%` }} />
+        <div className="h-2 rounded-full bg-laranja-500 transition-all" style={{ width: `${(feitos / passos.length) * 100}%` }} />
       </div>
       <ul className="space-y-2">
         {passos.map((p, i) => (
           <li key={i}>
             <Link to={p.para} className={`flex items-center gap-3 rounded-lg border p-2.5 text-sm transition-colors ${
-              p.ok ? 'border-transparent text-slate-400' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300'}`}>
+              p.ok ? 'border-transparent text-slate-400' : 'border-slate-200 bg-white text-slate-700 hover:border-laranja-300'}`}>
               {p.ok
                 ? <CheckCircle2 size={18} className="shrink-0 text-emerald-500" />
                 : <span className="h-[18px] w-[18px] shrink-0 rounded-full border-2 border-slate-300" />}
@@ -371,7 +371,19 @@ export default function Dashboard() {
     }
   }, [recebidas])
 
-  if (carregando) return <Spinner />
+  if (carregando) {
+    return (
+      <div>
+        <Skeleton className="mb-2 h-8 w-72" />
+        <Skeleton className="mb-6 h-4 w-96" />
+        <Skeleton className="mb-6 h-24 w-full" />
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28" />)}
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
 
   const tarefas = central.filter((i) => i.tipo === 'tarefa')
   const aniversarios = central.filter((i) => i.tipo === 'aniversario')

@@ -16,7 +16,17 @@ import {
 } from '../components/ui'
 import { useToast } from '../components/Toast'
 
-const ABAS = ['Planejamento', 'Interações', 'Reuniões', 'Apólices', 'Comissões', 'Documentos', 'Formulário', 'Tarefas', 'Histórico']
+const ABAS = [
+  { nome: 'Planejamento', icone: ChartPie },
+  { nome: 'Interações', icone: MessageCircle },
+  { nome: 'Reuniões', icone: CalendarPlus },
+  { nome: 'Apólices', icone: FileSignature },
+  { nome: 'Comissões', icone: Wallet },
+  { nome: 'Documentos', icone: FileText },
+  { nome: 'Formulário', icone: ClipboardList },
+  { nome: 'Tarefas', icone: CheckCircle2 },
+  { nome: 'Histórico', icone: RefreshCw },
+]
 
 export default function ClienteDetalhe() {
   const { id } = useParams()
@@ -206,12 +216,13 @@ export default function ClienteDetalhe() {
 
       {/* Abas */}
       <div className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200">
-        {ABAS.map((a) => (
-          <button key={a} onClick={() => setAba(a)}
-            className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-              aba === a ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800'
+        {ABAS.map(({ nome, icone: Icone }) => (
+          <button key={nome} onClick={() => setAba(nome)}
+            className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2 text-sm font-medium transition-colors ${
+              aba === nome ? 'border-laranja-500 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}>
-            {a}
+            <Icone size={15} className={aba === nome ? 'text-laranja-600' : 'text-slate-400'} />
+            {nome}
           </button>
         ))}
       </div>
