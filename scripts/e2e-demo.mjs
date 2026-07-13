@@ -106,6 +106,16 @@ await passo('Proposta (slides) com estudo completo', async () => {
   await page.waitForSelector('text=/cada filho protegido até os 24/i', { timeout: 3000 })
   await page.waitForSelector('text=/inventário custa caro/i', { timeout: 3000 })
   await page.waitForSelector('text=/quatro passos simples/i', { timeout: 3000 })
+  await page.waitForSelector('button:has-text("Copiar link do cliente")', { timeout: 3000 })
+})
+
+await passo('Proposta pública pelo link (/p/<token>, sem login)', async () => {
+  const anonima = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
+  await anonima.goto(`${BASE}/p/demo-proposta-carlos`)
+  await anonima.waitForSelector('text=Estudo preparado por', { timeout: 6000 })
+  await anonima.waitForSelector('text=/estudo de proteção e blindagem/i', { timeout: 3000 })
+  await anonima.screenshot({ path: 'e2e-shots/16-proposta-publica.png' })
+  await anonima.context().close()
 })
 
 await passo('Relatórios → fechamento com cascata', async () => {

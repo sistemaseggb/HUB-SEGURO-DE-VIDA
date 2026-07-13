@@ -131,6 +131,7 @@ function semear() {
     verba_sucessoria: null, cobertura_atual: 0, itcmd_pct: 4, custas_pct: 8,
     premio_estimado: 480,
     conjuge_nome: 'Paula', filhos_idades: '3 anos',
+    token_proposta: 'demo-proposta-rodrigo',
     created_at: iso(diasAtras(10)), updated_at: iso(diasAtras(2)),
   }, {
     id: idDemo(), id_cliente: carlos.id, profissao: 'Médico cardiologista', estado_civil: 'Casado(a)',
@@ -148,6 +149,7 @@ function semear() {
     verba_sucessoria: 456_000, cobertura_atual: 800_000, itcmd_pct: 4, custas_pct: 8,
     premio_estimado: 1890,
     conjuge_nome: 'Mariana', filhos_idades: '6 e 9 anos',
+    token_proposta: 'demo-proposta-carlos',
     created_at: iso(diasAtras(180)), updated_at: iso(diasAtras(30)),
   }]
 
@@ -671,6 +673,8 @@ export function criarSupabaseDemo() {
   // recalcula comissão tripartida ao registrar venda (imita o trigger do banco)
   const hooks = {
     aoInserir(tabela, r) {
+      // imita o default gen_random_uuid() da migração 017
+      if (tabela === 'planejamentos' && !r.token_proposta) r.token_proposta = uuid()
       if (tabela !== 'apolices') return
       const cfg = db.configuracoes[0]
       if (r.percentual_comissao == null) {
@@ -737,6 +741,14 @@ export function criarSupabaseDemo() {
           if (args.p_concluido) f.concluido_em = iso(hoje())
         }
         return { data: true, error: null }
+      }
+      if (fn === 'fn_proposta_carregar') {
+        const p = db.planejamentos.find((x) => x.token_proposta === args.p_token)
+        if (!p) return { data: { erro: 'proposta_nao_encontrada' }, error: null }
+        const c = db.clientes.find((x) => x.id === p.id_cliente)
+        const plano = { ...p }
+        delete plano.id; delete plano.id_cliente; delete plano.token_proposta
+        return { data: { cliente_nome: c?.nome ?? '', plano }, error: null }
       }
       if (fn === 'fn_gerar_fila_diaria') return { data: 0, error: null }
       if (fn === 'fn_vincular_evento') return { data: true, error: null }

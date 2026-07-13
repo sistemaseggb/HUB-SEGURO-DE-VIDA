@@ -304,18 +304,19 @@ export default function Dashboard() {
   const [foco, setFoco] = useState([])
   const [conversao, setConversao] = useState([])
   const [recebidas, setRecebidas] = useState([])
+  const [periodo, setPeriodo] = useState(6) // meses exibidos nos gráficos
 
   async function carregar() {
     const [c, d, r, ce, f, k, cfg, pr, cv, ri] = await Promise.all([
-      supabase.from('vw_comissoes_mensal').select('*').limit(6),
-      supabase.from('vw_dashboard_mensal').select('*').limit(6),
+      supabase.from('vw_comissoes_mensal').select('*').limit(periodo),
+      supabase.from('vw_dashboard_mensal').select('*').limit(periodo),
       supabase.from('vw_ranking_assessores').select('*').limit(5),
       supabase.from('vw_central_dia').select('*').limit(20),
       supabase.from('vw_funil_contagem').select('*'),
       supabase.from('vw_kpis_gerais').select('*').single(),
       supabase.from('configuracoes').select('*').single(),
       supabase.from('vw_prioridades_classificadas').select('*').limit(6),
-      supabase.from('vw_conversao_mensal').select('*').limit(6),
+      supabase.from('vw_conversao_mensal').select('*').limit(periodo),
       supabase.from('vw_comissoes_importadas_resumo').select('*'),
     ])
     setComissoes(c.data ?? [])
@@ -331,7 +332,7 @@ export default function Dashboard() {
     setCarregando(false)
   }
 
-  useEffect(() => { carregar() }, [])
+  useEffect(() => { carregar() }, [periodo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function concluirTarefa(id) {
     await supabase.from('tarefas').update({ concluida: true, concluida_em: new Date().toISOString() }).eq('id', id)
@@ -377,9 +378,9 @@ export default function Dashboard() {
       ref,
       doMes: porMes.get(ref) ?? { total: 0, nati: 0, bruno: 0 },
       doMesAtual: porMes.get(atual) ?? { total: 0, nati: 0, bruno: 0 },
-      evolucao: meses.slice(-6).map((m) => ({ rotulo: mesBR(`${m}-01`), valor: porMes.get(m).total })),
+      evolucao: meses.slice(-periodo).map((m) => ({ rotulo: mesBR(`${m}-01`), valor: porMes.get(m).total })),
     }
-  }, [recebidas])
+  }, [recebidas, periodo])
 
   if (carregando) {
     return (
@@ -508,6 +509,20 @@ export default function Dashboard() {
           </div>
         </Card>
       )}
+
+      {/* Período dos gráficos mensais */}
+      <div className="mb-3 flex items-center justify-end gap-2">
+        <span className="text-xs text-slate-400">Período dos gráficos:</span>
+        <div className="flex gap-1">
+          {[6, 12, 24].map((m) => (
+            <button key={m} onClick={() => setPeriodo(m)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                periodo === m ? 'bg-brand-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+              {m} meses
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
         {/* Central do dia */}

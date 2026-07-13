@@ -36,6 +36,13 @@ await passo('1. Link de formulário INVÁLIDO mostra erro amigável (não trava)
   await p.close()
 })
 
+await passo('1b. Link de proposta INVÁLIDO mostra erro amigável (não trava)', async () => {
+  const p = await ctx.newPage()
+  await p.goto(BASE + '/p/token-que-nao-existe')
+  await p.waitForSelector('text=Proposta não encontrada', { timeout: 6000 })
+  await p.close()
+})
+
 await passo('2. Formulário já CONCLUÍDO mostra estado concluído (não deixa reenviar)', async () => {
   const p = await ctx.newPage()
   await p.goto(BASE + '/f/demo-dps-token')

@@ -3,10 +3,10 @@ import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Printer, Heart, Landmark, GraduationCap, Activity,
   Stethoscope, CalendarClock, Scale, ClipboardCheck, Search, FileSignature, Handshake,
-  Hourglass, Coffee,
+  Hourglass, Coffee, Link2, Check, MessageCircle,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { brl, brlCompacto } from '../lib/format'
+import { brl, brlCompacto, whatsapp } from '../lib/format'
 import { calcularEstudo, IDADE_INDEPENDENCIA } from '../lib/estudo'
 import { Spinner, Button } from '../components/ui'
 import LinhaProtecao from '../components/LinhaProtecao'
@@ -18,11 +18,12 @@ import Logo from '../components/Logo'
 // página A4 paisagem, com cores preservadas). Slides:
 // capa → diagnóstico → autonomia → o número → futuro dos filhos → 5 pilares →
 // blindagem patrimonial → gap de cobertura → investimento → passos → fechamento.
-export default function Proposta() {
-  const { id } = useParams()
+export default function Proposta({ publica = false }) {
+  const { id, token } = useParams()
   const [dados, setDados] = useState(null)
   const [slideAtual, setSlideAtual] = useState(0)
   const [totalSlides, setTotalSlides] = useState(0)
+  const [copiado, setCopiado] = useState(false)
 
   // Navegação de apresentação: setas/PageUp-Down/espaço avançam os slides;
   // as bolinhas laterais mostram onde está e pulam direto ao clicar.
@@ -49,14 +50,35 @@ export default function Proposta() {
   }, [dados])
 
   useEffect(() => {
-    Promise.all([
-      supabase.from('clientes').select('*').eq('id', id).single(),
-      supabase.from('planejamentos').select('*').eq('id_cliente', id).maybeSingle(),
-    ]).then(([c, p]) => setDados({ cliente: c.data, plano: p.data }))
-  }, [id])
+    if (publica) {
+      // Rota pública /p/<token>: o cliente vê a proposta sem login — a RPC
+      // security definer (migração 017) devolve só o plano e o nome dele
+      supabase.rpc('fn_proposta_carregar', { p_token: token }).then(({ data, error }) => {
+        if (error || !data || data.erro) setDados({ naoEncontrada: true })
+        else setDados({ cliente: { nome: data.cliente_nome }, plano: data.plano })
+      })
+    } else {
+      Promise.all([
+        supabase.from('clientes').select('*').eq('id', id).single(),
+        supabase.from('planejamentos').select('*').eq('id_cliente', id).maybeSingle(),
+      ]).then(([c, p]) => setDados({ cliente: c.data, plano: p.data }))
+    }
+  }, [id, token, publica])
 
   if (!dados) return <Spinner />
   const { cliente, plano } = dados
+
+  if (dados.naoEncontrada) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 text-center">
+        <Logo tamanho={48} />
+        <p className="mt-6 text-lg font-semibold text-slate-800">Proposta não encontrada</p>
+        <p className="mt-2 max-w-sm text-sm text-slate-500">
+          Este link não está mais disponível. Fale com a sua consultora para receber um link atualizado.
+        </p>
+      </div>
+    )
+  }
 
   if (!plano) {
     return (
@@ -65,6 +87,14 @@ export default function Proposta() {
         <Link to={`/clientes/${id}`} className="mt-3 inline-block text-blue-600 hover:underline">← Voltar ao cliente</Link>
       </div>
     )
+  }
+
+  const linkPublico = plano.token_proposta ? `${window.location.origin}/p/${plano.token_proposta}` : null
+
+  function copiarLink() {
+    navigator.clipboard.writeText(linkPublico)
+    setCopiado(true)
+    setTimeout(() => setCopiado(false), 2000)
   }
 
   const e = calcularEstudo(plano)
@@ -78,14 +108,36 @@ export default function Proposta() {
   return (
     <div className="proposta">
       {/* barra de ações — some na impressão */}
-      <div className="fixed left-0 right-0 top-0 z-20 flex items-center justify-between bg-slate-900/95 px-4 py-2.5 backdrop-blur print:hidden">
-        <Link to={`/clientes/${id}`} className="inline-flex items-center gap-1 text-sm text-slate-300 hover:text-white">
-          <ArrowLeft size={15} /> Voltar ao cliente
-        </Link>
-        <div className="flex items-center gap-3">
-          <span className="hidden text-xs text-slate-400 sm:block">
+      <div className="fixed left-0 right-0 top-0 z-20 flex flex-wrap items-center justify-between gap-2 bg-slate-900/95 px-4 py-2.5 backdrop-blur print:hidden">
+        {publica ? (
+          <span className="text-sm text-slate-300">
+            Estudo preparado por <strong className="text-white">Natália Maschendorf</strong>
+          </span>
+        ) : (
+          <Link to={`/clientes/${id}`} className="inline-flex items-center gap-1 text-sm text-slate-300 hover:text-white">
+            <ArrowLeft size={15} /> Voltar ao cliente
+          </Link>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="hidden text-xs text-slate-400 lg:block">
             slide {slideAtual + 1} de {totalSlides} · use as setas ← →
           </span>
+          {!publica && linkPublico && (
+            <>
+              <Button variant="secondary" onClick={copiarLink}
+                title="O cliente abre a proposta no celular, sem login — só quem tem o link acessa">
+                {copiado ? <><Check size={15} /> Link copiado!</> : <><Link2 size={15} /> Copiar link do cliente</>}
+              </Button>
+              {whatsapp(cliente.telefone) && (
+                <a target="_blank" rel="noreferrer"
+                  href={whatsapp(cliente.telefone,
+                    `Olá ${primeiroNome}! Preparei o seu estudo de proteção personalizado. `
+                    + `Você pode ver com calma por aqui: ${linkPublico}`)}>
+                  <Button variant="success"><MessageCircle size={15} /> Enviar ao cliente</Button>
+                </a>
+              )}
+            </>
+          )}
           <Button variant="gold" onClick={() => window.print()}><Printer size={15} /> Salvar em PDF / Imprimir</Button>
         </div>
       </div>
