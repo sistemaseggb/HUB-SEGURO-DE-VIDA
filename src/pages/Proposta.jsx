@@ -3,24 +3,27 @@ import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Printer, Heart, Landmark, GraduationCap, Activity,
   Stethoscope, CalendarClock, Scale, ClipboardCheck, Search, FileSignature, Handshake,
-  Hourglass, Coffee,
+  Hourglass, Coffee, Link2, Check, MessageCircle,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { brl, brlCompacto } from '../lib/format'
-import { calcularEstudo } from '../lib/estudo'
+import { brl, brlCompacto, whatsapp } from '../lib/format'
+import { calcularEstudo, IDADE_INDEPENDENCIA } from '../lib/estudo'
 import { Spinner, Button } from '../components/ui'
+import LinhaProtecao from '../components/LinhaProtecao'
 
 import Logo from '../components/Logo'
 
 // Gerador de proposta: transforma o estudo por pilares numa apresentação de
-// tela cheia para a reunião (ou PDF pela impressão). Slides:
-// capa → diagnóstico → o número → 5 pilares → blindagem patrimonial →
-// gap de cobertura → próximos passos → fechamento.
-export default function Proposta() {
-  const { id } = useParams()
+// tela cheia para a reunião (ou PDF pela impressão — cada slide vira uma
+// página A4 paisagem, com cores preservadas). Slides:
+// capa → diagnóstico → autonomia → o número → futuro dos filhos → 5 pilares →
+// blindagem patrimonial → gap de cobertura → investimento → passos → fechamento.
+export default function Proposta({ publica = false }) {
+  const { id, token } = useParams()
   const [dados, setDados] = useState(null)
   const [slideAtual, setSlideAtual] = useState(0)
   const [totalSlides, setTotalSlides] = useState(0)
+  const [copiado, setCopiado] = useState(false)
 
   // Navegação de apresentação: setas/PageUp-Down/espaço avançam os slides;
   // as bolinhas laterais mostram onde está e pulam direto ao clicar.
@@ -47,14 +50,35 @@ export default function Proposta() {
   }, [dados])
 
   useEffect(() => {
-    Promise.all([
-      supabase.from('clientes').select('*').eq('id', id).single(),
-      supabase.from('planejamentos').select('*').eq('id_cliente', id).maybeSingle(),
-    ]).then(([c, p]) => setDados({ cliente: c.data, plano: p.data }))
-  }, [id])
+    if (publica) {
+      // Rota pública /p/<token>: o cliente vê a proposta sem login — a RPC
+      // security definer (migração 017) devolve só o plano e o nome dele
+      supabase.rpc('fn_proposta_carregar', { p_token: token }).then(({ data, error }) => {
+        if (error || !data || data.erro) setDados({ naoEncontrada: true })
+        else setDados({ cliente: { nome: data.cliente_nome }, plano: data.plano })
+      })
+    } else {
+      Promise.all([
+        supabase.from('clientes').select('*').eq('id', id).single(),
+        supabase.from('planejamentos').select('*').eq('id_cliente', id).maybeSingle(),
+      ]).then(([c, p]) => setDados({ cliente: c.data, plano: p.data }))
+    }
+  }, [id, token, publica])
 
   if (!dados) return <Spinner />
   const { cliente, plano } = dados
+
+  if (dados.naoEncontrada) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 text-center">
+        <Logo tamanho={48} />
+        <p className="mt-6 text-lg font-semibold text-slate-800">Proposta não encontrada</p>
+        <p className="mt-2 max-w-sm text-sm text-slate-500">
+          Este link não está mais disponível. Fale com a sua consultora para receber um link atualizado.
+        </p>
+      </div>
+    )
+  }
 
   if (!plano) {
     return (
@@ -63,6 +87,14 @@ export default function Proposta() {
         <Link to={`/clientes/${id}`} className="mt-3 inline-block text-blue-600 hover:underline">← Voltar ao cliente</Link>
       </div>
     )
+  }
+
+  const linkPublico = plano.token_proposta ? `${window.location.origin}/p/${plano.token_proposta}` : null
+
+  function copiarLink() {
+    navigator.clipboard.writeText(linkPublico)
+    setCopiado(true)
+    setTimeout(() => setCopiado(false), 2000)
   }
 
   const e = calcularEstudo(plano)
@@ -76,14 +108,36 @@ export default function Proposta() {
   return (
     <div className="proposta">
       {/* barra de ações — some na impressão */}
-      <div className="fixed left-0 right-0 top-0 z-20 flex items-center justify-between bg-slate-900/95 px-4 py-2.5 backdrop-blur print:hidden">
-        <Link to={`/clientes/${id}`} className="inline-flex items-center gap-1 text-sm text-slate-300 hover:text-white">
-          <ArrowLeft size={15} /> Voltar ao cliente
-        </Link>
-        <div className="flex items-center gap-3">
-          <span className="hidden text-xs text-slate-400 sm:block">
+      <div className="fixed left-0 right-0 top-0 z-20 flex flex-wrap items-center justify-between gap-2 bg-slate-900/95 px-4 py-2.5 backdrop-blur print:hidden">
+        {publica ? (
+          <span className="text-sm text-slate-300">
+            Estudo preparado por <strong className="text-white">Natália Maschendorf</strong>
+          </span>
+        ) : (
+          <Link to={`/clientes/${id}`} className="inline-flex items-center gap-1 text-sm text-slate-300 hover:text-white">
+            <ArrowLeft size={15} /> Voltar ao cliente
+          </Link>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="hidden text-xs text-slate-400 lg:block">
             slide {slideAtual + 1} de {totalSlides} · use as setas ← →
           </span>
+          {!publica && linkPublico && (
+            <>
+              <Button variant="secondary" onClick={copiarLink}
+                title="O cliente abre a proposta no celular, sem login — só quem tem o link acessa">
+                {copiado ? <><Check size={15} /> Link copiado!</> : <><Link2 size={15} /> Copiar link do cliente</>}
+              </Button>
+              {whatsapp(cliente.telefone) && (
+                <a target="_blank" rel="noreferrer"
+                  href={whatsapp(cliente.telefone,
+                    `Olá ${primeiroNome}! Preparei o seu estudo de proteção personalizado. `
+                    + `Você pode ver com calma por aqui: ${linkPublico}`)}>
+                  <Button variant="success"><MessageCircle size={15} /> Enviar ao cliente</Button>
+                </a>
+              )}
+            </>
+          )}
           <Button variant="gold" onClick={() => window.print()}><Printer size={15} /> Salvar em PDF / Imprimir</Button>
         </div>
       </div>
@@ -131,8 +185,12 @@ export default function Proposta() {
           <Dado rotulo="Proteção que já existe" valor={tem014 && e.coberturaAtual > 0 ? brlCompacto(e.coberturaAtual) : 'Nenhuma'}
             destaque={!(tem014 && e.coberturaAtual > 0)} />
         </div>
-        {plano.filhos_idades && (
-          <p className="mt-6 text-slate-500">Filhos: {plano.filhos_idades}</p>
+        {(e.filhos.length > 0 || plano.filhos_idades) && (
+          <p className="mt-6 text-slate-500">
+            Filhos: {e.filhos.length > 0
+              ? e.filhos.map((f) => `${f.nome || 'filho(a)'}${f.idade != null ? ` (${f.idade})` : ''}`).join(' · ')
+              : plano.filhos_idades}
+          </p>
         )}
         <p className="mt-10 max-w-xl text-center text-lg text-slate-600">
           Tudo isso depende de uma única coisa continuar existindo: <strong className="text-slate-900">a sua capacidade de gerar renda</strong>.
@@ -188,9 +246,51 @@ export default function Proposta() {
             {e.dividas > 0 && ', já quitando todas as dívidas'}.
           </p>
         )}
+        {e.capitalFilhos > 0 && (
+          <p className="mt-3 max-w-lg text-sm text-slate-400">
+            Já inclui {brlCompacto(e.capitalFilhos)} reservados para os filhos — calculados
+            até cada um completar {IDADE_INDEPENDENCIA} anos, e nem um dia a mais.
+          </p>
+        )}
       </section>
 
-      {/* 4 · OS PILARES */}
+      {/* 5 · O FUTURO DOS FILHOS — o gasto de hoje tem data para acabar */}
+      {e.filhos.some((f) => f.custoMensal > 0) && (
+        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>O futuro dos filhos</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            Cada filho protegido até os {IDADE_INDEPENDENCIA} anos — nem um dia a menos
+          </h2>
+          <div className={`mt-10 grid w-full max-w-4xl gap-5 ${e.filhos.length >= 3 ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+            {e.filhos.map((f, i) => (
+              <div key={i} className="rounded-2xl border border-slate-200/70 bg-white p-7 text-center shadow-card">
+                <div className="mx-auto w-fit rounded-2xl bg-laranja-50 p-3.5 text-laranja-600"><GraduationCap size={26} /></div>
+                <h3 className="mt-4 font-semibold text-slate-900">
+                  {f.nome || 'Filho(a)'}{f.idade != null && <span className="font-normal text-slate-400"> · {f.idade} anos</span>}
+                </h3>
+                {f.custoMensal > 0 && (
+                  <p className="mt-2 font-display text-2xl font-semibold tabular text-slate-900">{brl(f.custoMensal)}<span className="text-sm font-normal text-slate-400">/mês</span></p>
+                )}
+                <p className="mt-2 text-sm text-slate-500">
+                  {f.anosRestantes > 0
+                    ? <>garantido por <strong className="text-slate-700">{f.anosRestantes} anos</strong>, até os {IDADE_INDEPENDENCIA} — {brlCompacto(f.capitalAte24)} reservados no plano</>
+                    : <>já alcançou a independência — não entra no capital</>}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-8 w-full max-w-3xl rounded-2xl border border-slate-200/70 bg-white p-5 shadow-card">
+            <LinhaProtecao estudo={e} altura={165} />
+          </div>
+          <p className="mt-6 max-w-xl text-center text-base text-slate-600">
+            Esse gasto tem prazo: quando cada um completa {IDADE_INDEPENDENCIA}, ele sai da conta.
+            O plano reserva <strong className="text-slate-900">{brlCompacto(e.capitalFilhos)}</strong> — exatamente
+            o necessário, <strong className="text-slate-900">nem um real a mais</strong>.
+          </p>
+        </section>
+      )}
+
+      {/* 6 · OS PILARES */}
       <section className="flex min-h-screen flex-col items-center justify-center bg-white p-8 print:min-h-0 print:py-24">
         <p className={rotuloSecao}>As camadas da proteção</p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Um plano, {tem014 ? 'cinco' : 'três'} proteções</h2>
@@ -234,7 +334,7 @@ export default function Proposta() {
         </div>
       </section>
 
-      {/* 5 · BLINDAGEM PATRIMONIAL — o custo do inventário */}
+      {/* 7 · BLINDAGEM PATRIMONIAL — o custo do inventário */}
       {tem014 && temPatrimonio && (
         <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>Blindagem patrimonial</p>
@@ -263,7 +363,7 @@ export default function Proposta() {
         </section>
       )}
 
-      {/* 6 · O GAP — quanto falta */}
+      {/* 8 · O GAP — quanto falta */}
       {temGap && (
         <section className="flex min-h-screen flex-col items-center justify-center bg-white p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>O que falta</p>
@@ -282,7 +382,7 @@ export default function Proposta() {
         </section>
       )}
 
-      {/* O INVESTIMENTO — quando há cotação, o fechamento fala de valor */}
+      {/* 9 · O INVESTIMENTO — quando há cotação, o fechamento fala de valor */}
       {e.investimento && (
         <section className="flex min-h-screen flex-col items-center justify-center bg-white p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>O investimento</p>
@@ -305,11 +405,13 @@ export default function Proposta() {
                 <p className="mt-1 text-sm text-slate-500">da renda mensal — o resto continua livre</p>
               </div>
             )}
-            <div className="rounded-2xl border border-laranja-200/70 bg-laranja-50/50 p-6 text-center shadow-card">
-              <Heart size={22} className="mx-auto text-laranja-600" />
-              <p className="mt-2 font-display text-2xl font-semibold tabular text-slate-900">R$ 1 → R$ {e.investimento.alavancagem.toLocaleString('pt-BR')}</p>
-              <p className="mt-1 text-sm text-slate-500">cada real investido protege {e.investimento.alavancagem.toLocaleString('pt-BR')} reais</p>
-            </div>
+            {e.investimento.alavancagem != null && (
+              <div className="rounded-2xl border border-laranja-200/70 bg-laranja-50/50 p-6 text-center shadow-card">
+                <Heart size={22} className="mx-auto text-laranja-600" />
+                <p className="mt-2 font-display text-2xl font-semibold tabular text-slate-900">R$ 1 → R$ {e.investimento.alavancagem.toLocaleString('pt-BR')}</p>
+                <p className="mt-1 text-sm text-slate-500">cada real investido protege {e.investimento.alavancagem.toLocaleString('pt-BR')} reais</p>
+              </div>
+            )}
           </div>
           <p className="mt-10 max-w-lg text-center text-sm text-slate-400">
             Valor de referência cotado nas seguradoras para o plano completo — sujeito à análise da proposta.
@@ -317,7 +419,7 @@ export default function Proposta() {
         </section>
       )}
 
-      {/* 8 · PRÓXIMOS PASSOS */}
+      {/* 10 · PRÓXIMOS PASSOS */}
       <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 print:min-h-0 print:py-24">
         <p className={rotuloSecao}>Como ativamos o plano</p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Quatro passos simples</h2>
@@ -333,7 +435,7 @@ export default function Proposta() {
         </div>
       </section>
 
-      {/* 8 · FECHAMENTO */}
+      {/* 11 · FECHAMENTO */}
       <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-brand-800 via-brand-900 to-slate-900 p-8 text-center text-white print:min-h-0 print:py-24">
         <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-gold-400/10 blur-3xl print:hidden" />
         <div className="relative mb-10"><Logo claro tamanho={52} /></div>

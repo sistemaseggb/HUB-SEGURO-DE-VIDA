@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, Users, AlertTriangle } from 'lucide-react'
+import { Plus, Search, Users, AlertTriangle, MessageCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { etapaLabel } from '../lib/constants'
-import { dataBR } from '../lib/format'
+import { dataBR, whatsapp } from '../lib/format'
 import {
   PageHeader, Button, Card, Input, Select, Textarea, Campo, Modal, Badge, Spinner, EmptyState, ComoFunciona,
 } from '../components/ui'
@@ -17,6 +17,7 @@ export default function Clientes() {
   const [clientes, setClientes] = useState(null)
   const [assessores, setAssessores] = useState([])
   const [busca, setBusca] = useState('')
+  const [filtro, setFiltro] = useState('todos')
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState(NOVO)
   const [salvando, setSalvando] = useState(false)
@@ -37,15 +38,26 @@ export default function Clientes() {
 
   useEffect(() => { carregar() }, [])
 
+  // Filtro por situação: em andamento = todo mundo que ainda não fechou nem perdeu
+  const grupoDe = (c) => (c.status_funil === 'fechado' ? 'fechado'
+    : c.status_funil === 'perdido' ? 'perdido' : 'andamento')
+
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase()
-    if (!q) return clientes ?? []
-    return (clientes ?? []).filter(
-      (c) => c.nome.toLowerCase().includes(q)
+    return (clientes ?? []).filter((c) => {
+      if (filtro !== 'todos' && grupoDe(c) !== filtro) return false
+      if (!q) return true
+      return c.nome.toLowerCase().includes(q)
         || (c.codigo ?? '').toLowerCase().includes(q)
         || (c.assessores?.nome ?? '').toLowerCase().includes(q)
-    )
-  }, [clientes, busca])
+    })
+  }, [clientes, busca, filtro])
+
+  const contagens = useMemo(() => {
+    const acc = { todos: (clientes ?? []).length, andamento: 0, fechado: 0, perdido: 0 }
+    for (const c of clientes ?? []) acc[grupoDe(c)] += 1
+    return acc
+  }, [clientes])
 
   async function salvar(e) {
     e.preventDefault()
@@ -90,14 +102,30 @@ export default function Clientes() {
       )}
 
       <Card>
-        <div className="border-b border-slate-100 p-3">
-          <div className="relative max-w-xs">
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-3">
+          <div className="relative max-w-xs flex-1 basis-56">
             <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
             <input
               className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none"
               placeholder="Buscar por cliente ou assessor..."
               value={busca} onChange={(e) => setBusca(e.target.value)}
             />
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { id: 'todos', label: 'Todos' },
+              { id: 'andamento', label: 'Em andamento' },
+              { id: 'fechado', label: 'Fechados' },
+              { id: 'perdido', label: 'Perdidos' },
+            ].map((f) => (
+              <button key={f.id} onClick={() => setFiltro(f.id)}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  filtro === f.id
+                    ? 'bg-brand-900 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                {f.label} <span className={filtro === f.id ? 'text-white/60' : 'text-slate-400'}>{contagens[f.id]}</span>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -116,6 +144,7 @@ export default function Clientes() {
                 <th className="px-4 py-3 font-medium">Etapa</th>
                 <th className="px-4 py-3 font-medium">Telefone</th>
                 <th className="px-4 py-3 font-medium">Cadastro</th>
+                <th className="px-2 py-3 font-medium"></th>
               </tr>
             </thead>
             <tbody>
@@ -135,6 +164,15 @@ export default function Clientes() {
                   </td>
                   <td className="px-4 py-3 text-slate-500">{c.telefone ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-400">{dataBR(c.created_at)}</td>
+                  <td className="px-2 py-3">
+                    {whatsapp(c.telefone) && (
+                      <a href={whatsapp(c.telefone)} target="_blank" rel="noreferrer"
+                        className="inline-flex rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50"
+                        title={`WhatsApp de ${c.nome.split(' ')[0]}`}>
+                        <MessageCircle size={16} />
+                      </a>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

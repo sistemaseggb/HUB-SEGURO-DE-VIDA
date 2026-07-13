@@ -142,6 +142,8 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 13. [`supabase/migrations/013_tipo_produto_apolice.sql`](supabase/migrations/013_tipo_produto_apolice.sql)
 14. [`supabase/migrations/014_planejamento_detalhado.sql`](supabase/migrations/014_planejamento_detalhado.sql)
 15. [`supabase/migrations/015_cotacao_proposta.sql`](supabase/migrations/015_cotacao_proposta.sql)
+16. [`supabase/migrations/016_filhos_custo_mensal.sql`](supabase/migrations/016_filhos_custo_mensal.sql)
+17. [`supabase/migrations/017_proposta_publica.sql`](supabase/migrations/017_proposta_publica.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →

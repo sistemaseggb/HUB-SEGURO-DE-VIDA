@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { X, Lightbulb } from 'lucide-react'
 
 // Faixa didática "Como funciona" — explica o módulo e pode ser dispensada
@@ -88,6 +88,59 @@ const inputBase =
 
 export function Input(props) {
   return <input className={inputBase} {...props} />
+}
+
+// Campo de dinheiro com a pontuação brasileira enquanto digita (1.234.567,89).
+// Por fora se comporta como um Input comum: `value` é o número (ou string
+// numérica) e `onChange` recebe um evento com e.target.value numérico — os
+// formulários existentes não precisam mudar nada além do componente.
+export function InputMoeda({ value, onChange, prefixo = 'R$', ...props }) {
+  const formatar = (v) => {
+    if (v == null || v === '') return ''
+    const num = Number(v)
+    if (!Number.isFinite(num)) return ''
+    // preserva os decimais digitados (até 2), sem forçar ",00" em inteiros
+    const decimais = String(v).includes('.') ? Math.min(String(v).split('.')[1].length, 2) : 0
+    return num.toLocaleString('pt-BR', { minimumFractionDigits: decimais, maximumFractionDigits: 2 })
+  }
+  const [texto, setTexto] = useState(() => formatar(value))
+  const valorInterno = useRef(String(value ?? ''))
+
+  // Mudança vinda de fora (ex.: botão "usar sugestão") — reformata o campo
+  useEffect(() => {
+    if (String(value ?? '') !== valorInterno.current) {
+      valorInterno.current = String(value ?? '')
+      setTexto(formatar(value))
+    }
+  }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function aoDigitar(e) {
+    const limpo = e.target.value.replace(/[^\d,]/g, '')
+    const [bruto = '', ...resto] = limpo.split(',')
+    const inteiro = bruto.slice(0, 15)
+    const decimal = resto.length > 0 ? resto.join('').slice(0, 2) : null
+    const numero = inteiro === '' && decimal == null ? ''
+      : `${inteiro === '' ? '0' : inteiro}${decimal != null ? `.${decimal}` : ''}`
+    valorInterno.current = numero
+    setTexto(
+      (inteiro === '' ? '' : Number(inteiro).toLocaleString('pt-BR'))
+      + (decimal != null ? `,${decimal}` : ''),
+    )
+    onChange?.({ target: { value: numero } })
+  }
+
+  return (
+    <div className="relative">
+      {prefixo && (
+        <span className="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-sm text-slate-400">
+          {prefixo}
+        </span>
+      )}
+      <input inputMode="decimal" autoComplete="off"
+        className={`${inputBase} ${prefixo ? 'pl-10' : ''} tabular`}
+        value={texto} onChange={aoDigitar} {...props} />
+    </div>
+  )
 }
 
 export function Select({ children, className = '', ...props }) {

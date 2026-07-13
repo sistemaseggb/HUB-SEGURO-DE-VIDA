@@ -4,17 +4,18 @@ import {
   ArrowLeft, MessageCircle, Presentation, Copy, Check, Printer,
   CalendarPlus, FileSignature, ClipboardList, Zap, Upload, FileText, Download, Trash2, Pencil,
   Phone, Mail, Handshake, StickyNote, Flame, ChartPie, HeartHandshake, RefreshCw, CheckCircle2,
-  Users2, Wallet, Shield, Landmark, Sparkles,
+  Users2, Wallet, Shield, Landmark, Sparkles, Plus, Baby, Archive, TrendingDown,
 } from 'lucide-react'
 import { ETAPAS_FORM, ROTULOS_FORM } from '../lib/formularioConfig'
 import { supabase } from '../lib/supabase'
 import { ETAPAS, etapaLabel, STATUS_REUNIAO } from '../lib/constants'
 import { brl, brlCompacto, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib/format'
-import { calcularEstudo, PILARES } from '../lib/estudo'
+import { calcularEstudo, normalizarFilhos, IDADE_INDEPENDENCIA, PILARES } from '../lib/estudo'
 import {
-  Button, Card, Input, Select, Textarea, Campo, Modal, Badge, Spinner,
+  Button, Card, Input, InputMoeda, Select, Textarea, Campo, Modal, Badge, Spinner,
 } from '../components/ui'
 import { useToast } from '../components/Toast'
+import LinhaProtecao from '../components/LinhaProtecao'
 
 const ABAS = [
   { nome: 'Planejamento', icone: ChartPie },
@@ -42,15 +43,27 @@ export default function ClienteDetalhe() {
   const [formEdit, setFormEdit] = useState(null)
   const [erroEdit, setErroEdit] = useState(null)
 
+  const [carteira, setCarteira] = useState(null)
+
   const carregar = useCallback(async () => {
-    const [c, pr, ct] = await Promise.all([
+    const [c, pr, ct, ap] = await Promise.all([
       supabase.from('clientes').select('*, assessores(nome, telefone)').eq('id', id).single(),
       supabase.from('vw_prioridades_classificadas').select('proxima_acao, temperatura, score').eq('id', id).maybeSingle(),
       supabase.from('vw_clientes_contato').select('dias_sem_contato, ultimo_contato').eq('id', id).maybeSingle(),
+      supabase.from('apolices').select('valor_premio_mensal, capital_segurado, comissao_gerada, status').eq('id_cliente', id),
     ])
     setCliente(c.data)
     setPrioridade(pr.data)
     setContato(ct.data)
+    // resumo de valor do cliente para o cabeçalho (só apólices ativas)
+    const ativas = (ap.data ?? []).filter((a) => a.status === 'ativa')
+    setCarteira({
+      total: (ap.data ?? []).length,
+      ativas: ativas.length,
+      premio: ativas.reduce((s, a) => s + Number(a.valor_premio_mensal || 0), 0),
+      capital: ativas.reduce((s, a) => s + Number(a.capital_segurado || 0), 0),
+      comissao: (ap.data ?? []).reduce((s, a) => s + Number(a.comissao_gerada || 0), 0),
+    })
   }, [id])
 
   useEffect(() => { carregar() }, [carregar])
@@ -148,6 +161,34 @@ export default function ClienteDetalhe() {
             </button>
           </div>
         </div>
+        {/* Resumo de valor: o que este cliente representa na carteira */}
+        {carteira && carteira.total > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+              <FileSignature size={13} className="text-laranja-600" />
+              <strong className="tabular text-slate-800">{carteira.ativas}</strong> apólice(s) ativa(s)
+              {carteira.total > carteira.ativas && <span className="text-slate-400">de {carteira.total}</span>}
+            </span>
+            {carteira.premio > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+                <Wallet size={13} className="text-laranja-600" />
+                Prêmio ativo: <strong className="tabular text-slate-800">{brl(carteira.premio)}/mês</strong>
+              </span>
+            )}
+            {carteira.capital > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+                <Shield size={13} className="text-laranja-600" />
+                Capital segurado: <strong className="tabular text-slate-800">{brlCompacto(carteira.capital)}</strong>
+              </span>
+            )}
+            {carteira.comissao > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+                <Sparkles size={13} className="text-laranja-600" />
+                Comissão gerada: <strong className="tabular text-slate-800">{brl(carteira.comissao)}</strong>
+              </span>
+            )}
+          </div>
+        )}
         {cliente.perfil_necessidade && (
           <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{cliente.perfil_necessidade}</p>
         )}
@@ -285,6 +326,38 @@ function AbaHistorico({ idCliente, cliente }) {
 // botão "usar") → sucessão/inventário → objetivos. Tudo alimenta os slides.
 const SECAO = 'mb-2 mt-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400 first:mt-0'
 
+// Campo de pilar: valor com pontuação + sugestão calculada com botão "usar".
+// Fica FORA da AbaPlanejamento: se fosse recriado a cada render, o React
+// remontaria o input a cada tecla e o campo perderia o foco.
+function CampoPilar({ pilar, estudo, plano, setPlano }) {
+  const sugestao = estudo.sugestoes[pilar.id]
+  const valorForm = plano[pilar.campo]
+  const sugestaoArredondada = Math.round(sugestao * 100) / 100
+  return (
+    <div className="rounded-xl border border-slate-200/70 bg-white p-4">
+      <p className="font-medium text-slate-800">{pilar.rotulo}</p>
+      <p className="mb-3 mt-0.5 text-xs text-slate-400">{pilar.descricao}</p>
+      <InputMoeda value={valorForm ?? ''}
+        placeholder={sugestao > 0 ? Math.round(sugestao).toLocaleString('pt-BR') : '0'}
+        onChange={(e) => setPlano({ ...plano, [pilar.campo]: e.target.value })} />
+      <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+        <span className="text-slate-400" title={pilar.comoCalcula}>
+          Sugestão: <strong className="text-slate-600">{pilar.porDia ? `${brl(sugestao)}/dia` : brlCompacto(sugestao)}</strong>
+        </span>
+        {sugestao > 0 && String(valorForm ?? '') === '' && (
+          <span className="text-slate-300">em branco = usa a sugestão</span>
+        )}
+        {sugestao > 0 && String(valorForm ?? '') !== '' && Number(valorForm) !== sugestaoArredondada && (
+          <button type="button" className="font-semibold text-blue-600 hover:underline"
+            onClick={() => setPlano({ ...plano, [pilar.campo]: sugestaoArredondada })}>
+            usar sugestão
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function AbaPlanejamento({ idCliente }) {
   const toast = useToast()
   const [plano, setPlano] = useState(null)
@@ -295,7 +368,7 @@ function AbaPlanejamento({ idCliente }) {
       .then(({ data }) => setPlano(data ?? {
         id_cliente: idCliente, profissao: '', estado_civil: '', renda_mensal: '',
         custo_vida_mensal: '', patrimonio_total: '', dividas_total: '',
-        num_dependentes: 0, anos_protecao: 10, capital_sugerido: '',
+        num_dependentes: 0, dependentes: [], anos_protecao: 10, capital_sugerido: '',
         objetivos: '', observacoes_reuniao: '',
       }))
   }, [idCliente])
@@ -308,8 +381,28 @@ function AbaPlanejamento({ idCliente }) {
   const tem014 = 'capital_invalidez' in plano
   const tem015 = 'premio_estimado' in plano
 
+  // Filhos: lista estruturada guardada na coluna jsonb `dependentes`
+  // (formato [{nome, idade, custo_mensal}]) — o gasto some quando fazem 24
+  const filhos = Array.isArray(plano.dependentes) ? plano.dependentes : []
+  const setFilho = (i, campo, valor) =>
+    setPlano({ ...plano, dependentes: filhos.map((f, j) => (j === i ? { ...f, [campo]: valor } : f)) })
+  const addFilho = () =>
+    setPlano({ ...plano, dependentes: [...filhos, { nome: '', idade: '', custo_mensal: '' }] })
+  const removerFilho = (i) =>
+    setPlano({ ...plano, dependentes: filhos.filter((_, j) => j !== i) })
+
   async function salvar(e) {
     e.preventDefault()
+    // limpa linhas vazias e normaliza os tipos antes de gravar o jsonb
+    const filhosLimpos = filhos
+      .filter((f) => String(f?.nome ?? '').trim() !== ''
+        || (f?.idade !== '' && f?.idade != null) || Number(f?.custo_mensal) > 0)
+      .map((f) => ({
+        nome: String(f.nome ?? '').trim(),
+        idade: f.idade === '' || f.idade == null ? null : Number(f.idade),
+        custo_mensal: f.custo_mensal === '' || f.custo_mensal == null ? null : Number(f.custo_mensal),
+      }))
+    const idades = filhosLimpos.map((f) => f.idade).filter((i) => i != null)
     const payload = {
       id_cliente: idCliente,
       profissao: plano.profissao || null,
@@ -319,7 +412,8 @@ function AbaPlanejamento({ idCliente }) {
       patrimonio_total: plano.patrimonio_total || null,
       dividas_total: plano.dividas_total || 0,
       capital_sugerido: plano.capital_sugerido || null, // vazio = banco calcula sozinho
-      num_dependentes: plano.num_dependentes || 0,
+      dependentes: filhosLimpos,
+      num_dependentes: filhosLimpos.length > 0 ? filhosLimpos.length : (plano.num_dependentes || 0),
       anos_protecao: plano.anos_protecao || 10,
       objetivos: plano.objetivos || null,
       observacoes_reuniao: plano.observacoes_reuniao || null,
@@ -333,7 +427,10 @@ function AbaPlanejamento({ idCliente }) {
         itcmd_pct: plano.itcmd_pct ?? 4,
         custas_pct: plano.custas_pct ?? 8,
         conjuge_nome: plano.conjuge_nome || null,
-        filhos_idades: plano.filhos_idades || null,
+        // texto-resumo das idades (mantém compatibilidade com telas antigas)
+        filhos_idades: idades.length > 0
+          ? `${idades.join(', ')} anos`
+          : plano.filhos_idades || null,
       }),
     }
     const { data, error } = await supabase.from('planejamentos').upsert(payload, { onConflict: 'id_cliente' })
@@ -343,35 +440,6 @@ function AbaPlanejamento({ idCliente }) {
     setSalvo(true)
     toast.ok('Planejamento salvo.')
     setTimeout(() => setSalvo(false), 2500)
-  }
-
-  // Campo de pilar: input + sugestão calculada com botão "usar"
-  const CampoPilar = ({ pilar }) => {
-    const sugestao = estudo.sugestoes[pilar.id]
-    const valorForm = plano[pilar.campo]
-    return (
-      <div className="rounded-xl border border-slate-200/70 bg-white p-4">
-        <p className="font-medium text-slate-800">{pilar.rotulo}</p>
-        <p className="mb-3 mt-0.5 text-xs text-slate-400">{pilar.descricao}</p>
-        <Input type="number" step="0.01" min="0" value={valorForm ?? ''}
-          placeholder={sugestao > 0 ? String(Math.round(sugestao)) : '0'}
-          onChange={set(pilar.campo)} />
-        <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-          <span className="text-slate-400" title={pilar.comoCalcula}>
-            Sugestão: <strong className="text-slate-600">{pilar.porDia ? `${brl(sugestao)}/dia` : brlCompacto(sugestao)}</strong>
-          </span>
-          {sugestao > 0 && String(valorForm ?? '') === '' && (
-            <span className="text-slate-300">em branco = usa a sugestão</span>
-          )}
-          {sugestao > 0 && String(valorForm ?? '') !== '' && Number(valorForm) !== Math.round(sugestao * 100) / 100 && (
-            <button type="button" className="font-semibold text-blue-600 hover:underline"
-              onClick={() => setPlano({ ...plano, [pilar.campo]: Math.round(sugestao * 100) / 100 })}>
-              usar sugestão
-            </button>
-          )}
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -388,40 +456,101 @@ function AbaPlanejamento({ idCliente }) {
               ))}
             </Select>
           </Campo>
-          <Campo label="Nº de dependentes">
-            <Input type="number" min="0" value={plano.num_dependentes ?? 0} onChange={set('num_dependentes')} />
-          </Campo>
-          {tem014 && (
-            <>
-              <Campo label="Cônjuge" dica="Aparece no estudo">
-                <Input value={plano.conjuge_nome ?? ''} onChange={set('conjuge_nome')} />
-              </Campo>
-              <Campo label="Idades dos filhos" dica={'Ex.: "3, 7 e 12 anos"'}>
-                <Input value={plano.filhos_idades ?? ''} onChange={set('filhos_idades')} />
-              </Campo>
-            </>
+          {tem014 ? (
+            <Campo label="Cônjuge" dica="Aparece no estudo">
+              <Input value={plano.conjuge_nome ?? ''} onChange={set('conjuge_nome')} />
+            </Campo>
+          ) : (
+            <Campo label="Nº de dependentes">
+              <Input type="number" min="0" value={plano.num_dependentes ?? 0} onChange={set('num_dependentes')} />
+            </Campo>
+          )}
+        </div>
+
+        {/* Filhos: quanto custam HOJE — o estudo garante o valor só até os 24 */}
+        <div className="mt-4 rounded-xl border border-slate-200/70 bg-slate-50/60 p-4">
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-sm font-medium text-slate-700">
+              <Baby size={15} className="text-laranja-600" /> Filhos — o gasto que tem prazo para acabar
+            </p>
+            <button type="button" onClick={addFilho}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:border-slate-400 hover:text-slate-800">
+              <Plus size={13} /> Adicionar filho
+            </button>
+          </div>
+          <p className="mb-3 text-xs text-slate-400">
+            Informe quanto cada filho custa por mês hoje (escola, saúde, atividades...). Esse valor já
+            faz parte do custo de vida — o estudo o separa e garante <strong>apenas até os {IDADE_INDEPENDENCIA} anos</strong>:
+            depois disso ele deixa de existir e sai do capital.
+          </p>
+          {filhos.length === 0 && (
+            <p className="rounded-lg border border-dashed border-slate-200 bg-white py-3 text-center text-xs text-slate-400">
+              Nenhum filho cadastrado — sem filhos, o custo de vida inteiro é projetado pelo horizonte do estudo.
+            </p>
+          )}
+          {filhos.map((f, i) => {
+            const info = normalizarFilhos({ dependentes: [f] }, estudo.anos)[0]
+            return (
+              <div key={i} className="mb-2 grid items-end gap-2 rounded-lg border border-slate-200/70 bg-white p-3 sm:grid-cols-[1fr_90px_1fr_auto]">
+                <Campo label="Nome">
+                  <Input value={f.nome ?? ''} placeholder="Nome do filho"
+                    onChange={(e) => setFilho(i, 'nome', e.target.value)} />
+                </Campo>
+                <Campo label="Idade">
+                  <Input type="number" min="0" max="40" value={f.idade ?? ''}
+                    onChange={(e) => setFilho(i, 'idade', e.target.value)} />
+                </Campo>
+                <Campo label="Gasto mensal hoje">
+                  <InputMoeda value={f.custo_mensal ?? ''} placeholder="0"
+                    onChange={(e) => setFilho(i, 'custo_mensal', e.target.value)} />
+                </Campo>
+                <div className="flex items-center gap-2 pb-1">
+                  <span className="whitespace-nowrap text-xs text-slate-400">
+                    {info && info.idade != null
+                      ? info.anosRestantes > 0
+                        ? <>faltam <strong className="text-slate-600">{info.anosRestantes} anos</strong> até os {IDADE_INDEPENDENCIA}{info.capitalAte24 > 0 && <> · {brlCompacto(info.capitalAte24)}</>}</>
+                        : <span className="text-emerald-600">já independente ✓</span>
+                      : 'informe a idade'}
+                  </span>
+                  <button type="button" onClick={() => removerFilho(i)}
+                    className="rounded p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-600" title="Remover filho">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+          {estudo.custoFilhosMensal > 0 && (
+            <p className="mt-2 text-xs text-slate-500">
+              Gasto com filhos hoje: <strong className="tabular text-slate-700">{brl(estudo.custoFilhosMensal)}/mês</strong>
+              {' '}· reserva necessária até cada um fazer {IDADE_INDEPENDENCIA}:{' '}
+              <strong className="tabular text-slate-700">{brlCompacto(estudo.capitalFilhos)}</strong>
+              {' '}— já embutida na sugestão de proteção da família.
+            </p>
           )}
         </div>
 
         <p className={SECAO}><Wallet size={13} /> Vida financeira</p>
         <div className="grid gap-4 md:grid-cols-3">
-          <Campo label="Renda mensal (R$)"><Input type="number" step="0.01" value={plano.renda_mensal ?? ''} onChange={set('renda_mensal')} /></Campo>
-          <Campo label="Custo de vida mensal (R$)"><Input type="number" step="0.01" value={plano.custo_vida_mensal ?? ''} onChange={set('custo_vida_mensal')} /></Campo>
-          <Campo label="Dívidas totais (R$)"><Input type="number" step="0.01" value={plano.dividas_total ?? ''} onChange={set('dividas_total')} /></Campo>
-          <Campo label="Patrimônio total (R$)" dica="Base do cálculo de inventário">
-            <Input type="number" step="0.01" value={plano.patrimonio_total ?? ''} onChange={set('patrimonio_total')} />
+          <Campo label="Renda mensal"><InputMoeda value={plano.renda_mensal ?? ''} onChange={set('renda_mensal')} /></Campo>
+          <Campo label="Custo de vida mensal" dica={estudo.custoFilhosMensal > 0 ? `Inclui os ${brl(estudo.custoFilhosMensal)} dos filhos` : 'Quanto a família gasta por mês, no total'}>
+            <InputMoeda value={plano.custo_vida_mensal ?? ''} onChange={set('custo_vida_mensal')} />
+          </Campo>
+          <Campo label="Dívidas totais"><InputMoeda value={plano.dividas_total ?? ''} onChange={set('dividas_total')} /></Campo>
+          <Campo label="Patrimônio total" dica="Base do cálculo de inventário">
+            <InputMoeda value={plano.patrimonio_total ?? ''} onChange={set('patrimonio_total')} />
           </Campo>
           <Campo label="Anos de proteção" dica="Horizonte do estudo">
             <Input type="number" min="1" value={plano.anos_protecao ?? 10} onChange={set('anos_protecao')} />
           </Campo>
           {tem014 && (
-            <Campo label="Cobertura que já possui (R$)" dica="Seguros atuais — o estudo mostra o gap">
-              <Input type="number" step="0.01" value={plano.cobertura_atual ?? ''} onChange={set('cobertura_atual')} />
+            <Campo label="Cobertura que já possui" dica="Seguros atuais — o estudo mostra o gap">
+              <InputMoeda value={plano.cobertura_atual ?? ''} onChange={set('cobertura_atual')} />
             </Campo>
           )}
           {tem015 && (
-            <Campo label="Prêmio cotado (R$/mês)" dica="Cotação nas seguradoras — vira o slide 'O investimento'">
-              <Input type="number" step="0.01" min="0" value={plano.premio_estimado ?? ''} onChange={set('premio_estimado')} />
+            <Campo label="Prêmio cotado (por mês)" dica="Cotação nas seguradoras — vira o slide 'O investimento'">
+              <InputMoeda value={plano.premio_estimado ?? ''} onChange={set('premio_estimado')} />
             </Campo>
           )}
         </div>
@@ -434,8 +563,10 @@ function AbaPlanejamento({ idCliente }) {
           </p>
         )}
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <CampoPilar pilar={PILARES[0]} />
-          {tem014 && PILARES.slice(1).map((p) => <CampoPilar key={p.id} pilar={p} />)}
+          <CampoPilar pilar={PILARES[0]} estudo={estudo} plano={plano} setPlano={setPlano} />
+          {tem014 && PILARES.slice(1).map((p) => (
+            <CampoPilar key={p.id} pilar={p} estudo={estudo} plano={plano} setPlano={setPlano} />
+          ))}
         </div>
 
         {tem014 && (
@@ -506,7 +637,7 @@ function AbaPlanejamento({ idCliente }) {
                 <>
                   <p className="font-display text-lg font-semibold tabular-nums text-slate-900">{estudo.anosSugeridosPorFilhos} anos</p>
                   <p className="text-xs text-slate-400">
-                    até o mais novo fazer 24 —{' '}
+                    até o mais novo fazer {IDADE_INDEPENDENCIA} —{' '}
                     {Number(plano.anos_protecao) !== estudo.anosSugeridosPorFilhos && (
                       <button type="button" className="font-semibold text-laranja-700 hover:underline"
                         onClick={() => setPlano({ ...plano, anos_protecao: estudo.anosSugeridosPorFilhos })}>
@@ -519,16 +650,16 @@ function AbaPlanejamento({ idCliente }) {
               ) : (
                 <>
                   <p className="font-display text-lg font-semibold text-slate-300">—</p>
-                  <p className="text-xs text-slate-400">preencha as idades dos filhos</p>
+                  <p className="text-xs text-slate-400">cadastre os filhos com as idades acima</p>
                 </>
               )}
             </div>
             <div className="rounded-lg bg-slate-50 p-3">
               <p className="text-[11px] uppercase tracking-wide text-slate-400">Alavancagem do plano</p>
-              {estudo.investimento ? (
+              {estudo.investimento?.alavancagem != null ? (
                 <>
-                  <p className="font-display text-lg font-semibold tabular-nums text-slate-900">1 → {estudo.investimento.alavancagem}</p>
-                  <p className="text-xs text-slate-400">cada R$ 1/mês protege R$ {estudo.investimento.alavancagem}</p>
+                  <p className="font-display text-lg font-semibold tabular-nums text-slate-900">1 → {estudo.investimento.alavancagem.toLocaleString('pt-BR')}</p>
+                  <p className="text-xs text-slate-400">cada R$ 1/mês protege R$ {estudo.investimento.alavancagem.toLocaleString('pt-BR')}</p>
                 </>
               ) : (
                 <>
@@ -540,6 +671,21 @@ function AbaPlanejamento({ idCliente }) {
           </div>
         </div>
 
+        {/* Linha do tempo: o custo garantido caindo em degraus até os 24 */}
+        {estudo.custoFilhosMensal > 0 && estudo.custoVida > 0 && (
+          <div className="mt-6 rounded-xl border border-slate-200/70 bg-white p-4">
+            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <TrendingDown size={13} className="text-laranja-600" /> Linha do tempo da proteção
+            </p>
+            <p className="mb-3 text-xs text-slate-400">
+              O custo mensal que o plano garante cai em degraus: cada filho sai da conta ao
+              fazer {IDADE_INDEPENDENCIA} anos, e o padrão de vida vale pelo horizonte do estudo.
+              É o desenho de por que o capital é sob medida — mostre na reunião.
+            </p>
+            <LinhaProtecao estudo={estudo} />
+          </div>
+        )}
+
         {/* Resumo vivo do estudo */}
         <div className="mt-6 rounded-xl border border-brand-100 bg-brand-50/50 p-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-700">Resumo do estudo (ao vivo)</p>
@@ -547,7 +693,11 @@ function AbaPlanejamento({ idCliente }) {
             <div>
               <p className="text-xs text-slate-400">Proteção da família</p>
               <p className="font-semibold tabular-nums text-slate-900">{brlCompacto(estudo.valores.morte)}</p>
-              {estudo.mesesProtegidos > 0 && (
+              {estudo.capitalFilhos > 0 ? (
+                <p className="text-xs text-slate-500">
+                  inclui {brlCompacto(estudo.capitalFilhos)} para os filhos até os {IDADE_INDEPENDENCIA}
+                </p>
+              ) : estudo.mesesProtegidos > 0 && (
                 <p className="text-xs text-slate-500">{estudo.mesesProtegidos} meses de padrão de vida</p>
               )}
             </div>
@@ -778,6 +928,66 @@ const STATUS_APOLICE = [
   { id: 'cancelada', label: 'Cancelada', tom: 'red' },
 ]
 
+// Tabela de apólices — usada duas vezes na aba: novas (do Hub) e pré-sistema
+function TabelaApolices({ apolices, preSistema = false, onEditar, onExcluir }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200/70">
+      <table className="w-full min-w-[880px] text-left text-sm">
+        <thead>
+          <tr className={`border-b border-slate-100 text-xs uppercase text-slate-400 ${preSistema ? 'bg-slate-50/80' : 'bg-white'}`}>
+            <th className="py-2.5 pl-4 pr-3 font-medium">Seguradora</th>
+            <th className="py-2.5 pr-3 font-medium">Prêmio mensal</th>
+            <th className="py-2.5 pr-3 font-medium">Capital</th>
+            <th className="py-2.5 pr-3 font-medium">Comissão total</th>
+            <th className="py-2.5 pr-3 font-medium">Natália / Assessor / Escritório</th>
+            <th className="py-2.5 pr-3 font-medium">Vigência</th>
+            <th className="py-2.5 pr-3 font-medium">Status</th>
+            <th className="py-2.5 pr-2 font-medium"></th>
+          </tr>
+        </thead>
+        <tbody className={preSistema ? 'bg-slate-50/40' : 'bg-white'}>
+          {apolices.map((a) => (
+            <tr key={a.id} className={`border-b border-slate-50 last:border-0 ${a.status === 'cancelada' ? 'opacity-60' : ''}`}>
+              <td className="py-3 pl-4 pr-3 font-medium text-slate-800">
+                {a.seguradoras?.nome}
+                {a.numero_apolice && <span className="ml-1.5 font-mono text-xs font-normal text-slate-400">{a.numero_apolice}</span>}
+                {a.tipo_produto && <p className="text-xs font-normal text-slate-400">{a.tipo_produto}</p>}
+              </td>
+              <td className="py-3 pr-3 tabular">{brl(a.valor_premio_mensal)}</td>
+              <td className="py-3 pr-3 tabular">{Number(a.capital_segurado) > 0 ? brl(a.capital_segurado) : '—'}</td>
+              <td className="py-3 pr-3 font-semibold tabular text-slate-800">{brl(a.comissao_gerada)}</td>
+              <td className="py-3 pr-3 tabular text-slate-500">
+                {brl(a.comissao_natalia)} / {brl(a.comissao_assessor)} / {brl(a.comissao_escritorio)}
+              </td>
+              <td className="py-3 pr-3">{dataBR(a.data_vigencia)}</td>
+              <td className="py-3 pr-3">
+                <Badge tom={STATUS_APOLICE.find((s) => s.id === a.status)?.tom ?? 'slate'}>
+                  {STATUS_APOLICE.find((s) => s.id === a.status)?.label ?? a.status}
+                </Badge>
+                {a.status === 'cancelada' && a.motivo_cancelamento && (
+                  <p className="mt-1 max-w-[180px] truncate text-xs text-slate-400" title={a.motivo_cancelamento}>
+                    {a.motivo_cancelamento}
+                  </p>
+                )}
+              </td>
+              <td className="py-3 pr-2">
+                <div className="flex gap-1">
+                  <button onClick={() => onEditar(a)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600" title="Editar">
+                    <Pencil size={15} />
+                  </button>
+                  <button onClick={() => onExcluir(a)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir">
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function AbaApolices({ idCliente, onMudanca }) {
   const toast = useToast()
   const [apolices, setApolices] = useState(null)
@@ -820,7 +1030,8 @@ function AbaApolices({ idCliente, onMudanca }) {
       data_vigencia: form.data_vigencia,
       status: form.status,
       // coluna da migração 012 — só envia quando ela já existe no banco
-      ...(apolices.some((a) => 'motivo_cancelamento' in a)
+      // (com a lista vazia não dá para inspecionar; assume que a 012 rodou)
+      ...((apolices.length === 0 || apolices.some((a) => 'motivo_cancelamento' in a))
         && { motivo_cancelamento: form.status === 'cancelada' ? (form.motivo_cancelamento || null) : null }),
     }
     // Na edição NÃO reenviamos id_cliente (evita re-disparar a esteira de pós-venda)
@@ -857,54 +1068,34 @@ function AbaApolices({ idCliente, onMudanca }) {
       {apolices.length === 0
         ? <p className="py-6 text-center text-sm text-slate-400">Nenhuma apólice ainda.</p>
         : (
-          <div className="overflow-x-auto"><table className="w-full min-w-[880px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
-                <th className="py-2 pr-3 font-medium">Seguradora</th>
-                <th className="py-2 pr-3 font-medium">Prêmio mensal</th>
-                <th className="py-2 pr-3 font-medium">Capital</th>
-                <th className="py-2 pr-3 font-medium">Comissão total</th>
-                <th className="py-2 pr-3 font-medium">Natália / Assessor / Escritório</th>
-                <th className="py-2 pr-3 font-medium">Emissão / Vigência</th>
-                <th className="py-2 pr-3 font-medium">Status</th>
-                <th className="py-2 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {apolices.map((a) => (
-                <tr key={a.id} className={`border-b border-slate-50 ${a.status === 'cancelada' ? 'opacity-60' : ''}`}>
-                  <td className="py-3 pr-3 font-medium text-slate-800">{a.seguradoras?.nome}</td>
-                  <td className="py-3 pr-3">{brl(a.valor_premio_mensal)}</td>
-                  <td className="py-3 pr-3">{brl(a.capital_segurado)}</td>
-                  <td className="py-3 pr-3 font-semibold text-slate-800">{brl(a.comissao_gerada)}</td>
-                  <td className="py-3 pr-3 text-slate-500">
-                    {brl(a.comissao_natalia)} / {brl(a.comissao_assessor)} / {brl(a.comissao_escritorio)}
-                  </td>
-                  <td className="py-3 pr-3">{dataBR(a.data_vigencia)}</td>
-                  <td className="py-3 pr-3">
-                    <Badge tom={STATUS_APOLICE.find((s) => s.id === a.status)?.tom ?? 'slate'}>
-                      {STATUS_APOLICE.find((s) => s.id === a.status)?.label ?? a.status}
-                    </Badge>
-                    {a.status === 'cancelada' && a.motivo_cancelamento && (
-                      <p className="mt-1 max-w-[180px] truncate text-xs text-slate-400" title={a.motivo_cancelamento}>
-                        {a.motivo_cancelamento}
-                      </p>
-                    )}
-                  </td>
-                  <td className="py-3">
-                    <div className="flex gap-1">
-                      <button onClick={() => abrirEdicao(a)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600" title="Editar">
-                        <Pencil size={15} />
-                      </button>
-                      <button onClick={() => excluir(a)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir">
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table></div>
+          <>
+            {/* Organização: as vendas feitas PELO Hub separadas do histórico
+                importado das planilhas antigas (pré-sistema) */}
+            {apolices.some((a) => !a.importada) && (
+              <div className="mb-5">
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <FileSignature size={13} className="text-laranja-600" />
+                  Novas apólices — registradas no Hub ({apolices.filter((a) => !a.importada).length})
+                </p>
+                <TabelaApolices apolices={apolices.filter((a) => !a.importada)}
+                  onEditar={abrirEdicao} onExcluir={excluir} />
+              </div>
+            )}
+            {apolices.some((a) => a.importada) && (
+              <div>
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  <Archive size={13} />
+                  Apólices pré-sistema — histórico importado ({apolices.filter((a) => a.importada).length})
+                </p>
+                <TabelaApolices apolices={apolices.filter((a) => a.importada)} preSistema
+                  onEditar={abrirEdicao} onExcluir={excluir} />
+                <p className="mt-2 text-xs text-slate-400">
+                  Vieram das planilhas antigas via <strong>Importar</strong> — valem como memória do
+                  atendimento e não disparam as automações de pós-venda.
+                </p>
+              </div>
+            )}
+          </>
         )}
 
       <Modal aberto={modal} titulo={editando ? 'Editar apólice' : 'Registrar venda 🎉'} onFechar={() => setModal(false)}>
@@ -919,12 +1110,12 @@ function AbaApolices({ idCliente, onMudanca }) {
             </Select>
           </Campo>
           <div className="grid grid-cols-2 gap-3">
-            <Campo label="Prêmio mensal (R$)" obrigatorio>
-              <Input type="number" step="0.01" min="0" required value={form.valor_premio_mensal}
+            <Campo label="Prêmio mensal" obrigatorio>
+              <InputMoeda required value={form.valor_premio_mensal}
                 onChange={(e) => setForm({ ...form, valor_premio_mensal: e.target.value })} />
             </Campo>
-            <Campo label="Capital segurado (R$)" obrigatorio>
-              <Input type="number" step="0.01" min="0" required value={form.capital_segurado}
+            <Campo label="Capital segurado" obrigatorio>
+              <InputMoeda required value={form.capital_segurado}
                 onChange={(e) => setForm({ ...form, capital_segurado: e.target.value })} />
             </Campo>
             <Campo label="Início de vigência" obrigatorio>
@@ -1094,7 +1285,13 @@ async function imprimirDossie(cliente, contato) {
   const linhaAp = (a) => `<tr>
     <td>${esc(a.seguradoras?.nome ?? '—')}</td><td>${esc(a.tipo_produto ?? '—')}</td>
     <td class="num">${brl(a.valor_premio_mensal)}/mês</td><td>${dataBR(a.data_vigencia)}</td>
+    <td>${a.importada ? 'Pré-sistema' : 'Hub'}</td>
     <td>${a.status === 'ativa' ? 'Ativa' : a.status === 'cancelada' ? `Cancelada${a.motivo_cancelamento ? ` — ${esc(a.motivo_cancelamento)}` : ''}` : 'Suspensa'}</td></tr>`
+
+  const filhosDossie = estudo?.filhos?.length
+    ? estudo.filhos.map((f) => `${esc(f.nome || 'filho(a)')}${f.idade != null ? ` (${f.idade})` : ''}${
+      f.custoMensal > 0 ? ` — ${brl(f.custoMensal)}/mês até os 24` : ''}`).join(' · ')
+    : (plano?.filhos_idades ? esc(plano.filhos_idades) : null)
 
   const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
     <title>Dossiê — ${esc(cliente.nome)}</title>
@@ -1136,12 +1333,13 @@ async function imprimirDossie(cliente, contato) {
       <div class="celula"><p>Sucessão</p><b>${brlCompacto(estudo.valores.sucessao)}</b></div>
       <div class="celula"><p>Gap vs atual</p><b>${estudo.gap > 0 ? brlCompacto(estudo.gap) : 'Coberto ✓'}</b></div>
     </div>
+    ${filhosDossie ? `<p style="margin-top:6px"><strong>Filhos:</strong> ${filhosDossie}</p>` : ''}
     ${plano.objetivos ? `<p style="margin-top:6px"><strong>Objetivos:</strong> ${esc(plano.objetivos)}</p>` : ''}
     ${plano.observacoes_reuniao ? `<p style="margin-top:3px"><strong>Notas da última reunião:</strong> ${esc(plano.observacoes_reuniao)}</p>` : ''}`
     : '<div class="aviso">Planejamento ainda não preenchido — colete os dados na reunião (renda, custo de vida, patrimônio, dívidas, família).</div>'}
 
     <h2>Apólices (${apolices.length})</h2>
-    ${apolices.length ? `<table><tr><th>Seguradora</th><th>Produto</th><th>Prêmio</th><th>Emissão</th><th>Status</th></tr>
+    ${apolices.length ? `<table><tr><th>Seguradora</th><th>Produto</th><th>Prêmio</th><th>Emissão</th><th>Origem</th><th>Status</th></tr>
       ${apolices.map(linhaAp).join('')}</table>` : '<p class="muted">Nenhuma apólice ainda — cliente em prospecção.</p>'}
 
     <h2>Últimas conversas</h2>

@@ -112,3 +112,38 @@
     background: linear-gradient(90deg, var(--color-laranja-500), var(--color-laranja-300));
   }
 }
+
+/* ============================================================================
+   PDF DA PROPOSTA — "Salvar em PDF / Imprimir" gera um deck de verdade:
+   cada slide vira UMA página A4 paisagem, centralizado, com as cores da
+   marca preservadas (fundos escuros da capa/fechamento incluídos).
+   ============================================================================ */
+@media print {
+  @page { size: A4 landscape; margin: 0; }
+
+  html, body { background: #fff !important; }
+
+  /* Garante que gradientes e fundos coloridos saiam no PDF */
+  .proposta, .proposta * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .proposta section {
+    break-after: page;
+    break-inside: avoid;
+    /* uma página por slide, com o conteúdo centralizado como na tela */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    min-height: 0 !important;
+    padding: 1.6cm !important;
+    overflow: hidden;
+  }
+  .proposta section:last-of-type { break-after: auto; }
+
+  /* Sombras viram ruído no papel; bordas seguram o desenho dos cartões */
+  .proposta .shadow-card, .proposta .shadow-card-hover { box-shadow: none !important; }
+}

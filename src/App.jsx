@@ -32,8 +32,9 @@ export default function App() {
     <ToastProvider>
     <BrowserRouter>
       <Routes>
-        {/* Rota PÚBLICA: formulário do cliente, sem login */}
+        {/* Rotas PÚBLICAS: formulário e proposta do cliente, sem login */}
         <Route path="/f/:token" element={<FormularioPublico />} />
+        <Route path="/p/:token" element={<Proposta publica />} />
 
         {/* Rotas internas: exigem login */}
         {sessao === undefined ? (
