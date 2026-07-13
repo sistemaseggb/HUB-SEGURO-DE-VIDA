@@ -65,9 +65,16 @@ await passo('Cliente 360 → Planejamento por pilares', async () => {
   await shot('05-planejamento')
 })
 
+await passo('Planejamento → filhos com gasto até os 24', async () => {
+  await page.waitForSelector('text=o gasto que tem prazo para acabar', { timeout: 5000 })
+  await page.waitForSelector('text=Gasto com filhos hoje', { timeout: 3000 })
+})
+
 await passo('Cliente 360 → Apólices com status', async () => {
   await page.click('button:has-text("Apólices")')
   await page.waitForSelector('text=Ativa', { timeout: 5000 })
+  await page.waitForSelector('text=registradas no Hub', { timeout: 3000 })
+  await page.waitForSelector('text=pré-sistema', { timeout: 3000 })
   await shot('06-apolices')
 })
 
@@ -96,6 +103,7 @@ await passo('Proposta (slides) com estudo completo', async () => {
   await page.goto(`${BASE}/proposta/${idCliente}`)
   await page.waitForSelector('text=/estudo de proteção e blindagem/i', { timeout: 6000 })
   await shot('08-proposta-capa')
+  await page.waitForSelector('text=/cada filho protegido até os 24/i', { timeout: 3000 })
   await page.waitForSelector('text=/inventário custa caro/i', { timeout: 3000 })
   await page.waitForSelector('text=/quatro passos simples/i', { timeout: 3000 })
 })

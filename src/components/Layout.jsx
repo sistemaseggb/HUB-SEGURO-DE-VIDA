@@ -6,7 +6,6 @@ import {
   BarChart3, Upload, Menu, X,
 } from 'lucide-react'
 import { supabase, MODO_DEMO } from '../lib/supabase'
-import Logo from './Logo'
 import BuscaGlobal from './BuscaGlobal'
 
 // Menu agrupado por seções — mais didático e organizado

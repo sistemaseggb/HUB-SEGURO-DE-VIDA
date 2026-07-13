@@ -42,7 +42,7 @@ function limparCodCliente(v) {
   let s = String(v ?? '').trim().replace(/\.0+$/, '')
   if (!s) return ''
   if (/[a-z]/i.test(s) && !/^[a-z]\d/i.test(s)) return ''
-  s = s.split(/[\/,;]/)[0].trim()
+  s = s.split(/[/,;]/)[0].trim()
   return /^\d+$/.test(s) ? s : ''
 }
 function parsePct(v) {

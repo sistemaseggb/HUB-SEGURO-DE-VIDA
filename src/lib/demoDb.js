@@ -104,25 +104,32 @@ function semear() {
       comissao_escritorio: Math.round(comissao * 30) / 100,
       data_vigencia: extras.vigencia ?? dia(diasAtras(200)),
       status: extras.status ?? 'ativa', tipo_produto: extras.tipo ?? 'Seguro Temporário',
-      motivo_cancelamento: extras.motivo ?? null, importada: false,
+      motivo_cancelamento: extras.motivo ?? null, importada: extras.importada ?? false,
       created_at: iso(extras.criado ?? diasAtras(200)),
     }
   }
 
   const apolices = [
     apolice(carlos, idMag, 850, 2_500_000, 40, { numero: 'AP-77201', vigencia: dia(diasAtras(170)), tipo: 'Seguro Vitalício', criado: diasAtras(170) }),
-    apolice(carlos, idOmint, 320, 500_000, 21, { numero: 'OM-1108', vigencia: dia(diasAtras(340)), tipo: 'Seguro Temporário', criado: diasAtras(340) }),
+    // pré-sistema: veio da planilha geral via Importar (aparece separada na aba)
+    apolice(carlos, idOmint, 320, 500_000, 21, { numero: 'OM-1108', vigencia: dia(diasAtras(340)), tipo: 'Seguro Temporário', criado: diasAtras(340), importada: true }),
     apolice(fernanda, idAzos, 465, 1_200_000, 40, { numero: 'AZ-55980', vigencia: dia(diasAtras(110)), criado: diasAtras(110) }),
     apolice(fernanda, idIcatu, 210, 300_000, 45, {
       numero: 'IC-30412', vigencia: dia(diasAtras(400)), status: 'cancelada',
-      motivo: 'Substituída por apólice maior na Azos', criado: diasAtras(400),
+      motivo: 'Substituída por apólice maior na Azos', criado: diasAtras(400), importada: true,
     }),
   ]
 
   const planejamentos = [{
     id: idDemo(), id_cliente: carlos.id, profissao: 'Médico cardiologista', estado_civil: 'Casado(a)',
     renda_mensal: 48000, custo_vida_mensal: 27000, patrimonio_total: 3_800_000, dividas_total: 250_000,
-    num_dependentes: 2, dependentes: [], anos_protecao: 10,
+    num_dependentes: 2,
+    // filhos com o gasto mensal de hoje — o estudo garante só até os 24 anos
+    dependentes: [
+      { nome: 'Alice', idade: 6, custo_mensal: 3200 },
+      { nome: 'Lucas', idade: 9, custo_mensal: 3800 },
+    ],
+    anos_protecao: 10,
     capital_sugerido: 3_490_000, objetivos: 'Garantir a faculdade dos filhos e blindar o patrimônio da família.',
     observacoes_reuniao: 'Preocupado com sucessão da clínica. Esposa não trabalha fora. Quer revisar previdência no 2º semestre.',
     capital_invalidez: 3_490_000, capital_doencas_graves: 1_152_000, dit_diaria: 1600,

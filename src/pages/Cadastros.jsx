@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Plus, Percent, Save, MessageSquareText, Pencil, Trash2, CalendarSync, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
-  PageHeader, Card, Button, Input, Textarea, Campo, Modal, Spinner, Badge, ComoFunciona,
+  PageHeader, Card, Button, Input, InputMoeda, Textarea, Campo, Modal, Spinner, Badge, ComoFunciona,
 } from '../components/ui'
 import { useToast } from '../components/Toast'
 
@@ -320,8 +320,8 @@ function PainelSplit() {
           </Campo>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Campo label="Meta: prêmio/mês (R$)" dica="0 = sem meta">
-            <Input type="number" step="0.01" min="0" value={cfg.meta_premio_mensal ?? 0} onChange={set('meta_premio_mensal')} />
+          <Campo label="Meta: prêmio/mês" dica="0 = sem meta">
+            <InputMoeda value={cfg.meta_premio_mensal ?? 0} onChange={set('meta_premio_mensal')} />
           </Campo>
           <Campo label="Meta: reuniões/mês">
             <Input type="number" min="0" value={cfg.meta_reunioes_mensal ?? 0} onChange={set('meta_reunioes_mensal')} />
@@ -330,8 +330,8 @@ function PainelSplit() {
             <Input type="number" min="0" value={cfg.meta_apolices_mensal ?? 0} onChange={set('meta_apolices_mensal')} />
           </Campo>
           {cfg.meta_comissao_mensal !== undefined && (
-            <Campo label="Meta: comissão recebida/mês (R$)" dica="Medida pelas planilhas de comissão importadas">
-              <Input type="number" step="0.01" min="0" value={cfg.meta_comissao_mensal ?? 0} onChange={set('meta_comissao_mensal')} />
+            <Campo label="Meta: comissão recebida/mês" dica="Medida pelas planilhas de comissão importadas">
+              <InputMoeda value={cfg.meta_comissao_mensal ?? 0} onChange={set('meta_comissao_mensal')} />
             </Campo>
           )}
         </div>

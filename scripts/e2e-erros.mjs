@@ -89,7 +89,8 @@ await passo('7. Registrar venda calcula comissão sozinho (40/30/30)', async () 
   await page.click('button:has-text("Registrar venda")')
   await page.waitForTimeout(400)
   await page.locator('form select').first().selectOption({ index: 1 })
-  const nums = page.locator('form input[type=number]')
+  // campos de dinheiro usam InputMoeda (texto com pontuação pt-BR)
+  const nums = page.locator('form input[inputmode=decimal]')
   await nums.nth(0).fill('500')   // prêmio
   await nums.nth(1).fill('800000') // capital
   await page.fill('form input[type=date]', '2026-07-01')
