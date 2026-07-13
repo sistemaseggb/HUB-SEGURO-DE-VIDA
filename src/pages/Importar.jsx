@@ -154,8 +154,12 @@ export default function Importar() {
           </Campo>
           <div>
             <Campo label="...ou envie um arquivo .csv">
-              <input type="file" accept=".csv,.txt" onChange={lerArquivo}
-                className="w-full rounded-lg border border-dashed border-slate-300 p-6 text-sm text-slate-500" />
+              <label className="flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/50 p-6 text-center transition-colors hover:border-laranja-300 hover:bg-laranja-50/40">
+                <span className="rounded-xl bg-white p-2.5 text-laranja-600 shadow-sm"><Upload size={20} /></span>
+                <span className="text-sm font-medium text-slate-700">Clique para escolher o arquivo</span>
+                <span className="text-xs text-slate-400">.csv ou .txt — ou arraste para cá</span>
+                <input type="file" accept=".csv,.txt" onChange={lerArquivo} className="hidden" />
+              </label>
             </Campo>
             <p className="mt-2 text-xs text-slate-400">
               Se sua planilha é .xlsx, use "Arquivo → Salvar como → CSV" no Excel,

@@ -78,7 +78,7 @@ export default function Agenda() {
   if (!reunioes) return <Spinner />
 
   const rotuloDia = (chave) => {
-    if (chave === 'ATRASADAS') return '⚠️ Aguardando atualização (data já passou)'
+    if (chave === 'ATRASADAS') return 'Atrasadas — aguardando atualização'
     const hoje = new Date().toISOString().slice(0, 10)
     const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
     if (chave === hoje) return 'Hoje'

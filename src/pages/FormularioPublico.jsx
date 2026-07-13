@@ -100,7 +100,7 @@ export default function FormularioPublico() {
     return (
       <TelaCentro>
         <div className="rounded-3xl bg-gradient-to-br from-brand-500 to-brand-700 p-5 text-white shadow-lg shadow-brand-200">
-          <ShieldCheck size={40} />
+          <img src="/logo.png" alt="GB | XP" className="h-12 object-contain" />
         </div>
         <p className="mt-6 text-xs font-semibold uppercase tracking-[0.25em] text-brand-600">Natália Maschendorf · Seguro de Vida</p>
         <h1 className="mt-3 font-display text-4xl font-semibold tracking-tight text-slate-900">
@@ -131,13 +131,13 @@ export default function FormularioPublico() {
       {/* barra superior com marca + progresso */}
       <div className="sticky top-0 z-10 border-b border-slate-100 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-xl items-center gap-2 px-4 pt-3">
-          <div className="rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 p-1 text-white"><ShieldCheck size={14} /></div>
+          <img src="/logo-gb.png" alt="GB" className="h-6 w-6 object-contain" />
           <span className="font-display text-sm font-semibold text-slate-800">Hub Seguros</span>
           <span className="text-xs text-slate-400">· Natália Maschendorf</span>
         </div>
         <div className="mx-auto mt-3 max-w-xl px-4">
           <div className="h-1.5 rounded-full bg-slate-100">
-            <div className="h-1.5 rounded-full bg-gradient-to-r from-brand-500 to-brand-400 transition-all duration-500" style={{ width: `${progresso}%` }} />
+            <div className="h-1.5 rounded-full bg-gradient-to-r from-laranja-500 to-laranja-400 transition-all duration-500" style={{ width: `${progresso}%` }} />
           </div>
         </div>
         <div className="mx-auto flex max-w-xl items-center justify-between px-4 py-2 text-xs text-slate-400">

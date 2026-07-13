@@ -3,10 +3,12 @@ import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, MessageCircle, Presentation, Copy, Check, Printer,
   CalendarPlus, FileSignature, ClipboardList, Zap, Upload, FileText, Download, Trash2, Pencil,
+  Phone, Mail, Handshake, StickyNote, Flame, ChartPie, HeartHandshake, RefreshCw, CheckCircle2,
+  Users2, Wallet, Shield, Landmark,
 } from 'lucide-react'
 import { ETAPAS_FORM, ROTULOS_FORM } from '../lib/formularioConfig'
 import { supabase } from '../lib/supabase'
-import { ETAPAS, etapaLabel, STATUS_REUNIAO, TIPO_TAREFA_ICONE } from '../lib/constants'
+import { ETAPAS, etapaLabel, STATUS_REUNIAO } from '../lib/constants'
 import { brl, brlCompacto, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib/format'
 import { calcularEstudo, PILARES } from '../lib/estudo'
 import {
@@ -14,7 +16,17 @@ import {
 } from '../components/ui'
 import { useToast } from '../components/Toast'
 
-const ABAS = ['Planejamento', 'Interações', 'Reuniões', 'Apólices', 'Comissões', 'Documentos', 'Formulário', 'Tarefas', 'Histórico']
+const ABAS = [
+  { nome: 'Planejamento', icone: ChartPie },
+  { nome: 'Interações', icone: MessageCircle },
+  { nome: 'Reuniões', icone: CalendarPlus },
+  { nome: 'Apólices', icone: FileSignature },
+  { nome: 'Comissões', icone: Wallet },
+  { nome: 'Documentos', icone: FileText },
+  { nome: 'Formulário', icone: ClipboardList },
+  { nome: 'Tarefas', icone: CheckCircle2 },
+  { nome: 'Histórico', icone: RefreshCw },
+]
 
 export default function ClienteDetalhe() {
   const { id } = useParams()
@@ -147,7 +159,7 @@ export default function ClienteDetalhe() {
             </span>
             <span className="ml-auto">
               <Badge tom={prioridade.temperatura === 'quente' ? 'red' : prioridade.temperatura === 'morno' ? 'yellow' : 'slate'}>
-                {prioridade.temperatura === 'quente' ? '🔥 quente' : prioridade.temperatura === 'morno' ? 'morno' : 'frio'}
+                {prioridade.temperatura === 'quente' ? <><Flame size={12} className="inline -mt-0.5" /> quente</> : prioridade.temperatura === 'morno' ? 'morno' : 'frio'}
               </Badge>
             </span>
           </div>
@@ -204,12 +216,13 @@ export default function ClienteDetalhe() {
 
       {/* Abas */}
       <div className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200">
-        {ABAS.map((a) => (
-          <button key={a} onClick={() => setAba(a)}
-            className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-              aba === a ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800'
+        {ABAS.map(({ nome, icone: Icone }) => (
+          <button key={nome} onClick={() => setAba(nome)}
+            className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2 text-sm font-medium transition-colors ${
+              aba === nome ? 'border-laranja-500 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}>
-            {a}
+            <Icone size={15} className={aba === nome ? 'text-laranja-600' : 'text-slate-400'} />
+            {nome}
           </button>
         ))}
       </div>
@@ -362,7 +375,7 @@ function AbaPlanejamento({ idCliente }) {
   return (
     <Card className="p-5">
       <form onSubmit={salvar}>
-        <p className={SECAO}>👨‍👩‍👧 Família e perfil</p>
+        <p className={SECAO}><Users2 size={13} /> Família e perfil</p>
         <div className="grid gap-4 md:grid-cols-3">
           <Campo label="Profissão"><Input value={plano.profissao ?? ''} onChange={set('profissao')} /></Campo>
           <Campo label="Estado civil">
@@ -388,7 +401,7 @@ function AbaPlanejamento({ idCliente }) {
           )}
         </div>
 
-        <p className={SECAO}>💰 Vida financeira</p>
+        <p className={SECAO}><Wallet size={13} /> Vida financeira</p>
         <div className="grid gap-4 md:grid-cols-3">
           <Campo label="Renda mensal (R$)"><Input type="number" step="0.01" value={plano.renda_mensal ?? ''} onChange={set('renda_mensal')} /></Campo>
           <Campo label="Custo de vida mensal (R$)"><Input type="number" step="0.01" value={plano.custo_vida_mensal ?? ''} onChange={set('custo_vida_mensal')} /></Campo>
@@ -406,7 +419,7 @@ function AbaPlanejamento({ idCliente }) {
           )}
         </div>
 
-        <p className={SECAO}>🛡️ Os 5 pilares da proteção</p>
+        <p className={SECAO}><Shield size={13} /> Os 5 pilares da proteção</p>
         {!tem014 && (
           <p className="mb-3 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
             Rode a migração <strong>014_planejamento_detalhado.sql</strong> no Supabase para liberar
@@ -420,7 +433,7 @@ function AbaPlanejamento({ idCliente }) {
 
         {tem014 && (
           <>
-            <p className={SECAO}>🏛️ Sucessão — o custo do inventário</p>
+            <p className={SECAO}><Landmark size={13} /> Sucessão — o custo do inventário</p>
             <div className="grid items-end gap-4 md:grid-cols-4">
               <Campo label="ITCMD do estado (%)" dica="RS 6 · PR 4 · SC até 8">
                 <Input type="number" step="0.5" min="0" max="20" value={plano.itcmd_pct ?? 4} onChange={set('itcmd_pct')} />
@@ -495,13 +508,19 @@ function AbaPlanejamento({ idCliente }) {
   )
 }
 
+// Ícones por tipo de tarefa automática (contato, revisão, pós-venda...)
+const ICONE_TAREFA = {
+  contato: Phone, agendamento: CalendarPlus, planejamento: ChartPie,
+  formulario: ClipboardList, pos_venda: HeartHandshake, revisao: RefreshCw, geral: CheckCircle2,
+}
+
 // ─── INTERAÇÕES: linha do tempo de contatos com o cliente ────────────────────
 const TIPO_INTERACAO = [
-  { id: 'ligacao', label: '📞 Ligação' },
-  { id: 'whatsapp', label: '💬 WhatsApp' },
-  { id: 'email', label: '✉️ E-mail' },
-  { id: 'reuniao', label: '🤝 Reunião/Encontro' },
-  { id: 'nota', label: '📝 Nota' },
+  { id: 'ligacao', label: 'Ligação', icone: Phone },
+  { id: 'whatsapp', label: 'WhatsApp', icone: MessageCircle },
+  { id: 'email', label: 'E-mail', icone: Mail },
+  { id: 'reuniao', label: 'Reunião/Encontro', icone: Handshake },
+  { id: 'nota', label: 'Nota', icone: StickyNote },
 ]
 
 function AbaInteracoes({ idCliente, onMudanca }) {
@@ -563,10 +582,12 @@ function AbaInteracoes({ idCliente, onMudanca }) {
           <ol className="relative ml-3 space-y-4 border-l-2 border-slate-100 pl-5">
             {itens.map((i) => (
               <li key={i.id} className="group relative">
-                <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
+                <span className="absolute -left-[31px] top-0 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-laranja-100 text-laranja-700">
+                  {(() => { const Ic = TIPO_INTERACAO.find((x) => x.id === i.tipo)?.icone ?? StickyNote; return <Ic size={11} /> })()}
+                </span>
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-sm text-slate-800">{label(i.tipo)} — {i.descricao}</p>
+                    <p className="text-sm text-slate-800"><span className="font-medium">{label(i.tipo)}</span> — {i.descricao}</p>
                     <p className="text-xs text-slate-400">{dataHoraBR(i.data)}</p>
                   </div>
                   <button onClick={() => excluir(i)} className="rounded p-1 text-slate-300 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100" title="Excluir">
@@ -1231,7 +1252,9 @@ function AbaTarefas({ idCliente }) {
                 t.concluida ? 'border-slate-100 opacity-50' : 'border-slate-200'}`}>
                 <input type="checkbox" checked={t.concluida} onChange={() => alternar(t)}
                   className="h-4 w-4 accent-blue-600" />
-                <span className="text-lg">{TIPO_TAREFA_ICONE[t.tipo] ?? '✔️'}</span>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+                  {(() => { const Ic = ICONE_TAREFA[t.tipo] ?? CheckCircle2; return <Ic size={15} /> })()}
+                </span>
                 <div className="flex-1">
                   <p className={`text-sm ${t.concluida ? 'line-through' : 'text-slate-800'}`}>{t.titulo}</p>
                   <p className="text-xs text-slate-400">

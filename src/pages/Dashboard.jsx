@@ -3,19 +3,20 @@ import { Link } from 'react-router-dom'
 import {
   CalendarCheck, Wallet, FileSignature, TrendingUp, CheckCircle2,
   MessageCircle, AlertTriangle, Trophy, Cake, Target, Percent, Timer, ShieldCheck, Flame, Rocket,
-  CalendarClock,
+  CalendarClock, Sun, Snowflake,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, mesBR, dataBR, whatsapp } from '../lib/format'
 import { CHART, etapaLabel } from '../lib/constants'
-import { Card, StatTile, Spinner, Badge, EmptyState } from '../components/ui'
+import { Card, StatTile, Skeleton, Badge, EmptyState } from '../components/ui'
 
 // ─── Gráfico de barras (série única, tooltip por barra) ──────────────────────
-function GraficoBarras({ dados, formatoValor = brlCompacto }) {
+function GraficoBarras({ dados, formatoValor = brlCompacto, meta = 0 }) {
   const [hover, setHover] = useState(null)
-  const max = Math.max(...dados.map((d) => d.valor), 1)
+  const max = Math.max(...dados.map((d) => d.valor), meta, 1)
   const W = 560, H = 180, PAD = 8, EIXO = 22
-  const bw = Math.min(48, (W - PAD * 2) / dados.length - 8)
+  const bw = Math.min(36, (W - PAD * 2) / dados.length - 10)
+  const yMeta = meta > 0 ? H - (meta / max) * (H - 24) : null
 
   return (
     <div className="relative">
@@ -25,9 +26,18 @@ function GraficoBarras({ dados, formatoValor = brlCompacto }) {
             stroke={CHART.grid} strokeWidth="1" />
         ))}
         <line x1={PAD} x2={W - PAD} y1={H} y2={H} stroke={CHART.eixo} strokeWidth="1" />
+        {yMeta !== null && (
+          <g>
+            <line x1={PAD} x2={W - PAD} y1={yMeta} y2={yMeta}
+              stroke={CHART.textoMudo} strokeWidth="1.5" strokeDasharray="6 4" />
+            <text x={W - PAD} y={yMeta - 5} textAnchor="end" fontSize="10" fill={CHART.textoMudo}>
+              meta {formatoValor(meta)}
+            </text>
+          </g>
+        )}
         {dados.map((d, i) => {
           const x = PAD + ((W - PAD * 2) / dados.length) * (i + 0.5) - bw / 2
-          const h = Math.max((d.valor / max) * (H - 12), d.valor > 0 ? 3 : 0)
+          const h = Math.max((d.valor / max) * (H - 24), d.valor > 0 ? 3 : 0)
           return (
             <g key={d.rotulo}>
               {/* alvo de hover maior que a barra */}
@@ -255,21 +265,21 @@ function PrimeirosPassos() {
   if (feitos === passos.length) return null
 
   return (
-    <Card className="mb-6 border-blue-100 bg-blue-50/40 p-5">
+    <Card className="risco-marca mb-6 p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-          <Rocket size={18} className="text-blue-600" /> Primeiros passos
+          <Rocket size={18} className="text-laranja-600" /> Primeiros passos
         </h2>
         <span className="text-sm text-slate-500">{feitos} de {passos.length}</span>
       </div>
       <div className="mb-4 h-2 rounded-full bg-slate-200">
-        <div className="h-2 rounded-full bg-blue-600 transition-all" style={{ width: `${(feitos / passos.length) * 100}%` }} />
+        <div className="h-2 rounded-full bg-laranja-500 transition-all" style={{ width: `${(feitos / passos.length) * 100}%` }} />
       </div>
       <ul className="space-y-2">
         {passos.map((p, i) => (
           <li key={i}>
             <Link to={p.para} className={`flex items-center gap-3 rounded-lg border p-2.5 text-sm transition-colors ${
-              p.ok ? 'border-transparent text-slate-400' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300'}`}>
+              p.ok ? 'border-transparent text-slate-400' : 'border-slate-200 bg-white text-slate-700 hover:border-laranja-300'}`}>
               {p.ok
                 ? <CheckCircle2 size={18} className="shrink-0 text-emerald-500" />
                 : <span className="h-[18px] w-[18px] shrink-0 rounded-full border-2 border-slate-300" />}
@@ -371,7 +381,19 @@ export default function Dashboard() {
     }
   }, [recebidas])
 
-  if (carregando) return <Spinner />
+  if (carregando) {
+    return (
+      <div>
+        <Skeleton className="mb-2 h-8 w-72" />
+        <Skeleton className="mb-6 h-4 w-96" />
+        <Skeleton className="mb-6 h-24 w-full" />
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28" />)}
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
 
   const tarefas = central.filter((i) => i.tipo === 'tarefa')
   const aniversarios = central.filter((i) => i.tipo === 'aniversario')
@@ -401,7 +423,7 @@ export default function Dashboard() {
         <StatTile rotulo="Apólices vendidas no mês" valor={mesAtual.dash.apolices_vendidas ?? 0}
           icone={FileSignature} corIcone="text-emerald-600 bg-emerald-50" />
         <StatTile rotulo="Prêmio mensal vendido" valor={brlCompacto(mesAtual.dash.premio_mensal_vendido ?? 0)}
-          icone={TrendingUp} corIcone="text-violet-600 bg-violet-50" />
+          icone={TrendingUp} corIcone="text-laranja-600 bg-laranja-50" />
         <StatTile rotulo="Sua comissão do mês" valor={brl(mesAtual.com.comissao_natalia ?? 0)}
           detalhe="parte da Natália na divisão" icone={Wallet} corIcone="text-amber-600 bg-amber-50" />
       </div>
@@ -413,7 +435,7 @@ export default function Dashboard() {
         <StatTile rotulo="Ticket médio (prêmio mensal)" valor={brl(kpis.ticket_medio_premio ?? 0)}
           icone={TrendingUp} corIcone="text-emerald-600 bg-emerald-50" />
         <StatTile rotulo="Dias médios até fechar" valor={kpis.dias_medios_ate_fechar ?? '—'}
-          detalhe="do cadastro do lead à venda" icone={Timer} corIcone="text-violet-600 bg-violet-50" />
+          detalhe="do cadastro do lead à venda" icone={Timer} corIcone="text-laranja-600 bg-laranja-50" />
         <StatTile rotulo="Capital total da carteira" valor={brlCompacto(kpis.capital_total_carteira ?? 0)}
           detalhe="soma das apólices ativas" icone={ShieldCheck} corIcone="text-amber-600 bg-amber-50" />
       </div>
@@ -467,7 +489,7 @@ export default function Dashboard() {
                     {c.nome}
                   </Link>
                   <Badge tom={c.temperatura === 'quente' ? 'red' : c.temperatura === 'morno' ? 'yellow' : 'slate'}>
-                    {c.temperatura === 'quente' ? '🔥' : c.temperatura === 'morno' ? '🌤' : '❄️'} {c.score}
+                    {c.temperatura === 'quente' ? <Flame size={11} /> : c.temperatura === 'morno' ? <Sun size={11} /> : <Snowflake size={11} />} {c.score}
                   </Badge>
                 </div>
                 <p className="mb-2 text-sm text-blue-700">→ {c.proxima_acao}</p>
@@ -550,7 +572,7 @@ export default function Dashboard() {
           <p className="mb-4 text-xs text-slate-400">Soma dos prêmios mensais das apólices cadastradas em cada mês</p>
           {evolucao.length === 0
             ? <p className="py-8 text-center text-sm text-slate-400">Cadastre a primeira venda para ver o gráfico.</p>
-            : <GraficoBarras dados={evolucao} />}
+            : <GraficoBarras dados={evolucao} meta={Number(metas.meta_premio_mensal) || 0} />}
         </Card>
 
         {/* Comissões recebidas das seguradoras (planilhas importadas) */}
@@ -576,7 +598,7 @@ export default function Dashboard() {
             ? <p className="py-8 text-center text-sm text-slate-400">
                 Nenhuma planilha de comissão importada ainda. Comece em Importar → Comissões.
               </p>
-            : <GraficoBarras dados={recebidasMes.evolucao} formatoValor={brl} />}
+            : <GraficoBarras dados={recebidasMes.evolucao} formatoValor={brl} meta={Number(metas.meta_comissao_mensal) || 0} />}
         </Card>
 
         {/* Conversão: leads x fechados */}

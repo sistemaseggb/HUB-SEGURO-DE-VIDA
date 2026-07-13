@@ -55,7 +55,7 @@ export default function PosVenda() {
         <StatTile rotulo="Receita anualizada" valor={brlCompacto(carteira.receita_anualizada ?? 0)}
           icone={TrendingUp} corIcone="text-blue-600 bg-blue-50" />
         <StatTile rotulo="Capital total protegido" valor={brlCompacto(carteira.capital_total ?? 0)}
-          icone={ShieldCheck} corIcone="text-violet-600 bg-violet-50" />
+          icone={ShieldCheck} corIcone="text-laranja-600 bg-laranja-50" />
         <StatTile rotulo="Ticket médio" valor={brl(carteira.ticket_medio ?? 0)}
           detalhe="prêmio mensal por apólice" icone={TrendingUp} corIcone="text-amber-600 bg-amber-50" />
       </div>
@@ -129,7 +129,10 @@ export default function PosVenda() {
               <ul className="space-y-2">
                 {regua.map((e, i) => (
                   <li key={i} className="flex items-center gap-3 rounded-lg border border-slate-100 p-3">
-                    <span className="text-xl">{e.tipo_evento === 'aniversario_cliente' ? '🎂' : '📄'}</span>
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                      e.tipo_evento === 'aniversario_cliente' ? 'bg-laranja-50 text-laranja-600' : 'bg-slate-100 text-slate-500'}`}>
+                      {e.tipo_evento === 'aniversario_cliente' ? <Cake size={17} /> : <ShieldCheck size={17} />}
+                    </span>
                     <div className="min-w-0 flex-1">
                       <Link to={`/clientes/${e.id_cliente}`}
                         className="block truncate text-sm font-medium text-slate-800 hover:underline">
