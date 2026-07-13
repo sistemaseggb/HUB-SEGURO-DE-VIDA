@@ -127,6 +127,7 @@ function semear() {
     observacoes_reuniao: 'Preocupado com sucessão da clínica. Esposa não trabalha fora. Quer revisar previdência no 2º semestre.',
     capital_invalidez: 3_490_000, capital_doencas_graves: 1_152_000, dit_diaria: 1600,
     verba_sucessoria: 456_000, cobertura_atual: 800_000, itcmd_pct: 4, custas_pct: 8,
+    premio_estimado: 1890,
     conjuge_nome: 'Mariana', filhos_idades: '6 e 9 anos',
     created_at: iso(diasAtras(180)), updated_at: iso(diasAtras(30)),
   }]

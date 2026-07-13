@@ -52,9 +52,58 @@ export function calcularEstudo(plano) {
   const mesesProtegidos = custoVida > 0 ? Math.round((valores.morte - dividas) / custoVida) : null
   const custoInventario = patrimonio * (itcmd + custas) / 100
 
+  // ── Inteligência do estudo ────────────────────────────────────────────────
+  // Autonomia ATUAL da família: quantos meses o padrão de vida se sustenta
+  // hoje, sem seguro — patrimônio menos dívidas, dividido pelo custo mensal.
+  // É o número que abre os olhos do cliente (e o contraste com o plano).
+  const autonomiaAtualMeses = custoVida > 0
+    ? Math.max(Math.round((patrimonio + coberturaAtual - dividas) / custoVida), 0)
+    : null
+
+  // Fôlego financeiro mensal e comprometimento da renda
+  const poupancaMensal = renda > 0 ? renda - custoVida : null
+  const comprometimentoRenda = renda > 0 ? Math.round((custoVida / renda) * 100) : null
+
+  // Horizonte sugerido pelos filhos: proteger até o mais novo completar 24
+  // (formatos aceitos: "3, 7 e 12 anos", "5", "2 e 4")
+  let anosSugeridosPorFilhos = null
+  {
+    const idades = String(plano.filhos_idades ?? '').match(/\d+/g)?.map(Number) ?? []
+    if (idades.length > 0) {
+      const maisNovo = Math.min(...idades)
+      if (maisNovo >= 0 && maisNovo < 24) anosSugeridosPorFilhos = 24 - maisNovo
+    }
+  }
+
+  // Cotação (migração 015): o investimento que aparece na proposta
+  const premio = n(plano.premio_estimado)
+  const investimento = premio > 0 ? {
+    mensal: premio,
+    diario: Math.round((premio / 30) * 100) / 100,
+    pctRenda: renda > 0 ? Math.round((premio / renda) * 1000) / 10 : null,
+    // cada R$ 1 de prêmio mensal protege R$ N de capital (morte + sucessão)
+    alavancagem: Math.round((valores.morte + valores.sucessao) / premio),
+  } : null
+
+  // Completude do estudo: os campos que sustentam uma proposta forte
+  const camposChave = [
+    ['renda_mensal', renda > 0], ['custo_vida_mensal', custoVida > 0],
+    ['patrimonio_total', patrimonio > 0], ['num_dependentes', plano.num_dependentes != null],
+    ['objetivos', !!String(plano.objetivos ?? '').trim()],
+    ['cobertura_atual', plano.cobertura_atual != null && plano.cobertura_atual !== ''],
+    ['premio_estimado', premio > 0],
+  ]
+  const completude = {
+    feitos: camposChave.filter(([, ok]) => ok).length,
+    total: camposChave.length,
+    faltando: camposChave.filter(([, ok]) => !ok).map(([campo]) => campo),
+  }
+
   return {
     renda, custoVida, dividas, patrimonio, anos, itcmd, custas,
     sugestoes, valores, coberturaAtual, gap, mesesProtegidos, custoInventario,
+    autonomiaAtualMeses, poupancaMensal, comprometimentoRenda,
+    anosSugeridosPorFilhos, investimento, completude,
     // capital total de morte + sucessão (quando sucessão não está embutida)
     protecaoTotal: valores.morte + valores.sucessao,
   }
