@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Printer, Heart, Landmark, GraduationCap, Activity,
   Stethoscope, CalendarClock, Scale, ClipboardCheck, Search, FileSignature, Handshake,
+  Hourglass, Coffee,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto } from '../lib/format'
@@ -18,6 +19,32 @@ import Logo from '../components/Logo'
 export default function Proposta() {
   const { id } = useParams()
   const [dados, setDados] = useState(null)
+  const [slideAtual, setSlideAtual] = useState(0)
+  const [totalSlides, setTotalSlides] = useState(0)
+
+  // Navegação de apresentação: setas/PageUp-Down/espaço avançam os slides;
+  // as bolinhas laterais mostram onde está e pulam direto ao clicar.
+  useEffect(() => {
+    const slides = () => [...document.querySelectorAll('.proposta section')]
+    setTotalSlides(slides().length)
+    function atual() {
+      const y = window.scrollY + window.innerHeight / 2
+      return Math.max(slides().findLastIndex((s) => s.offsetTop <= y), 0)
+    }
+    function irPara(i) {
+      const alvo = slides()[Math.max(0, Math.min(i, slides().length - 1))]
+      alvo?.scrollIntoView({ behavior: 'smooth' })
+    }
+    function onKey(e) {
+      if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); irPara(atual() + 1) }
+      else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); irPara(atual() - 1) }
+    }
+    function onScroll() { setSlideAtual(atual()) }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('scroll', onScroll) }
+  }, [dados])
 
   useEffect(() => {
     Promise.all([
@@ -53,7 +80,22 @@ export default function Proposta() {
         <Link to={`/clientes/${id}`} className="inline-flex items-center gap-1 text-sm text-slate-300 hover:text-white">
           <ArrowLeft size={15} /> Voltar ao cliente
         </Link>
-        <Button variant="gold" onClick={() => window.print()}><Printer size={15} /> Salvar em PDF / Imprimir</Button>
+        <div className="flex items-center gap-3">
+          <span className="hidden text-xs text-slate-400 sm:block">
+            slide {slideAtual + 1} de {totalSlides} · use as setas ← →
+          </span>
+          <Button variant="gold" onClick={() => window.print()}><Printer size={15} /> Salvar em PDF / Imprimir</Button>
+        </div>
+      </div>
+
+      {/* bolinhas de navegação (somem na impressão) */}
+      <div className="fixed right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2 print:hidden">
+        {[...Array(totalSlides)].map((_, i) => (
+          <button key={i} aria-label={`Ir ao slide ${i + 1}`}
+            onClick={() => document.querySelectorAll('.proposta section')[i]?.scrollIntoView({ behavior: 'smooth' })}
+            className={`h-2.5 w-2.5 rounded-full transition-all ${
+              i === slideAtual ? 'scale-125 bg-laranja-500' : 'bg-slate-400/40 hover:bg-slate-400/70'}`} />
+        ))}
       </div>
 
       {/* 1 · CAPA */}
@@ -97,7 +139,43 @@ export default function Proposta() {
         </p>
       </section>
 
-      {/* 3 · O NÚMERO */}
+      {/* 3 · QUANTO TEMPO — a pergunta que abre os olhos */}
+      {e.autonomiaAtualMeses != null && e.mesesProtegidos > 0 && (
+        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>A pergunta central</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            Se a renda parasse hoje, por quanto tempo a família manteria o padrão de vida?
+          </h2>
+          <div className="mt-12 grid w-full max-w-3xl gap-5 md:grid-cols-2">
+            <div className="rounded-2xl border border-red-100 bg-red-50/60 p-8 text-center">
+              <Hourglass size={26} className="mx-auto text-red-400" />
+              <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-red-500">Hoje, sem o plano</p>
+              <p className="mt-2 font-display text-5xl font-semibold tabular text-red-600">
+                {e.autonomiaAtualMeses >= 1200 ? '∞' : e.autonomiaAtualMeses}
+              </p>
+              <p className="mt-1 text-sm text-red-800/70">
+                {e.autonomiaAtualMeses === 1 ? 'mês' : 'meses'} — <strong>consumindo o patrimônio
+                que você construiu</strong>, até acabar
+              </p>
+            </div>
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-8 text-center">
+              <Heart size={26} className="mx-auto text-emerald-500" />
+              <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-emerald-600">Com o plano</p>
+              <p className="mt-2 font-display text-5xl font-semibold tabular text-emerald-600">
+                {e.autonomiaAtualMeses + e.mesesProtegidos >= 1200 ? '∞' : e.autonomiaAtualMeses + e.mesesProtegidos}
+              </p>
+              <p className="mt-1 text-sm text-emerald-900/70">
+                meses — o seguro sustenta a família <strong>e o patrimônio fica preservado</strong>
+              </p>
+            </div>
+          </div>
+          <p className="mt-10 max-w-lg text-center text-lg text-slate-600">
+            O plano não substitui o que você construiu — <strong className="text-slate-900">ele impede que seja consumido</strong>.
+          </p>
+        </section>
+      )}
+
+      {/* 4 · O NÚMERO */}
       <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 text-center print:min-h-0 print:py-24">
         <p className={rotuloSecao}>A proteção recomendada</p>
         <p className="mt-6 font-display text-6xl font-semibold tracking-tight text-slate-900 tabular md:text-8xl">{brlCompacto(e.valores.morte)}</p>
@@ -204,7 +282,42 @@ export default function Proposta() {
         </section>
       )}
 
-      {/* 7 · PRÓXIMOS PASSOS */}
+      {/* O INVESTIMENTO — quando há cotação, o fechamento fala de valor */}
+      {e.investimento && (
+        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>O investimento</p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+            Quanto custa proteger tudo isso?
+          </h2>
+          <p className="mt-8 font-display text-6xl font-semibold tracking-tight text-slate-900 tabular md:text-7xl">
+            {brl(e.investimento.mensal)}<span className="text-2xl font-normal text-slate-400">/mês</span>
+          </p>
+          <div className="mt-10 grid w-full max-w-3xl gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200/70 bg-white p-6 text-center shadow-card">
+              <Coffee size={22} className="mx-auto text-laranja-600" />
+              <p className="mt-2 font-display text-2xl font-semibold tabular text-slate-900">{brl(e.investimento.diario)}</p>
+              <p className="mt-1 text-sm text-slate-500">por dia — menos que um café com pão de queijo</p>
+            </div>
+            {e.investimento.pctRenda != null && (
+              <div className="rounded-2xl border border-slate-200/70 bg-white p-6 text-center shadow-card">
+                <Scale size={22} className="mx-auto text-laranja-600" />
+                <p className="mt-2 font-display text-2xl font-semibold tabular text-slate-900">{String(e.investimento.pctRenda).replace('.', ',')}%</p>
+                <p className="mt-1 text-sm text-slate-500">da renda mensal — o resto continua livre</p>
+              </div>
+            )}
+            <div className="rounded-2xl border border-laranja-200/70 bg-laranja-50/50 p-6 text-center shadow-card">
+              <Heart size={22} className="mx-auto text-laranja-600" />
+              <p className="mt-2 font-display text-2xl font-semibold tabular text-slate-900">R$ 1 → R$ {e.investimento.alavancagem.toLocaleString('pt-BR')}</p>
+              <p className="mt-1 text-sm text-slate-500">cada real investido protege {e.investimento.alavancagem.toLocaleString('pt-BR')} reais</p>
+            </div>
+          </div>
+          <p className="mt-10 max-w-lg text-center text-sm text-slate-400">
+            Valor de referência cotado nas seguradoras para o plano completo — sujeito à análise da proposta.
+          </p>
+        </section>
+      )}
+
+      {/* 8 · PRÓXIMOS PASSOS */}
       <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 print:min-h-0 print:py-24">
         <p className={rotuloSecao}>Como ativamos o plano</p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Quatro passos simples</h2>

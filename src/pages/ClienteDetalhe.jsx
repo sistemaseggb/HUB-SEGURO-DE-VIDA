@@ -4,7 +4,7 @@ import {
   ArrowLeft, MessageCircle, Presentation, Copy, Check, Printer,
   CalendarPlus, FileSignature, ClipboardList, Zap, Upload, FileText, Download, Trash2, Pencil,
   Phone, Mail, Handshake, StickyNote, Flame, ChartPie, HeartHandshake, RefreshCw, CheckCircle2,
-  Users2, Wallet, Shield, Landmark,
+  Users2, Wallet, Shield, Landmark, Sparkles,
 } from 'lucide-react'
 import { ETAPAS_FORM, ROTULOS_FORM } from '../lib/formularioConfig'
 import { supabase } from '../lib/supabase'
@@ -304,8 +304,9 @@ function AbaPlanejamento({ idCliente }) {
 
   const estudo = calcularEstudo(plano)
   const set = (k) => (e) => setPlano({ ...plano, [k]: e.target.value })
-  // Colunas da migração 014: só enviamos ao banco se já existirem no registro
+  // Colunas das migrações 014/015: só enviamos ao banco se já existirem
   const tem014 = 'capital_invalidez' in plano
+  const tem015 = 'premio_estimado' in plano
 
   async function salvar(e) {
     e.preventDefault()
@@ -322,6 +323,7 @@ function AbaPlanejamento({ idCliente }) {
       anos_protecao: plano.anos_protecao || 10,
       objetivos: plano.objetivos || null,
       observacoes_reuniao: plano.observacoes_reuniao || null,
+      ...(tem015 && { premio_estimado: plano.premio_estimado || null }),
       ...(tem014 && {
         capital_invalidez: plano.capital_invalidez || null,
         capital_doencas_graves: plano.capital_doencas_graves || null,
@@ -417,6 +419,11 @@ function AbaPlanejamento({ idCliente }) {
               <Input type="number" step="0.01" value={plano.cobertura_atual ?? ''} onChange={set('cobertura_atual')} />
             </Campo>
           )}
+          {tem015 && (
+            <Campo label="Prêmio cotado (R$/mês)" dica="Cotação nas seguradoras — vira o slide 'O investimento'">
+              <Input type="number" step="0.01" min="0" value={plano.premio_estimado ?? ''} onChange={set('premio_estimado')} />
+            </Campo>
+          )}
         </div>
 
         <p className={SECAO}><Shield size={13} /> Os 5 pilares da proteção</p>
@@ -457,6 +464,81 @@ function AbaPlanejamento({ idCliente }) {
             </div>
           </>
         )}
+
+        {/* Inteligência do estudo: leituras que viram argumento de venda */}
+        <div className="mt-6 rounded-xl border border-slate-200/70 bg-white p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <Sparkles size={13} className="text-laranja-600" /> Inteligência do estudo
+            </p>
+            <div className="flex items-center gap-2" title="Campos que sustentam uma proposta forte">
+              <div className="h-1.5 w-24 rounded-full bg-slate-100">
+                <div className="h-1.5 rounded-full bg-laranja-500 transition-all"
+                  style={{ width: `${(estudo.completude.feitos / estudo.completude.total) * 100}%` }} />
+              </div>
+              <span className="text-xs text-slate-400">estudo {estudo.completude.feitos}/{estudo.completude.total}</span>
+            </div>
+          </div>
+          <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">Autonomia da família hoje</p>
+              <p className={`font-display text-lg font-semibold tabular-nums ${
+                estudo.autonomiaAtualMeses != null && estudo.autonomiaAtualMeses < 24 ? 'text-red-600' : 'text-slate-900'}`}>
+                {estudo.autonomiaAtualMeses == null ? '—'
+                  : estudo.autonomiaAtualMeses >= 1200 ? 'vitalícia'
+                  : `${estudo.autonomiaAtualMeses} meses`}
+              </p>
+              <p className="text-xs text-slate-400">se a renda parasse hoje, sem o plano</p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">Fôlego mensal</p>
+              <p className={`font-display text-lg font-semibold tabular-nums ${
+                (estudo.poupancaMensal ?? 0) < 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                {estudo.poupancaMensal == null ? '—' : brl(estudo.poupancaMensal)}
+              </p>
+              <p className="text-xs text-slate-400">
+                renda − custo de vida{estudo.comprometimentoRenda != null ? ` · ${estudo.comprometimentoRenda}% comprometida` : ''}
+              </p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">Horizonte pelos filhos</p>
+              {estudo.anosSugeridosPorFilhos ? (
+                <>
+                  <p className="font-display text-lg font-semibold tabular-nums text-slate-900">{estudo.anosSugeridosPorFilhos} anos</p>
+                  <p className="text-xs text-slate-400">
+                    até o mais novo fazer 24 —{' '}
+                    {Number(plano.anos_protecao) !== estudo.anosSugeridosPorFilhos && (
+                      <button type="button" className="font-semibold text-laranja-700 hover:underline"
+                        onClick={() => setPlano({ ...plano, anos_protecao: estudo.anosSugeridosPorFilhos })}>
+                        usar no estudo
+                      </button>
+                    )}
+                    {Number(plano.anos_protecao) === estudo.anosSugeridosPorFilhos && 'aplicado ✓'}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-display text-lg font-semibold text-slate-300">—</p>
+                  <p className="text-xs text-slate-400">preencha as idades dos filhos</p>
+                </>
+              )}
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">Alavancagem do plano</p>
+              {estudo.investimento ? (
+                <>
+                  <p className="font-display text-lg font-semibold tabular-nums text-slate-900">1 → {estudo.investimento.alavancagem}</p>
+                  <p className="text-xs text-slate-400">cada R$ 1/mês protege R$ {estudo.investimento.alavancagem}</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-display text-lg font-semibold text-slate-300">—</p>
+                  <p className="text-xs text-slate-400">preencha o prêmio cotado</p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* Resumo vivo do estudo */}
         <div className="mt-6 rounded-xl border border-brand-100 bg-brand-50/50 p-4">

@@ -39,8 +39,12 @@ e registrar os dados; o sistema cuida do resto.
   Reuniões, Apólices, **Documentos** (anexos no Storage), Formulário de
   onboarding, Tarefas e Histórico. Faixa de **Próxima Melhor Ação** e
   temperatura no topo. Botão **Gerar proposta** cria a apresentação.
-- **Proposta** — apresentação em tela cheia gerada a partir do planejamento
-  (capital recomendado, pilares, fechamento) — exportável em PDF pelo navegador.
+- **Proposta** — apresentação em tela cheia com navegação de deck (setas do
+  teclado, bolinhas laterais, contador): capa, diagnóstico, "quanto tempo a
+  família aguentaria hoje?" (autonomia sem × com o plano), capital, 5 pilares,
+  blindagem patrimonial, gap, **o investimento** (prêmio/dia, % da renda e
+  alavancagem R$ 1 → R$ N, quando a cotação está no planejamento) e próximos
+  passos — exportável em PDF pelo navegador.
 - **Formulário público** (`/f/<token>`) — onboarding pós-venda estilo Typeform:
   etapas curtas, progresso salvo automaticamente (o cliente pode parar e voltar),
   sem login, seguro por token via RPC. Campos configuráveis em
@@ -137,6 +141,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 12. [`supabase/migrations/012_historico_apolices.sql`](supabase/migrations/012_historico_apolices.sql)
 13. [`supabase/migrations/013_tipo_produto_apolice.sql`](supabase/migrations/013_tipo_produto_apolice.sql)
 14. [`supabase/migrations/014_planejamento_detalhado.sql`](supabase/migrations/014_planejamento_detalhado.sql)
+15. [`supabase/migrations/015_cotacao_proposta.sql`](supabase/migrations/015_cotacao_proposta.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
