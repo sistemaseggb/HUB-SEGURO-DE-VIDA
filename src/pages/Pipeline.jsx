@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Clock, GripVertical } from 'lucide-react'
+import { Clock, GripVertical, MessageCircle, ShieldCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ETAPAS } from '../lib/constants'
+import { brlCompacto, whatsapp } from '../lib/format'
 import { PageHeader, Badge, Spinner, Modal, Campo, Textarea, Button, ComoFunciona } from '../components/ui'
 
 // Kanban do funil: arraste o card para a nova etapa — o banco cuida do resto
@@ -10,18 +11,25 @@ import { PageHeader, Badge, Spinner, Modal, Campo, Textarea, Button, ComoFuncion
 export default function Pipeline() {
   const [cards, setCards] = useState(null)
   const [config, setConfig] = useState({ dias_alerta_amarelo: 5, dias_alerta_vermelho: 10 })
+  const [planos, setPlanos] = useState(new Map()) // id_cliente → {capital, premio}
   const [arrastando, setArrastando] = useState(null)
   const [colunaAlvo, setColunaAlvo] = useState(null)
   const [modalPerda, setModalPerda] = useState(null) // card sendo perdido
   const [motivoPerda, setMotivoPerda] = useState('')
 
   async function carregar() {
-    const [p, c] = await Promise.all([
+    const [p, c, pl] = await Promise.all([
       supabase.from('vw_pipeline').select('*').order('data_entrada_etapa'),
       supabase.from('configuracoes').select('dias_alerta_amarelo, dias_alerta_vermelho').single(),
+      // '*' para funcionar mesmo sem a migração 015 (premio_estimado)
+      supabase.from('planejamentos').select('*'),
     ])
     setCards(p.data ?? [])
     if (c.data) setConfig(c.data)
+    setPlanos(new Map((pl.data ?? []).map((x) => [x.id_cliente, {
+      capital: Number(x.capital_sugerido || 0),
+      premio: Number(x.premio_estimado || 0),
+    }])))
   }
 
   useEffect(() => { carregar() }, [])
@@ -72,6 +80,8 @@ export default function Pipeline() {
       <div className="flex gap-3 overflow-x-auto pb-4">
         {ETAPAS.map((etapa) => {
           const daEtapa = cards.filter((c) => c.status_funil === etapa.id)
+          // potencial da coluna: capital sugerido dos estudos já feitos
+          const potencial = daEtapa.reduce((s, c) => s + (planos.get(c.id)?.capital ?? 0), 0)
           return (
             <div
               key={etapa.id}
@@ -83,10 +93,15 @@ export default function Pipeline() {
               }`}
             >
               <div className="h-1" style={{ background: etapa.cor }} />
-              <div className="mb-1 flex items-center justify-between px-3 py-2.5">
+              <div className="flex items-center justify-between px-3 pb-0.5 pt-2.5">
                 <span className="text-sm font-semibold text-slate-700">{etapa.label}</span>
                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-xs font-semibold text-slate-500 ring-1 ring-slate-200">{daEtapa.length}</span>
               </div>
+              <p className="mb-1 px-3 pb-1 text-[11px] text-slate-400">
+                {potencial > 0 && !['fechado', 'perdido'].includes(etapa.id)
+                  ? <>capital em estudo: <strong className="tabular text-slate-500">{brlCompacto(potencial)}</strong></>
+                  : ' '}
+              </p>
 
               <div className="flex min-h-24 flex-1 flex-col gap-2 px-2 pb-2">
                 {daEtapa.map((card) => (
@@ -109,11 +124,23 @@ export default function Pipeline() {
                     {card.perfil_necessidade && (
                       <p className="mt-1 line-clamp-2 text-xs text-slate-500">{card.perfil_necessidade}</p>
                     )}
-                    <div className="mt-2">
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
                       <Badge tom={tomDias(card.dias_na_etapa, card.status_funil)}>
                         <Clock size={11} />
                         {card.dias_na_etapa === 0 ? 'hoje' : `${card.dias_na_etapa} dia(s) parado`}
                       </Badge>
+                      {(planos.get(card.id)?.capital ?? 0) > 0 && (
+                        <Badge tom="blue">
+                          <ShieldCheck size={11} /> {brlCompacto(planos.get(card.id).capital)}
+                        </Badge>
+                      )}
+                      {whatsapp(card.telefone) && (
+                        <a href={whatsapp(card.telefone)} target="_blank" rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()} draggable={false}
+                          className="ml-auto rounded p-1 text-emerald-600 hover:bg-emerald-50" title="WhatsApp">
+                          <MessageCircle size={14} />
+                        </a>
+                      )}
                     </div>
                   </div>
                 ))}

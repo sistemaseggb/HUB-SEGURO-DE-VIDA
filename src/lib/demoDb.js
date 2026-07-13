@@ -121,6 +121,18 @@ function semear() {
   ]
 
   const planejamentos = [{
+    id: idDemo(), id_cliente: rodrigo.id, profissao: 'Engenheiro civil (autônomo)', estado_civil: 'Casado(a)',
+    renda_mensal: 22000, custo_vida_mensal: 14000, patrimonio_total: 900_000, dividas_total: 120_000,
+    num_dependentes: 1, dependentes: [{ nome: 'Sofia', idade: 3, custo_mensal: 2100 }], anos_protecao: 21,
+    // (11.900 base × 12 × 21) + (2.100 da Sofia × 12 × 21) + 120 mil de dívidas
+    capital_sugerido: 3_648_000, objetivos: 'Proteger a renda de autônomo (DIT) e a faculdade da Sofia.',
+    observacoes_reuniao: 'Sem CLT — a DIT é o centro do estudo. Quer parcela abaixo de R$ 500.',
+    capital_invalidez: null, capital_doencas_graves: null, dit_diaria: 700,
+    verba_sucessoria: null, cobertura_atual: 0, itcmd_pct: 4, custas_pct: 8,
+    premio_estimado: 480,
+    conjuge_nome: 'Paula', filhos_idades: '3 anos',
+    created_at: iso(diasAtras(10)), updated_at: iso(diasAtras(2)),
+  }, {
     id: idDemo(), id_cliente: carlos.id, profissao: 'Médico cardiologista', estado_civil: 'Casado(a)',
     renda_mensal: 48000, custo_vida_mensal: 27000, patrimonio_total: 3_800_000, dividas_total: 250_000,
     num_dependentes: 2,

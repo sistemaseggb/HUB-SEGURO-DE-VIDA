@@ -4,7 +4,7 @@ import {
   ArrowLeft, MessageCircle, Presentation, Copy, Check, Printer,
   CalendarPlus, FileSignature, ClipboardList, Zap, Upload, FileText, Download, Trash2, Pencil,
   Phone, Mail, Handshake, StickyNote, Flame, ChartPie, HeartHandshake, RefreshCw, CheckCircle2,
-  Users2, Wallet, Shield, Landmark, Sparkles, Plus, Baby, Archive,
+  Users2, Wallet, Shield, Landmark, Sparkles, Plus, Baby, Archive, TrendingDown,
 } from 'lucide-react'
 import { ETAPAS_FORM, ROTULOS_FORM } from '../lib/formularioConfig'
 import { supabase } from '../lib/supabase'
@@ -15,6 +15,7 @@ import {
   Button, Card, Input, InputMoeda, Select, Textarea, Campo, Modal, Badge, Spinner,
 } from '../components/ui'
 import { useToast } from '../components/Toast'
+import LinhaProtecao from '../components/LinhaProtecao'
 
 const ABAS = [
   { nome: 'Planejamento', icone: ChartPie },
@@ -42,15 +43,27 @@ export default function ClienteDetalhe() {
   const [formEdit, setFormEdit] = useState(null)
   const [erroEdit, setErroEdit] = useState(null)
 
+  const [carteira, setCarteira] = useState(null)
+
   const carregar = useCallback(async () => {
-    const [c, pr, ct] = await Promise.all([
+    const [c, pr, ct, ap] = await Promise.all([
       supabase.from('clientes').select('*, assessores(nome, telefone)').eq('id', id).single(),
       supabase.from('vw_prioridades_classificadas').select('proxima_acao, temperatura, score').eq('id', id).maybeSingle(),
       supabase.from('vw_clientes_contato').select('dias_sem_contato, ultimo_contato').eq('id', id).maybeSingle(),
+      supabase.from('apolices').select('valor_premio_mensal, capital_segurado, comissao_gerada, status').eq('id_cliente', id),
     ])
     setCliente(c.data)
     setPrioridade(pr.data)
     setContato(ct.data)
+    // resumo de valor do cliente para o cabeçalho (só apólices ativas)
+    const ativas = (ap.data ?? []).filter((a) => a.status === 'ativa')
+    setCarteira({
+      total: (ap.data ?? []).length,
+      ativas: ativas.length,
+      premio: ativas.reduce((s, a) => s + Number(a.valor_premio_mensal || 0), 0),
+      capital: ativas.reduce((s, a) => s + Number(a.capital_segurado || 0), 0),
+      comissao: (ap.data ?? []).reduce((s, a) => s + Number(a.comissao_gerada || 0), 0),
+    })
   }, [id])
 
   useEffect(() => { carregar() }, [carregar])
@@ -148,6 +161,34 @@ export default function ClienteDetalhe() {
             </button>
           </div>
         </div>
+        {/* Resumo de valor: o que este cliente representa na carteira */}
+        {carteira && carteira.total > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+              <FileSignature size={13} className="text-laranja-600" />
+              <strong className="tabular text-slate-800">{carteira.ativas}</strong> apólice(s) ativa(s)
+              {carteira.total > carteira.ativas && <span className="text-slate-400">de {carteira.total}</span>}
+            </span>
+            {carteira.premio > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+                <Wallet size={13} className="text-laranja-600" />
+                Prêmio ativo: <strong className="tabular text-slate-800">{brl(carteira.premio)}/mês</strong>
+              </span>
+            )}
+            {carteira.capital > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+                <Shield size={13} className="text-laranja-600" />
+                Capital segurado: <strong className="tabular text-slate-800">{brlCompacto(carteira.capital)}</strong>
+              </span>
+            )}
+            {carteira.comissao > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+                <Sparkles size={13} className="text-laranja-600" />
+                Comissão gerada: <strong className="tabular text-slate-800">{brl(carteira.comissao)}</strong>
+              </span>
+            )}
+          </div>
+        )}
         {cliente.perfil_necessidade && (
           <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{cliente.perfil_necessidade}</p>
         )}
@@ -629,6 +670,21 @@ function AbaPlanejamento({ idCliente }) {
             </div>
           </div>
         </div>
+
+        {/* Linha do tempo: o custo garantido caindo em degraus até os 24 */}
+        {estudo.custoFilhosMensal > 0 && estudo.custoVida > 0 && (
+          <div className="mt-6 rounded-xl border border-slate-200/70 bg-white p-4">
+            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <TrendingDown size={13} className="text-laranja-600" /> Linha do tempo da proteção
+            </p>
+            <p className="mb-3 text-xs text-slate-400">
+              O custo mensal que o plano garante cai em degraus: cada filho sai da conta ao
+              fazer {IDADE_INDEPENDENCIA} anos, e o padrão de vida vale pelo horizonte do estudo.
+              É o desenho de por que o capital é sob medida — mostre na reunião.
+            </p>
+            <LinhaProtecao estudo={estudo} />
+          </div>
+        )}
 
         {/* Resumo vivo do estudo */}
         <div className="mt-6 rounded-xl border border-brand-100 bg-brand-50/50 p-4">

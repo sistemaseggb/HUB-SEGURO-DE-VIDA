@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase'
 import { brl, brlCompacto } from '../lib/format'
 import { calcularEstudo, IDADE_INDEPENDENCIA } from '../lib/estudo'
 import { Spinner, Button } from '../components/ui'
+import LinhaProtecao from '../components/LinhaProtecao'
 
 import Logo from '../components/Logo'
 
@@ -226,7 +227,10 @@ export default function Proposta() {
               </div>
             ))}
           </div>
-          <p className="mt-10 max-w-xl text-center text-lg text-slate-600">
+          <div className="mt-8 w-full max-w-3xl rounded-2xl border border-slate-200/70 bg-white p-5 shadow-card">
+            <LinhaProtecao estudo={e} altura={165} />
+          </div>
+          <p className="mt-6 max-w-xl text-center text-base text-slate-600">
             Esse gasto tem prazo: quando cada um completa {IDADE_INDEPENDENCIA}, ele sai da conta.
             O plano reserva <strong className="text-slate-900">{brlCompacto(e.capitalFilhos)}</strong> — exatamente
             o necessário, <strong className="text-slate-900">nem um real a mais</strong>.
