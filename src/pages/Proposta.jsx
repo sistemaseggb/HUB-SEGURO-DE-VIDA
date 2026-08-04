@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Printer, Heart, Landmark, GraduationCap, Activity,
   Stethoscope, CalendarClock, Scale, ClipboardCheck, Search, FileSignature, Handshake,
-  Hourglass, Coffee, Link2, Check, MessageCircle,
+  Hourglass, Coffee, Link2, Check, MessageCircle, ShieldCheck,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, whatsapp } from '../lib/format'
@@ -105,6 +105,25 @@ export default function Proposta({ publica = false }) {
 
   const rotuloSecao = 'text-sm font-medium uppercase tracking-[0.3em] text-gold-500'
 
+  // Lista consolidada das proteções ativas — alimenta o slide de resumo.
+  // A soma das importâncias seguradas (capital que a apólice contrata) é um
+  // conceito real: mostra a amplitude total do que o cliente passa a ter.
+  const protecoes = [
+    { icone: Heart, nome: 'Proteção da família', valor: e.valores.morte, capital: true,
+      descricao: 'Se a renda faltar por qualquer motivo' },
+    ...(tem014 ? [
+      { icone: Activity, nome: 'Invalidez permanente', valor: e.valores.invalidez, capital: true,
+        descricao: 'Acidente ou doença que impeça de trabalhar' },
+      { icone: Stethoscope, nome: 'Doenças graves', valor: e.valores.doencas_graves, capital: true,
+        descricao: 'Dinheiro em vida, no diagnóstico' },
+      ...(e.valores.dit > 0 ? [{ icone: CalendarClock, nome: 'Renda diária (DIT)', valor: e.valores.dit, porDia: true,
+        descricao: 'Por dia de afastamento temporário' }] : []),
+      ...(e.valores.sucessao > 0 ? [{ icone: Scale, nome: 'Sucessão e inventário', valor: e.valores.sucessao, capital: true,
+        descricao: 'Liquidez imediata, livre de inventário' }] : []),
+    ] : []),
+  ]
+  const somaCoberturas = protecoes.filter((p) => p.capital).reduce((s, p) => s + p.valor, 0)
+
   return (
     <div className="proposta">
       {/* barra de ações — some na impressão */}
@@ -194,6 +213,44 @@ export default function Proposta({ publica = false }) {
         )}
         <p className="mt-10 max-w-xl text-center text-lg text-slate-600">
           Tudo isso depende de uma única coisa continuar existindo: <strong className="text-slate-900">a sua capacidade de gerar renda</strong>.
+        </p>
+      </section>
+
+      {/* 2b · REENQUADRAMENTO — o slide que muda a cabeça do cliente */}
+      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 print:min-h-0 print:py-24">
+        <p className={rotuloSecao}>Antes de tudo, uma verdade</p>
+        <h2 className="mt-3 max-w-3xl text-center text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">
+          Seguro de vida não é sobre morrer.<br />
+          <span className="text-laranja-600">É sobre continuar cuidando.</span>
+        </h2>
+        <div className="mt-12 grid w-full max-w-4xl gap-5 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200/70 bg-white p-7 text-center shadow-card">
+            <div className="mx-auto w-fit rounded-2xl bg-laranja-50 p-3.5 text-laranja-600"><Activity size={26} /></div>
+            <h3 className="mt-4 font-semibold text-slate-900">A maior parte paga em vida</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              Invalidez, doenças graves e afastamento pagam <strong className="text-slate-700">enquanto você está aqui</strong> —
+              justamente quando os custos explodem e a renda para.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200/70 bg-white p-7 text-center shadow-card">
+            <div className="mx-auto w-fit rounded-2xl bg-laranja-50 p-3.5 text-laranja-600"><Heart size={26} /></div>
+            <h3 className="mt-4 font-semibold text-slate-900">Substitui a sua renda</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              O plano transforma anos de trabalho em um capital que <strong className="text-slate-700">sustenta a família</strong>
+              e realiza os sonhos que você prometeu — com ou sem você.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200/70 bg-white p-7 text-center shadow-card">
+            <div className="mx-auto w-fit rounded-2xl bg-laranja-50 p-3.5 text-laranja-600"><ShieldCheck size={26} /></div>
+            <h3 className="mt-4 font-semibold text-slate-900">Protege o que você construiu</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              Dá <strong className="text-slate-700">liquidez imediata</strong> para o inventário — o patrimônio não trava,
+              a família não vende bens às pressas para pagar imposto.
+            </p>
+          </div>
+        </div>
+        <p className="mt-10 max-w-xl text-center text-lg text-slate-600">
+          É o único ativo que <strong className="text-slate-900">se multiplica exatamente na hora que você mais precisa</strong>.
         </p>
       </section>
 
@@ -382,6 +439,57 @@ export default function Proposta({ publica = false }) {
         </section>
       )}
 
+      {/* 8b · RESUMO DO PLANO — o pacote completo, logo antes do preço */}
+      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 print:min-h-0 print:py-24">
+        <p className={rotuloSecao}>Seu plano completo</p>
+        <h2 className="mt-3 text-center text-3xl font-semibold tracking-tight text-slate-900">
+          Tudo que {primeiroNome} passa a ter
+        </h2>
+        <div className="mt-10 grid w-full max-w-5xl gap-6 lg:grid-cols-[1.25fr_1fr]">
+          {/* Lista das proteções */}
+          <div className="space-y-2.5">
+            {protecoes.map((p) => {
+              const Icone = p.icone
+              return (
+                <div key={p.nome} className="flex items-center gap-4 rounded-2xl border border-slate-200/70 bg-white p-4 shadow-card">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-laranja-50 text-laranja-600">
+                    <Icone size={20} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-slate-900">{p.nome}</p>
+                    <p className="text-xs text-slate-400">{p.descricao}</p>
+                  </div>
+                  <p className="shrink-0 font-display text-lg font-semibold tabular text-slate-900">
+                    {p.porDia ? `${brl(p.valor)}/dia` : brlCompacto(p.valor)}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+          {/* Painel de significado — o total e o porquê */}
+          <div className="relative flex flex-col justify-center overflow-hidden rounded-3xl bg-gradient-to-br from-brand-800 to-brand-900 p-7 text-white">
+            <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-laranja-500/10 blur-3xl print:hidden" />
+            <p className="relative text-xs font-semibold uppercase tracking-wide text-gold-400">Soma das coberturas contratadas</p>
+            <p className="relative mt-2 font-display text-4xl font-semibold tabular md:text-5xl">{brlCompacto(somaCoberturas)}</p>
+            <p className="relative mt-2 text-sm text-white/70">
+              É a amplitude total da sua proteção — capital que a família recebe conforme a necessidade de cada momento.
+            </p>
+            {plano.objetivos && (
+              <div className="relative mt-5 rounded-2xl bg-white/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gold-400">O que isso garante</p>
+                <p className="mt-1 text-sm text-white/90">{plano.objetivos}</p>
+              </div>
+            )}
+            {e.investimento && (
+              <p className="relative mt-5 text-sm text-white/80">
+                Tudo isso por <strong className="font-display text-2xl font-semibold text-white">{brl(e.investimento.mensal)}</strong>
+                <span className="text-white/60">/mês</span>
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+
       {/* 9 · O INVESTIMENTO — quando há cotação, o fechamento fala de valor */}
       {e.investimento && (
         <section className="flex min-h-screen flex-col items-center justify-center bg-white p-8 print:min-h-0 print:py-24">
@@ -413,7 +521,12 @@ export default function Proposta({ publica = false }) {
               </div>
             )}
           </div>
-          <p className="mt-10 max-w-lg text-center text-sm text-slate-400">
+          <p className="mt-8 max-w-xl text-center text-lg text-slate-600">
+            Menos de <strong className="text-slate-900">{String(e.investimento.pctRenda ?? '').replace('.', ',')}%</strong> da
+            sua renda garantem <strong className="text-slate-900">{brlCompacto(somaCoberturas)}</strong> de proteção,
+            prontos no momento em que a família mais precisar.
+          </p>
+          <p className="mt-6 max-w-lg text-center text-sm text-slate-400">
             Valor de referência cotado nas seguradoras para o plano completo — sujeito à análise da proposta.
           </p>
         </section>
@@ -443,6 +556,12 @@ export default function Proposta({ publica = false }) {
           O melhor dia para proteger sua família foi ontem.<br />
           <span className="text-gold-400">O segundo melhor é hoje.</span>
         </h2>
+        {plano.objetivos && (
+          <p className="relative mt-6 max-w-xl text-white/70">
+            Você me disse o que quer garantir: <span className="text-white">“{plano.objetivos}”</span>.
+            Esse plano existe exatamente para isso acontecer — com ou sem você por perto.
+          </p>
+        )}
         <p className="relative mt-8 text-lg text-white/80">Vamos ativar seu plano, {primeiroNome}?</p>
         <p className="relative mt-12 text-sm text-white/50">
           Valores sujeitos à análise da seguradora. Estudo elaborado por Natália Maschendorf em {new Date().toLocaleDateString('pt-BR')}.

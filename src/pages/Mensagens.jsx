@@ -44,9 +44,10 @@ export default function Mensagens() {
   }
 
   async function marcar(m, status) {
-    await supabase.from('fila_mensagens').update({
+    const { error } = await supabase.from('fila_mensagens').update({
       status, enviada_em: status === 'enviada' ? new Date().toISOString() : null,
     }).eq('id', m.id)
+    if (error) return toast.erro(`Não foi possível atualizar: ${error.message}`)
     if (status === 'enviada') toast.ok('Marcada como enviada.')
     else if (status === 'descartada') toast.info('Mensagem descartada.')
     carregar()

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { CalendarPlus, MessageCircle, CalendarClock, Mail, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { STATUS_REUNIAO, etapaLabel } from '../lib/constants'
-import { whatsapp, dataHoraBR } from '../lib/format'
+import { whatsapp, dataHoraBR, hojeLocal, diaLocal } from '../lib/format'
 import {
   PageHeader, Card, Button, Select, Input, Textarea, Campo, Modal, Spinner, EmptyState, ComoFunciona, Badge,
 } from '../components/ui'
@@ -34,16 +34,19 @@ export default function Agenda() {
 
   async function agendar(e) {
     e.preventDefault()
-    await supabase.from('reunioes').insert({
+    const { error } = await supabase.from('reunioes').insert({
       id_cliente: form.id_cliente, data_hora: form.data_hora, notas: form.notas || null,
     })
+    if (error) return toast.erro(`Não foi possível agendar: ${error.message}`)
     setModal(false)
     setForm({ id_cliente: '', data_hora: '', notas: '' })
+    toast.ok('Reunião agendada! O cliente avançou no funil.')
     carregar()
   }
 
   async function mudarStatus(r, status) {
-    await supabase.from('reunioes').update({ status }).eq('id', r.id)
+    const { error } = await supabase.from('reunioes').update({ status }).eq('id', r.id)
+    if (error) return toast.erro(`Não foi possível atualizar: ${error.message}`)
     carregar()
   }
 
@@ -56,7 +59,8 @@ export default function Agenda() {
   }
 
   async function ignorarEvento(evento) {
-    await supabase.from('agenda_externa').update({ status: 'ignorada' }).eq('id', evento.id)
+    const { error } = await supabase.from('agenda_externa').update({ status: 'ignorada' }).eq('id', evento.id)
+    if (error) return toast.erro(`Não foi possível ignorar: ${error.message}`)
     setPendentes((ps) => ps.filter((p) => p.id !== evento.id))
   }
 
@@ -67,7 +71,7 @@ export default function Agenda() {
     for (const r of reunioes) {
       const d = new Date(r.data_hora); d.setHours(0, 0, 0, 0)
       const passada = d < hoje && r.status === 'agendada'
-      const chave = passada ? 'ATRASADAS' : d.toISOString().slice(0, 10)
+      const chave = passada ? 'ATRASADAS' : diaLocal(r.data_hora)
       if (!porDia.has(chave)) porDia.set(chave, [])
       porDia.get(chave).push(r)
     }
@@ -79,8 +83,8 @@ export default function Agenda() {
 
   const rotuloDia = (chave) => {
     if (chave === 'ATRASADAS') return 'Atrasadas — aguardando atualização'
-    const hoje = new Date().toISOString().slice(0, 10)
-    const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+    const hoje = hojeLocal()
+    const amanha = diaLocal(Date.now() + 86400000)
     if (chave === hoje) return 'Hoje'
     if (chave === amanha) return 'Amanhã'
     const [y, m, d] = chave.split('-')

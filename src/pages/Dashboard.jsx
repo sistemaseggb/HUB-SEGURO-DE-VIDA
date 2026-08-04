@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   CalendarCheck, Wallet, FileSignature, TrendingUp, CheckCircle2,
   MessageCircle, AlertTriangle, Trophy, Cake, Target, Percent, Timer, ShieldCheck, Flame, Rocket,
-  CalendarClock, Sun, Snowflake,
+  CalendarClock, Sun, Snowflake, GraduationCap,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, mesBR, dataBR, whatsapp } from '../lib/format'
@@ -288,6 +288,9 @@ function PrimeirosPassos() {
           </li>
         ))}
       </ul>
+      <Link to="/guia" className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-laranja-700 hover:underline">
+        <GraduationCap size={15} /> Não sabe por onde começar? Abra o guia passo a passo
+      </Link>
     </Card>
   )
 }
