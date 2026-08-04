@@ -446,6 +446,19 @@ function AbaPlanejamento({ idCliente }) {
     setTimeout(() => setSalvo(false), 2500)
   }
 
+  // Prontidão da proposta: o que já dá para apresentar e o que ainda pega mal
+  const pct = Math.round((estudo.completude.feitos / estudo.completude.total) * 100)
+  const pronto = estudo.completude.feitos >= estudo.completude.total - 1
+  const alertas = []
+  if (estudo.renda <= 0) alertas.push('Preencha a renda mensal — vários cálculos dependem dela.')
+  if (estudo.custoVida <= 0) alertas.push('Preencha o custo de vida — é a base da proteção da família.')
+  if (estudo.renda > 0 && estudo.custoVida > estudo.renda)
+    alertas.push('O custo de vida está maior que a renda — confira os valores com o cliente.')
+  if (!tem015 || !(Number(plano.premio_estimado) > 0))
+    alertas.push('Sem prêmio cotado: a proposta não terá o slide “O investimento”. Cote nas seguradoras e preencha.')
+  if (estudo.patrimonio <= 0)
+    alertas.push('Sem patrimônio: a proposta não mostrará a blindagem/inventário.')
+
   return (
     <Card className="p-5">
       <ComoFunciona id="planejamento" titulo="Como montar o planejamento">
@@ -454,6 +467,45 @@ function AbaPlanejamento({ idCliente }) {
         Cada número aqui alimenta a <strong>proposta</strong> e a linha do tempo. Deixe um pilar em branco
         para usar a sugestão automática, ou digite o valor que você definiu.
       </ComoFunciona>
+
+      {/* Prontidão da proposta */}
+      <div className="mb-5 rounded-2xl border border-slate-200/70 bg-slate-50/60 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="relative flex h-12 w-12 items-center justify-center">
+              <svg viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
+                <circle cx="18" cy="18" r="15.5" fill="none" stroke="#e2e8f0" strokeWidth="3" />
+                <circle cx="18" cy="18" r="15.5" fill="none" stroke={pronto ? '#0e9f6e' : '#d96527'} strokeWidth="3"
+                  strokeLinecap="round" strokeDasharray={`${(pct / 100) * 97.4} 97.4`} />
+              </svg>
+              <span className="absolute text-xs font-bold text-slate-700">{pct}%</span>
+            </div>
+            <div>
+              <p className="font-semibold text-slate-900">
+                {pronto ? 'Estudo pronto para apresentar ✓' : 'Prontidão da proposta'}
+              </p>
+              <p className="text-xs text-slate-500">
+                {estudo.completude.feitos} de {estudo.completude.total} informações-chave preenchidas
+              </p>
+            </div>
+          </div>
+          <Link to={`/proposta/${idCliente}`}>
+            <Button variant={pronto ? 'primary' : 'secondary'}>
+              <Presentation size={16} /> Gerar proposta
+            </Button>
+          </Link>
+        </div>
+        {alertas.length > 0 && (
+          <ul className="mt-3 space-y-1.5 border-t border-slate-200/70 pt-3">
+            {alertas.map((a, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-slate-500">
+                <span className="mt-0.5 text-amber-500">▹</span> {a}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <form onSubmit={salvar}>
         <p className={SECAO}><Users2 size={13} /> Família e perfil</p>
         <div className="grid gap-4 md:grid-cols-3">
