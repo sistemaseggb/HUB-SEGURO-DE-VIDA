@@ -14,7 +14,7 @@ import { brl, brlCompacto, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib
 import { calcularEstudo, normalizarFilhos, IDADE_INDEPENDENCIA, PILARES } from '../lib/estudo'
 import { BLOCOS_ROTEIRO } from '../lib/roteiro'
 import {
-  Button, Card, Input, InputMoeda, Select, Textarea, Campo, Modal, Badge, Spinner,
+  Button, Card, Input, InputMoeda, Select, Textarea, Campo, Modal, Badge, Spinner, ComoFunciona,
 } from '../components/ui'
 import { useToast } from '../components/Toast'
 import LinhaProtecao from '../components/LinhaProtecao'
@@ -448,6 +448,12 @@ function AbaPlanejamento({ idCliente }) {
 
   return (
     <Card className="p-5">
+      <ComoFunciona id="planejamento" titulo="Como montar o planejamento">
+        Preencha os dados que você levantou na reunião — renda, custo de vida, patrimônio, dívidas e os
+        filhos. O sistema calcula sozinho os <strong>5 pilares da proteção</strong> e o capital ideal.
+        Cada número aqui alimenta a <strong>proposta</strong> e a linha do tempo. Deixe um pilar em branco
+        para usar a sugestão automática, ou digite o valor que você definiu.
+      </ComoFunciona>
       <form onSubmit={salvar}>
         <p className={SECAO}><Users2 size={13} /> Família e perfil</p>
         <div className="grid gap-4 md:grid-cols-3">
