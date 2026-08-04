@@ -1,5 +1,7 @@
 # Hub Seguro de Vida — Natália Maschendorf
 
+![CI](https://github.com/sistemaseggb/HUB-SEGURO-DE-VIDA/actions/workflows/ci.yml/badge.svg)
+
 Sistema de gestão completa do fluxo de consultoria de seguro de vida — pré-venda,
 venda e pós-venda — com automação máxima: o trabalho da Natália é fazer a reunião
 e registrar os dados; o sistema cuida do resto.

@@ -1,0 +1,62 @@
+# Verificação automática do Hub — roda sozinha a cada envio de código.
+# Se algo quebrar (lint, build ou os testes de tela), o GitHub avisa ANTES
+# de publicar. Assim a consultora nunca recebe uma versão com erro.
+name: CI — verificação automática
+
+on:
+  push:
+  pull_request:
+
+# Cancela execuções antigas do mesmo branch quando chega um push novo
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Lint, build e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Configurar o Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar as dependências
+        run: npm ci
+
+      - name: Lint (oxlint)
+        run: npm run lint
+
+      - name: Build de produção
+        run: npm run build
+
+      - name: Instalar o Chromium (para os testes de tela)
+        id: chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Rodar os testes ponta-a-ponta (modo demo)
+        env:
+          CHROMIUM_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          # sobe o site em segundo plano (sem .env → modo demonstração)
+          npm run preview &
+          echo "Aguardando o servidor responder em http://localhost:4173 ..."
+          for i in $(seq 1 40); do
+            curl -sf http://localhost:4173 >/dev/null && { echo "no ar!"; break; }
+            sleep 1
+          done
+          npm run test:e2e
+
+      - name: Guardar as capturas de tela (só se algo falhar)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-e2e
+          path: e2e-shots/
+          if-no-files-found: ignore
