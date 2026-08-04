@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Printer, Heart, Landmark, GraduationCap, Activity,
   Stethoscope, CalendarClock, Scale, ClipboardCheck, Search, FileSignature, Handshake,
-  Hourglass, Coffee, Link2, Check, MessageCircle,
+  Hourglass, Coffee, Link2, Check, MessageCircle, ShieldCheck,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, whatsapp } from '../lib/format'
@@ -194,6 +194,44 @@ export default function Proposta({ publica = false }) {
         )}
         <p className="mt-10 max-w-xl text-center text-lg text-slate-600">
           Tudo isso depende de uma única coisa continuar existindo: <strong className="text-slate-900">a sua capacidade de gerar renda</strong>.
+        </p>
+      </section>
+
+      {/* 2b · REENQUADRAMENTO — o slide que muda a cabeça do cliente */}
+      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 print:min-h-0 print:py-24">
+        <p className={rotuloSecao}>Antes de tudo, uma verdade</p>
+        <h2 className="mt-3 max-w-3xl text-center text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">
+          Seguro de vida não é sobre morrer.<br />
+          <span className="text-laranja-600">É sobre continuar cuidando.</span>
+        </h2>
+        <div className="mt-12 grid w-full max-w-4xl gap-5 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200/70 bg-white p-7 text-center shadow-card">
+            <div className="mx-auto w-fit rounded-2xl bg-laranja-50 p-3.5 text-laranja-600"><Activity size={26} /></div>
+            <h3 className="mt-4 font-semibold text-slate-900">A maior parte paga em vida</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              Invalidez, doenças graves e afastamento pagam <strong className="text-slate-700">enquanto você está aqui</strong> —
+              justamente quando os custos explodem e a renda para.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200/70 bg-white p-7 text-center shadow-card">
+            <div className="mx-auto w-fit rounded-2xl bg-laranja-50 p-3.5 text-laranja-600"><Heart size={26} /></div>
+            <h3 className="mt-4 font-semibold text-slate-900">Substitui a sua renda</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              O plano transforma anos de trabalho em um capital que <strong className="text-slate-700">sustenta a família</strong>
+              e realiza os sonhos que você prometeu — com ou sem você.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200/70 bg-white p-7 text-center shadow-card">
+            <div className="mx-auto w-fit rounded-2xl bg-laranja-50 p-3.5 text-laranja-600"><ShieldCheck size={26} /></div>
+            <h3 className="mt-4 font-semibold text-slate-900">Protege o que você construiu</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              Dá <strong className="text-slate-700">liquidez imediata</strong> para o inventário — o patrimônio não trava,
+              a família não vende bens às pressas para pagar imposto.
+            </p>
+          </div>
+        </div>
+        <p className="mt-10 max-w-xl text-center text-lg text-slate-600">
+          É o único ativo que <strong className="text-slate-900">se multiplica exatamente na hora que você mais precisa</strong>.
         </p>
       </section>
 

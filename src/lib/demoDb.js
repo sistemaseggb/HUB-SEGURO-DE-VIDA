@@ -19,7 +19,8 @@ const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
 
 const hoje = () => new Date()
 const iso = (d) => d.toISOString()
-const dia = (d) => d.toISOString().slice(0, 10)
+// "AAAA-MM-DD" no fuso local (não UTC), para casar com hojeLocal() do frontend
+const dia = (d) => { const o = d.getTimezoneOffset() * 60000; return new Date(d - o).toISOString().slice(0, 10) }
 const diasAtras = (n) => { const d = hoje(); d.setDate(d.getDate() - n); return d }
 const diasFrente = (n) => { const d = hoje(); d.setDate(d.getDate() + n); return d }
 const mesTrunc = (d) => `${String(d).slice(0, 7)}-01`
@@ -131,7 +132,7 @@ function semear() {
     verba_sucessoria: null, cobertura_atual: 0, itcmd_pct: 4, custas_pct: 8,
     premio_estimado: 480,
     conjuge_nome: 'Paula', filhos_idades: '3 anos',
-    token_proposta: 'demo-proposta-rodrigo',
+    token_proposta: 'demo-proposta-rodrigo', roteiro: {},
     created_at: iso(diasAtras(10)), updated_at: iso(diasAtras(2)),
   }, {
     id: idDemo(), id_cliente: carlos.id, profissao: 'Médico cardiologista', estado_civil: 'Casado(a)',
@@ -150,6 +151,10 @@ function semear() {
     premio_estimado: 1890,
     conjuge_nome: 'Mariana', filhos_idades: '6 e 9 anos',
     token_proposta: 'demo-proposta-carlos',
+    roteiro: { blocos: {
+      abertura: { feito: true, nota: 'Muito receptivo. Falou da clínica e dos dois filhos.' },
+      descoberta: { feito: true, nota: 'Esposa não trabalha fora. Preocupado com a faculdade dos filhos.' },
+    } },
     created_at: iso(diasAtras(180)), updated_at: iso(diasAtras(30)),
   }]
 

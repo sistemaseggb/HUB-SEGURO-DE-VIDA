@@ -70,6 +70,16 @@ await passo('Planejamento → filhos com gasto até os 24', async () => {
   await page.waitForSelector('text=Gasto com filhos hoje', { timeout: 3000 })
 })
 
+await passo('Cliente 360 → Roteiro da reunião (script guiado)', async () => {
+  await page.click('button:has-text("Roteiro")')
+  await page.waitForSelector('text=Roteiro da reunião', { timeout: 5000 })
+  await page.waitForSelector('text=Abertura e conexão', { timeout: 3000 })
+  await page.waitForSelector('text=Como conduzir', { timeout: 3000 })
+  // volta para o Planejamento para os próximos passos que esperam a aba de apólices
+  await page.click('button:has-text("Apólices")')
+  await page.waitForTimeout(300)
+})
+
 await passo('Cliente 360 → Apólices com status', async () => {
   await page.click('button:has-text("Apólices")')
   await page.waitForSelector('text=Ativa', { timeout: 5000 })
@@ -103,6 +113,7 @@ await passo('Proposta (slides) com estudo completo', async () => {
   await page.goto(`${BASE}/proposta/${idCliente}`)
   await page.waitForSelector('text=/estudo de proteção e blindagem/i', { timeout: 6000 })
   await shot('08-proposta-capa')
+  await page.waitForSelector('text=/não é sobre morrer/i', { timeout: 3000 })
   await page.waitForSelector('text=/cada filho protegido até os 24/i', { timeout: 3000 })
   await page.waitForSelector('text=/inventário custa caro/i', { timeout: 3000 })
   await page.waitForSelector('text=/quatro passos simples/i', { timeout: 3000 })
@@ -116,6 +127,13 @@ await passo('Proposta pública pelo link (/p/<token>, sem login)', async () => {
   await anonima.waitForSelector('text=/estudo de proteção e blindagem/i', { timeout: 3000 })
   await anonima.screenshot({ path: 'e2e-shots/16-proposta-publica.png' })
   await anonima.context().close()
+})
+
+await passo('Guia passo a passo abre e mostra a jornada', async () => {
+  await page.goto(BASE + '/guia')
+  await page.waitForSelector('text=A jornada completa do cliente', { timeout: 6000 })
+  await page.waitForSelector('text=Conduza a reunião com o roteiro', { timeout: 3000 })
+  await shot('15-guia')
 })
 
 await passo('Relatórios → fechamento com cascata', async () => {

@@ -5,12 +5,14 @@ import {
   CalendarPlus, FileSignature, ClipboardList, Zap, Upload, FileText, Download, Trash2, Pencil,
   Phone, Mail, Handshake, StickyNote, Flame, ChartPie, HeartHandshake, RefreshCw, CheckCircle2,
   Users2, Wallet, Shield, Landmark, Sparkles, Plus, Baby, Archive, TrendingDown,
+  ListChecks, Lightbulb, MessageSquareQuote, Clock3,
 } from 'lucide-react'
 import { ETAPAS_FORM, ROTULOS_FORM } from '../lib/formularioConfig'
 import { supabase } from '../lib/supabase'
 import { ETAPAS, etapaLabel, STATUS_REUNIAO } from '../lib/constants'
 import { brl, brlCompacto, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib/format'
 import { calcularEstudo, normalizarFilhos, IDADE_INDEPENDENCIA, PILARES } from '../lib/estudo'
+import { BLOCOS_ROTEIRO } from '../lib/roteiro'
 import {
   Button, Card, Input, InputMoeda, Select, Textarea, Campo, Modal, Badge, Spinner,
 } from '../components/ui'
@@ -19,6 +21,7 @@ import LinhaProtecao from '../components/LinhaProtecao'
 
 const ABAS = [
   { nome: 'Planejamento', icone: ChartPie },
+  { nome: 'Roteiro', icone: ListChecks },
   { nome: 'Interações', icone: MessageCircle },
   { nome: 'Reuniões', icone: CalendarPlus },
   { nome: 'Apólices', icone: FileSignature },
@@ -269,6 +272,7 @@ export default function ClienteDetalhe() {
       </div>
 
       {aba === 'Planejamento' && <AbaPlanejamento idCliente={id} />}
+      {aba === 'Roteiro' && <AbaRoteiro idCliente={id} cliente={cliente} />}
       {aba === 'Interações' && <AbaInteracoes idCliente={id} onMudanca={carregar} />}
       {aba === 'Reuniões' && <AbaReunioes idCliente={id} onMudanca={carregar} />}
       {aba === 'Apólices' && <AbaApolices idCliente={id} onMudanca={carregar} />}
@@ -740,6 +744,191 @@ function AbaPlanejamento({ idCliente }) {
   )
 }
 
+// ─── ROTEIRO: o script consultivo que a consultora conduz na reunião ─────────
+// Cada bloco tem falas, perguntas e um campo de anotação. O progresso e as
+// notas ficam salvos no planejamento (coluna `roteiro`, migração 018).
+function AbaRoteiro({ idCliente, cliente }) {
+  const toast = useToast()
+  const [plano, setPlano] = useState(null)
+  const [roteiro, setRoteiro] = useState({})
+  const [salvando, setSalvando] = useState(false)
+
+  useEffect(() => {
+    supabase.from('planejamentos').select('*').eq('id_cliente', idCliente).maybeSingle()
+      .then(({ data }) => {
+        setPlano(data ?? { id_cliente: idCliente })
+        setRoteiro(data?.roteiro?.blocos ?? {})
+      })
+  }, [idCliente])
+
+  if (!plano) return <Spinner />
+
+  const tem018 = plano.roteiro !== undefined
+  const feitos = BLOCOS_ROTEIRO.filter((b) => roteiro[b.id]?.feito).length
+  const setBloco = (id, campo, valor) =>
+    setRoteiro((r) => ({ ...r, [id]: { ...r[id], [campo]: valor } }))
+
+  async function salvar() {
+    setSalvando(true)
+    const payload = {
+      id_cliente: idCliente,
+      roteiro: { blocos: roteiro, atualizado_em: new Date().toISOString() },
+    }
+    const { error } = await supabase.from('planejamentos').upsert(payload, { onConflict: 'id_cliente' })
+    setSalvando(false)
+    if (error) return toast.erro(`Não foi possível salvar: ${error.message}`)
+    toast.ok('Roteiro salvo.')
+  }
+
+  // Junta as anotações do roteiro numa nota de reunião consolidada
+  async function consolidarNotas() {
+    const linhas = BLOCOS_ROTEIRO
+      .filter((b) => roteiro[b.id]?.nota?.trim())
+      .map((b) => `• ${b.titulo}: ${roteiro[b.id].nota.trim()}`)
+    if (linhas.length === 0) return toast.info('Sem anotações para consolidar ainda.')
+    const texto = `Reunião de ${dataBR(new Date().toISOString())}\n${linhas.join('\n')}`
+    const atual = plano.observacoes_reuniao ? `${plano.observacoes_reuniao}\n\n` : ''
+    const { error } = await supabase.from('planejamentos')
+      .upsert({ id_cliente: idCliente, observacoes_reuniao: atual + texto }, { onConflict: 'id_cliente' })
+    if (error) return toast.erro(`Erro: ${error.message}`)
+    toast.ok('Anotações levadas para as Notas da reunião (aba Planejamento).')
+  }
+
+  return (
+    <Card className="p-5">
+      {!tem018 && (
+        <p className="mb-4 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
+          Rode a migração <strong>018_roteiro_reuniao.sql</strong> no Supabase para que as anotações
+          do roteiro fiquem salvas. Sem ela, o roteiro funciona como guia, mas não grava.
+        </p>
+      )}
+
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 font-semibold text-slate-900">
+            <ListChecks size={18} className="text-laranja-600" /> Roteiro da reunião
+          </h3>
+          <p className="mt-0.5 text-sm text-slate-500">
+            Seu guia de conversa com {cliente.nome.split(' ')[0]} — conduza bloco a bloco e anote o que ouvir.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2" title="Blocos concluídos">
+            <div className="h-1.5 w-28 rounded-full bg-slate-100">
+              <div className="h-1.5 rounded-full bg-laranja-500 transition-all"
+                style={{ width: `${(feitos / BLOCOS_ROTEIRO.length) * 100}%` }} />
+            </div>
+            <span className="text-xs text-slate-400">{feitos}/{BLOCOS_ROTEIRO.length}</span>
+          </div>
+          <Button variant="secondary" onClick={() => imprimirRoteiro(cliente, roteiro)}>
+            <Printer size={15} /> Imprimir
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {BLOCOS_ROTEIRO.map((b, i) => {
+          const estado = roteiro[b.id] ?? {}
+          return (
+            <div key={b.id} className={`rounded-xl border p-4 transition-colors ${
+              estado.feito ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200/70 bg-white'}`}>
+              <div className="flex items-start gap-3">
+                <button type="button" onClick={() => setBloco(b.id, 'feito', !estado.feito)}
+                  className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                    estado.feito ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 text-transparent hover:border-emerald-400'}`}
+                  title={estado.feito ? 'Concluído' : 'Marcar como feito'}>
+                  <CheckCircle2 size={14} />
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[11px] font-bold text-white">{i + 1}</span>
+                    <h4 className="font-semibold text-slate-900">{b.titulo}</h4>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+                      <Clock3 size={11} /> {b.tempo}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">{b.objetivo}</p>
+
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-lg bg-slate-50 p-3">
+                      <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        <MessageSquareQuote size={12} /> Como conduzir
+                      </p>
+                      <ul className="space-y-1 text-xs text-slate-600">
+                        {b.falas.map((f, j) => <li key={j} className="flex gap-1.5"><span className="text-laranja-400">›</span> {f}</li>)}
+                      </ul>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 p-3">
+                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Perguntas-chave</p>
+                      <ul className="space-y-1 text-xs text-slate-600">
+                        {b.perguntas.map((p, j) => <li key={j} className="flex gap-1.5"><span className="text-laranja-400">?</span> {p}</li>)}
+                      </ul>
+                    </div>
+                  </div>
+
+                  {b.dica && (
+                    <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-laranja-100 bg-laranja-50/60 px-3 py-2 text-xs text-laranja-800">
+                      <Lightbulb size={13} className="mt-0.5 shrink-0" /> {b.dica}
+                    </p>
+                  )}
+
+                  <Textarea rows={2} className="mt-3" placeholder={`Anote o que o cliente disse em "${b.titulo}"...`}
+                    value={estado.nota ?? ''} onChange={(e) => setBloco(b.id, 'nota', e.target.value)} />
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <Button onClick={salvar} disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar roteiro'}</Button>
+        <Button variant="secondary" onClick={consolidarNotas}>
+          <StickyNote size={15} /> Levar anotações para as Notas da reunião
+        </Button>
+      </div>
+    </Card>
+  )
+}
+
+// Impressão do roteiro — leve para a reunião no papel, se preferir
+function imprimirRoteiro(cliente, roteiro) {
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const blocos = BLOCOS_ROTEIRO.map((b, i) => `
+    <h2>${i + 1}. ${esc(b.titulo)} <span class="tempo">${esc(b.tempo)}</span></h2>
+    <p class="obj">${esc(b.objetivo)}</p>
+    <p class="rot">Como conduzir</p>
+    <ul>${b.falas.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
+    <p class="rot">Perguntas-chave</p>
+    <ul>${b.perguntas.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>
+    ${roteiro[b.id]?.nota ? `<p class="nota"><strong>Anotações:</strong> ${esc(roteiro[b.id].nota)}</p>` : '<div class="linha"></div>'}
+  `).join('')
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+    <title>Roteiro — ${esc(cliente.nome)}</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; }
+      body { font: 12.5px/1.5 -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; color: #0f172a; padding: 34px; }
+      h1 { font-size: 19px; } .sub { color: #64748b; font-size: 11px; margin: 3px 0 14px; }
+      h2 { font-size: 13px; color: #0f172a; margin: 16px 0 3px; }
+      .tempo { font-size: 10px; color: #94a3b8; font-weight: 400; }
+      .obj { color: #475569; font-size: 11.5px; margin-bottom: 5px; }
+      .rot { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: #d96527; font-weight: 700; margin-top: 6px; }
+      ul { margin: 2px 0 4px 18px; } li { margin: 1px 0; }
+      .nota { background: #f8fafc; border-left: 3px solid #d96527; padding: 5px 8px; margin-top: 5px; font-size: 11.5px; }
+      .linha { border-bottom: 1px dashed #cbd5e1; height: 22px; margin-top: 4px; }
+      @media print { body { padding: 0; } }
+    </style></head><body>
+    <h1>Roteiro de reunião — ${esc(cliente.nome)}</h1>
+    <p class="sub">Hub Seguro de Vida · guia consultivo · ${new Date().toLocaleDateString('pt-BR')}</p>
+    ${blocos}
+    <script>window.onload = () => window.print()</script>
+    </body></html>`
+  const w = window.open('', '_blank')
+  if (!w) return
+  w.document.write(html)
+  w.document.close()
+}
+
 // Ícones por tipo de tarefa automática (contato, revisão, pós-venda...)
 const ICONE_TAREFA = {
   contato: Phone, agendamento: CalendarPlus, planejamento: ChartPie,
@@ -756,6 +945,7 @@ const TIPO_INTERACAO = [
 ]
 
 function AbaInteracoes({ idCliente, onMudanca }) {
+  const toast = useToast()
   const [itens, setItens] = useState(null)
   const [tipo, setTipo] = useState('ligacao')
   const [descricao, setDescricao] = useState('')
@@ -772,16 +962,19 @@ function AbaInteracoes({ idCliente, onMudanca }) {
     e.preventDefault()
     if (!descricao.trim()) return
     setSalvando(true)
-    await supabase.from('interacoes').insert({ id_cliente: idCliente, tipo, descricao: descricao.trim() })
-    setDescricao('')
+    const { error } = await supabase.from('interacoes').insert({ id_cliente: idCliente, tipo, descricao: descricao.trim() })
     setSalvando(false)
+    if (error) return toast.erro(`Não foi possível registrar: ${error.message}`)
+    setDescricao('')
+    toast.ok('Contato registrado.')
     carregar()
     onMudanca?.()
   }
 
   async function excluir(i) {
     if (!window.confirm('Excluir este registro de contato?')) return
-    await supabase.from('interacoes').delete().eq('id', i.id)
+    const { error } = await supabase.from('interacoes').delete().eq('id', i.id)
+    if (error) return toast.erro(`Não foi possível excluir: ${error.message}`)
     carregar()
     onMudanca?.()
   }
@@ -836,6 +1029,7 @@ function AbaInteracoes({ idCliente, onMudanca }) {
 
 // ─── REUNIÕES: agendar avança o funil sozinho; concluir também ───────────────
 function AbaReunioes({ idCliente, onMudanca }) {
+  const toast = useToast()
   const [reunioes, setReunioes] = useState(null)
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState({ data_hora: '', notas: '' })
@@ -848,20 +1042,24 @@ function AbaReunioes({ idCliente, onMudanca }) {
 
   async function agendar(e) {
     e.preventDefault()
-    await supabase.from('reunioes').insert({ id_cliente: idCliente, data_hora: form.data_hora, notas: form.notas || null })
+    const { error } = await supabase.from('reunioes').insert({ id_cliente: idCliente, data_hora: form.data_hora, notas: form.notas || null })
+    if (error) return toast.erro(`Não foi possível agendar: ${error.message}`)
     setModal(false)
     setForm({ data_hora: '', notas: '' })
+    toast.ok('Reunião agendada!')
     carregar(); onMudanca()
   }
 
   async function mudarStatus(r, status) {
-    await supabase.from('reunioes').update({ status }).eq('id', r.id)
+    const { error } = await supabase.from('reunioes').update({ status }).eq('id', r.id)
+    if (error) return toast.erro(`Não foi possível atualizar: ${error.message}`)
     carregar(); onMudanca()
   }
 
   async function excluir(r) {
     if (!window.confirm('Excluir esta reunião?')) return
-    await supabase.from('reunioes').delete().eq('id', r.id)
+    const { error } = await supabase.from('reunioes').delete().eq('id', r.id)
+    if (error) return toast.erro(`Não foi possível excluir: ${error.message}`)
     carregar(); onMudanca()
   }
 
@@ -1502,7 +1700,11 @@ function AbaFormulario({ idCliente, cliente }) {
 
 // ─── TAREFAS do cliente ──────────────────────────────────────────────────────
 function AbaTarefas({ idCliente }) {
+  const toast = useToast()
   const [tarefas, setTarefas] = useState(null)
+  const [titulo, setTitulo] = useState('')
+  const [vencimento, setVencimento] = useState('')
+  const [salvando, setSalvando] = useState(false)
 
   const carregar = useCallback(() =>
     supabase.from('tarefas').select('*').eq('id_cliente', idCliente)
@@ -1511,11 +1713,34 @@ function AbaTarefas({ idCliente }) {
 
   useEffect(() => { carregar() }, [carregar])
 
+  async function criar(e) {
+    e.preventDefault()
+    if (!titulo.trim()) return
+    setSalvando(true)
+    const { error } = await supabase.from('tarefas').insert({
+      id_cliente: idCliente, titulo: titulo.trim(), tipo: 'geral',
+      data_vencimento: vencimento || undefined, automatica: false,
+    })
+    setSalvando(false)
+    if (error) return toast.erro(`Não foi possível criar: ${error.message}`)
+    setTitulo(''); setVencimento('')
+    toast.ok('Tarefa criada.')
+    carregar()
+  }
+
   async function alternar(t) {
-    await supabase.from('tarefas').update({
+    const { error } = await supabase.from('tarefas').update({
       concluida: !t.concluida,
       concluida_em: t.concluida ? null : new Date().toISOString(),
     }).eq('id', t.id)
+    if (error) return toast.erro(`Erro: ${error.message}`)
+    carregar()
+  }
+
+  async function excluir(t) {
+    if (!window.confirm(`Excluir a tarefa "${t.titulo}"?`)) return
+    const { error } = await supabase.from('tarefas').delete().eq('id', t.id)
+    if (error) return toast.erro(`Erro: ${error.message}`)
     carregar()
   }
 
@@ -1523,12 +1748,27 @@ function AbaTarefas({ idCliente }) {
 
   return (
     <Card className="p-5">
+      <form onSubmit={criar} className="mb-5 flex flex-wrap items-end gap-2">
+        <div className="min-w-0 flex-1">
+          <Campo label="Nova tarefa">
+            <Input value={titulo} onChange={(e) => setTitulo(e.target.value)}
+              placeholder="Ex.: retornar ligação, enviar cotação, cobrar a DPS..." />
+          </Campo>
+        </div>
+        <div className="w-44">
+          <Campo label="Vence em">
+            <Input type="date" value={vencimento} onChange={(e) => setVencimento(e.target.value)} />
+          </Campo>
+        </div>
+        <Button type="submit" disabled={salvando}><Plus size={15} /> Adicionar</Button>
+      </form>
+
       {tarefas.length === 0
-        ? <p className="py-6 text-center text-sm text-slate-400">Nenhuma tarefa para este cliente.</p>
+        ? <p className="py-6 text-center text-sm text-slate-400">Nenhuma tarefa para este cliente. Crie a primeira acima.</p>
         : (
           <ul className="space-y-2">
             {tarefas.map((t) => (
-              <li key={t.id} className={`flex items-center gap-3 rounded-lg border p-3 ${
+              <li key={t.id} className={`group flex items-center gap-3 rounded-lg border p-3 ${
                 t.concluida ? 'border-slate-100 opacity-50' : 'border-slate-200'}`}>
                 <input type="checkbox" checked={t.concluida} onChange={() => alternar(t)}
                   className="h-4 w-4 accent-blue-600" />
@@ -1541,6 +1781,9 @@ function AbaTarefas({ idCliente }) {
                     vence {dataBR(t.data_vencimento)} {t.automatica && '· criada automaticamente'}
                   </p>
                 </div>
+                <button onClick={() => excluir(t)} className="rounded p-1.5 text-slate-300 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100" title="Excluir">
+                  <Trash2 size={14} />
+                </button>
               </li>
             ))}
           </ul>

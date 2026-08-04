@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Link, Outlet, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, KanbanSquare, Users, HeartHandshake,
   Settings, LogOut, CalendarDays, MessageSquareText,
-  BarChart3, Upload, Menu, X,
+  BarChart3, Upload, Menu, X, GraduationCap, LifeBuoy,
 } from 'lucide-react'
 import { supabase, MODO_DEMO } from '../lib/supabase'
 import BuscaGlobal from './BuscaGlobal'
@@ -32,6 +32,12 @@ const SECOES = [
       { para: '/relatorios', rotulo: 'Relatórios', icone: BarChart3 },
       { para: '/importar', rotulo: 'Importar', icone: Upload },
       { para: '/cadastros', rotulo: 'Cadastros', icone: Settings },
+    ],
+  },
+  {
+    titulo: 'Ajuda',
+    itens: [
+      { para: '/guia', rotulo: 'Guia passo a passo', icone: GraduationCap },
     ],
   },
 ]
@@ -125,8 +131,13 @@ export default function Layout() {
             <Menu size={22} />
           </button>
           <BuscaGlobal />
+          <Link to="/guia"
+            className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-laranja-300 hover:text-laranja-700"
+            title="Guia passo a passo: como usar o Hub do começo ao fim">
+            <LifeBuoy size={15} /> <span className="hidden sm:inline">Ajuda</span>
+          </Link>
           {MODO_DEMO && (
-            <span className="ml-auto shrink-0 rounded-full border border-laranja-200 bg-laranja-50 px-3 py-1 text-xs font-semibold text-laranja-700"
+            <span className="shrink-0 rounded-full border border-laranja-200 bg-laranja-50 px-3 py-1 text-xs font-semibold text-laranja-700"
               title="Banco simulado com dados fictícios — nada é salvo. Configure o .env para conectar ao banco real.">
               ✨ Demonstração
             </span>

@@ -16,7 +16,35 @@ export const dataBR = (d) => {
 }
 
 export const dataHoraBR = (d) =>
-  d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
+  d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
+
+// Data de HOJE no fuso local (não em UTC) — evita o bug de virada de dia
+// entre 21h e a meia-noite no Brasil (UTC-3), quando toISOString() já
+// devolveria o dia seguinte. Formato ISO "AAAA-MM-DD".
+export const hojeLocal = () => {
+  const d = new Date()
+  const off = d.getTimezoneOffset() * 60000
+  return new Date(d - off).toISOString().slice(0, 10)
+}
+
+// Converte um Date para "AAAA-MM-DD" no fuso local
+export const diaLocal = (data) => {
+  const d = new Date(data)
+  const off = d.getTimezoneOffset() * 60000
+  return new Date(d - off).toISOString().slice(0, 10)
+}
+
+// "há X dias / hoje / ontem" — leitura humana de tempo decorrido
+export const tempoRelativo = (d) => {
+  if (!d) return '—'
+  const dias = Math.floor((Date.now() - new Date(d).getTime()) / 86400000)
+  if (dias <= 0) return 'hoje'
+  if (dias === 1) return 'ontem'
+  if (dias < 30) return `há ${dias} dias`
+  if (dias < 60) return 'há 1 mês'
+  if (dias < 365) return `há ${Math.floor(dias / 30)} meses`
+  return `há ${Math.floor(dias / 365)} ano(s)`
+}
 
 export const mesBR = (d) => {
   if (!d) return '—'
