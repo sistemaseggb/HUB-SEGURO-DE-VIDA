@@ -9,7 +9,10 @@
 // agenda, mensagens, cadastros) e a visão do CLIENTE (formulário público de
 // DPS pelo link, com validação e campo condicional). Capturas em e2e-shots/.
 import { chromium } from 'playwright-core'
-import { existsSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import * as XLSX from 'xlsx'
 
 const BASE = process.env.E2E_BASE ?? 'http://localhost:4173'
 const erros = []
@@ -160,6 +163,31 @@ await passo('Cadastros (divisão de comissão)', async () => {
   await page.goto(BASE + '/cadastros')
   await page.waitForSelector('text=Divisão de comissão', { timeout: 5000 })
   await shot('13-cadastros')
+})
+
+await passo('Importar → Planilha geral (Seguros Fechados) lê .xlsx e importa', async () => {
+  // gera um mini-xlsx no formato da planilha real (aba "Propostas fechadas")
+  const linhas = [
+    ['NOME / RAZÃO SOCIAL', 'CÓD. CLIENTE', 'ESPECIALISTA', 'COMISSÃO', 'ASSESSOR', 'COD. AI', 'APÓLICE', 'SEGURADORA', 'PRÊMIO ANUAL', '', 'PRÊMIO MES', 'DATA', 'TIPO', '', 'STATUS', 'MOTIVO CANCELAMENTO'],
+    ['Teste Importado Um', 900001, 'Nati', 0.4, 'Assessor Teste', 'AT01', 'AP-E2E-1', 'Prudential', 2400, '', 200, 45200, 'RESGATÁVEL', '', 'ATIVO', ''],
+    ['Teste Importado Dois', 900002, 'Nati', 0.4, 'Assessor Teste', 'AT01', 'AP-E2E-2', 'MAG', 3600, '', 300, 45210, 'RESGATÁVEL', '', 'CANCELADO', 'inadimplência'],
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(linhas)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Propostas fechadas')
+  const caminho = join(tmpdir(), 'e2e-planilha-geral.xlsx')
+  XLSX.writeFile(wb, caminho)
+
+  await page.goto(BASE + '/importar')
+  await page.click('button:has-text("Planilha geral")')
+  await page.setInputFiles('input[type=file]', caminho)
+  await page.waitForSelector('text=Apólices na planilha', { timeout: 8000 })
+  await page.waitForSelector('text=Teste Importado Um', { timeout: 3000 })
+  await shot('14-planilha-geral')
+  await page.click('button:has-text("Importar / atualizar")')
+  await page.waitForSelector('text=/nova\\(s\\)/', { timeout: 10000 })
+  const txt = await page.locator('p:has-text("nova(s)")').first().innerText()
+  if (!/2 apólice/.test(txt)) throw new Error('esperava 2 apólices importadas: ' + txt.slice(0, 80))
 })
 
 // ── VISÃO DO CLIENTE (formulário público/DPS) ──
