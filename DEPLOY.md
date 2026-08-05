@@ -19,10 +19,16 @@ Vercel e (C) o teste final. Reserve ~30 minutos na primeira vez.
 3. Aguarde ~2 minutos até o projeto ficar pronto.
 
 ### A2. Rode as migrações (cria todas as tabelas) — a parte mais importante
-No projeto do Supabase, abra **SQL Editor** (menu lateral). Para **cada**
-arquivo abaixo, na **ordem**, abra o arquivo aqui do repositório (pasta
-`supabase/migrations/`), copie **todo** o conteúdo, cole no SQL Editor e clique
-em **Run**. Faça um de cada vez, de cima para baixo:
+
+**Jeito fácil (recomendado, 1 minuto):** No Supabase, abra **SQL Editor** →
+**New query**. Abra o arquivo **`supabase/setup_completo.sql`** deste
+repositório, copie **tudo**, cole no editor e clique em **Run**. Esse arquivo já
+junta as 18 migrações na ordem certa — pronto. *(Use este caminho num projeto
+Supabase novo/vazio.)*
+
+**Jeito manual (se preferir, ou se o de cima der erro):** rode um arquivo de
+cada vez, na **ordem**, copiando o conteúdo de cada um da pasta
+`supabase/migrations/`:
 
 1. `001_schema_inicial.sql`
 2. `002_automacao_e_planejamento.sql`
