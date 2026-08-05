@@ -307,10 +307,11 @@ export default function Dashboard() {
   const [foco, setFoco] = useState([])
   const [conversao, setConversao] = useState([])
   const [recebidas, setRecebidas] = useState([])
+  const [regua, setRegua] = useState([])
   const [periodo, setPeriodo] = useState(6) // meses exibidos nos gráficos
 
   async function carregar() {
-    const [c, d, r, ce, f, k, cfg, pr, cv, ri] = await Promise.all([
+    const [c, d, r, ce, f, k, cfg, pr, cv, ri, rg] = await Promise.all([
       supabase.from('vw_comissoes_mensal').select('*').limit(periodo),
       supabase.from('vw_dashboard_mensal').select('*').limit(periodo),
       supabase.from('vw_ranking_assessores').select('*').limit(5),
@@ -321,6 +322,7 @@ export default function Dashboard() {
       supabase.from('vw_prioridades_classificadas').select('*').limit(6),
       supabase.from('vw_conversao_mensal').select('*').limit(periodo),
       supabase.from('vw_comissoes_importadas_resumo').select('*'),
+      supabase.from('vw_regua_relacionamento').select('*').lte('dias_restantes', 30),
     ])
     setComissoes(c.data ?? [])
     setDashboard(d.data ?? [])
@@ -332,6 +334,7 @@ export default function Dashboard() {
     setFoco(pr.data ?? [])
     setConversao(cv.data ?? [])
     setRecebidas(ri.data ?? [])
+    setRegua(rg.data ?? [])
     setCarregando(false)
   }
 
@@ -510,6 +513,56 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+        </Card>
+      )}
+
+      {/* Aniversários e renovações — o pós-venda na tela inicial */}
+      {regua.length > 0 && (
+        <Card className="mb-6 p-5">
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+              <Cake size={18} className="text-laranja-500" /> Aniversários e renovações
+              <span className="rounded-full bg-laranja-50 px-2 py-0.5 text-xs font-semibold text-laranja-700">{regua.length}</span>
+            </h2>
+            <Link to="/pos-venda" className="text-xs font-semibold text-laranja-700 hover:underline">ver tudo no Pós-Venda →</Link>
+          </div>
+          <p className="mb-4 text-xs text-slate-400">
+            Próximos 30 dias — um contato no aniversário do cliente ou da apólice mantém a carteira viva e gera indicação
+          </p>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {regua.slice(0, 6).map((e, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-lg border border-slate-200/70 p-3">
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                  e.tipo_evento === 'aniversario_cliente' ? 'bg-laranja-50 text-laranja-600' : 'bg-slate-100 text-slate-500'}`}>
+                  {e.tipo_evento === 'aniversario_cliente' ? <Cake size={16} /> : <ShieldCheck size={16} />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <Link to={`/clientes/${e.id_cliente}`} className="block truncate text-sm font-medium text-slate-800 hover:text-blue-700 hover:underline">
+                    {e.nome_cliente}
+                  </Link>
+                  <p className="text-xs text-slate-400">
+                    {e.tipo_evento === 'aniversario_cliente' ? 'Aniversário' : 'Aniversário da apólice'} · {dataBR(e.data_evento)}
+                  </p>
+                </div>
+                <Badge tom={e.dias_restantes <= 7 ? 'yellow' : 'slate'}>
+                  {e.dias_restantes === 0 ? 'hoje' : `${e.dias_restantes}d`}
+                </Badge>
+                {whatsapp(e.telefone) && (
+                  <a target="_blank" rel="noreferrer"
+                    href={whatsapp(e.telefone,
+                      e.tipo_evento === 'aniversario_cliente'
+                        ? `Olá ${e.nome_cliente.split(' ')[0]}! Passando para te desejar um feliz aniversário! 🎉 Que seja um ano incrível. Um abraço, Natália.`
+                        : `Olá ${e.nome_cliente.split(' ')[0]}! Sua apólice está completando mais um ano 🎉 Que tal marcarmos uma conversa rápida para revisar se a proteção continua ideal para o seu momento?`)}
+                    className="shrink-0 rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50" title="Mensagem pronta no WhatsApp">
+                    <MessageCircle size={16} />
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+          {regua.length > 6 && (
+            <p className="mt-3 text-xs text-slate-400">+{regua.length - 6} nos próximos 30 dias — veja todos no Pós-Venda.</p>
+          )}
         </Card>
       )}
 
