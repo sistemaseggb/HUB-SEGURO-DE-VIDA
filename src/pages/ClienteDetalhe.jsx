@@ -330,6 +330,18 @@ function AbaHistorico({ idCliente, cliente }) {
 // botão "usar") → sucessão/inventário → objetivos. Tudo alimenta os slides.
 const SECAO = 'mb-2 mt-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400 first:mt-0'
 
+// Objetivos comuns em consultoria de vida — chips que a consultora agrega com
+// um clique. Enriquecem a capa e o fechamento da proposta.
+const OBJETIVOS_SUGERIDOS = [
+  'Garantir a educação dos filhos',
+  'Manter o padrão de vida da família',
+  'Quitar dívidas e financiamentos',
+  'Planejamento sucessório e blindagem patrimonial',
+  'Proteger a renda de autônomo',
+  'Complementar a aposentadoria',
+  'Deixar um legado',
+]
+
 // Campo de pilar: valor com pontuação + sugestão calculada com botão "usar".
 // Fica FORA da AbaPlanejamento: se fosse recriado a cada render, o React
 // remontaria o input a cada tecla e o campo perderia o foco.
@@ -785,9 +797,27 @@ function AbaPlanejamento({ idCliente }) {
         </div>
 
         <div className="mt-5 grid gap-4">
-          <Campo label="Objetivos do cliente">
+          <Campo label="Objetivos do cliente" dica="Aparecem na capa e no fechamento da proposta — clique para adicionar sugestões">
             <Textarea value={plano.objetivos ?? ''} onChange={set('objetivos')}
               placeholder="Ex.: garantir a faculdade dos filhos, proteger a empresa, planejamento sucessório..." />
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {OBJETIVOS_SUGERIDOS.map((o) => {
+                const jaTem = String(plano.objetivos ?? '').toLowerCase().includes(o.toLowerCase())
+                return (
+                  <button key={o} type="button" disabled={jaTem}
+                    onClick={() => {
+                      const atual = String(plano.objetivos ?? '').trim()
+                      setPlano({ ...plano, objetivos: atual ? `${atual}; ${o}` : o })
+                    }}
+                    className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                      jaTem
+                        ? 'cursor-default border-emerald-200 bg-emerald-50 text-emerald-600'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-laranja-300 hover:text-laranja-700'}`}>
+                    {jaTem ? '✓ ' : '+ '}{o}
+                  </button>
+                )
+              })}
+            </div>
           </Campo>
           <Campo label="Notas da reunião">
             <Textarea value={plano.observacoes_reuniao ?? ''} onChange={set('observacoes_reuniao')} rows={4} />
