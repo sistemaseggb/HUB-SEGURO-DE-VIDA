@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import { Upload, CheckCircle2, AlertTriangle, Download, FileSpreadsheet, X } from 'lucide-react'
+import { Upload, CheckCircle2, AlertTriangle, Download, FileSpreadsheet, X, Table2, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { parseCSV, acharColuna, normalizar, paraDataISO, paraNumero, baixarCSV } from '../lib/csv'
 import {
   detectarPlanilha, normalizarComissoes, lerArquivoComissao,
   inferirSeguradora, inferirCompetencia,
 } from '../lib/planilhasComissao'
+import { lerPlanilhaGeral } from '../lib/planilhaGeral'
 import { ETAPAS } from '../lib/constants'
+import { brl } from '../lib/format'
 import { PageHeader, Card, Button, Textarea, Campo, Input, Spinner, ComoFunciona, Badge } from '../components/ui'
 
 // Importador de planilhas: cole o conteúdo (ou envie um .csv) e o sistema
@@ -80,6 +82,9 @@ export default function Importar() {
   if (modo === 'comissoes') {
     return <ImportarComissoes onVoltar={(m) => setModo(m)} />
   }
+  if (modo === 'planilha_geral') {
+    return <ImportarPlanilhaGeral onVoltar={(m) => setModo(m)} />
+  }
 
   function analisar(csvTexto) {
     setResultado(null)
@@ -138,6 +143,10 @@ export default function Importar() {
           <button onClick={() => setModo('comissoes')}
             className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
             Comissões (planilhas das seguradoras)
+          </button>
+          <button onClick={() => setModo('planilha_geral')}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-laranja-200 bg-laranja-50 px-4 py-2 text-sm font-semibold text-laranja-700 hover:bg-laranja-100">
+            <Table2 size={15} /> Planilha geral (Seguros Fechados)
           </button>
           <div className="flex-1" />
           <Button variant="ghost" onClick={() => baixarCSV(`modelo-${modo}.csv`, modelo.exemplo[0], [modelo.exemplo[1]])}>
@@ -244,6 +253,303 @@ export default function Importar() {
                 </ul>
               </div>
             )}
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+// ─── Importação da PLANILHA GERAL (Seguros Fechados) ─────────────────────────
+// A planilha-mestre do escritório, subida todo mês. Cria os assessores,
+// seguradoras e clientes que faltam, e faz UPSERT das apólices: as que já
+// existem têm prêmio/status/comissão ATUALIZADOS; as novas são inseridas.
+// É assim que "atualizar os números do mês" funciona num clique.
+async function importarPlanilhaGeral(registros) {
+  const erros = []
+  const criados = []
+  if (!registros.length) {
+    return { ok: 0, atualizados: 0, erros: ['Nenhuma apólice válida encontrada na planilha.'], criados }
+  }
+
+  const [{ data: assessores }, { data: seguradoras }, { data: clientes }] = await Promise.all([
+    supabase.from('assessores').select('id, nome, codigo'),
+    supabase.from('seguradoras').select('id, nome'),
+    supabase.from('clientes').select('id, nome, codigo'),
+  ])
+  const assessorPorNome = new Map((assessores ?? []).map((a) => [normalizar(a.nome), a.id]))
+  const assessorPorCod = new Map((assessores ?? []).filter((a) => a.codigo).map((a) => [normalizar(a.codigo), a.id]))
+  const segPorNome = new Map((seguradoras ?? []).map((s) => [normalizar(s.nome), s.id]))
+  const clientePorNome = new Map((clientes ?? []).map((c) => [normalizar(c.nome), c.id]))
+  const clientePorCod = new Map((clientes ?? []).filter((c) => c.codigo).map((c) => [normalizar(c.codigo), c.id]))
+
+  const acharAssessor = (r) => (r.codAssessor && assessorPorCod.get(normalizar(r.codAssessor)))
+    || (r.assessor && assessorPorNome.get(normalizar(r.assessor)))
+  const acharCliente = (r) => (r.codCliente && clientePorCod.get(normalizar(r.codCliente)))
+    || clientePorNome.get(normalizar(r.cliente))
+
+  // 1. Assessores que faltam
+  const assessoresNovos = new Map()
+  for (const r of registros) {
+    if (r.assessor && !acharAssessor(r) && !assessoresNovos.has(normalizar(r.assessor))) {
+      assessoresNovos.set(normalizar(r.assessor), { nome: r.assessor, codigo: r.codAssessor || null })
+    }
+  }
+  if (assessoresNovos.size) {
+    const { data, error } = await supabase.from('assessores').insert([...assessoresNovos.values()]).select('id, nome, codigo')
+    if (error) return { ok: 0, atualizados: 0, erros: [`Falha ao criar assessores: ${error.message}`], criados }
+    for (const a of data) { assessorPorNome.set(normalizar(a.nome), a.id); if (a.codigo) assessorPorCod.set(normalizar(a.codigo), a.id) }
+    criados.push(`${data.length} assessor(es)`)
+  }
+
+  // 2. Seguradoras que faltam (comissão padrão = a % que a planilha trouxe)
+  const segNovas = new Map()
+  for (const r of registros) {
+    if (!segPorNome.has(normalizar(r.seguradora)) && !segNovas.has(normalizar(r.seguradora))) {
+      segNovas.set(normalizar(r.seguradora), { nome: r.seguradora, comissao_padrao_percentual: r.percentual ?? 40 })
+    }
+  }
+  if (segNovas.size) {
+    const { data, error } = await supabase.from('seguradoras').insert([...segNovas.values()]).select('id, nome')
+    if (error) return { ok: 0, atualizados: 0, erros: [`Falha ao criar seguradoras: ${error.message}`], criados }
+    for (const s of data) segPorNome.set(normalizar(s.nome), s.id)
+    criados.push(`${data.length} seguradora(s)`)
+  }
+
+  // Assessor de reserva: para linhas cujo campo "assessor" veio vazio na
+  // planilha, ninguém é perdido — entram sob "(sem assessor)" para a consultora
+  // reatribuir depois. Só criamos se realmente for preciso.
+  let idFallback = assessorPorNome.get(normalizar('(sem assessor)')) ?? null
+  const precisaFallback = registros.some((r) => !acharCliente(r) && !acharAssessor(r))
+  if (precisaFallback && !idFallback) {
+    const { data } = await supabase.from('assessores').insert({ nome: '(sem assessor)' }).select('id').single()
+    if (data) { idFallback = data.id; assessorPorNome.set(normalizar('(sem assessor)'), data.id); criados.push('assessor de reserva') }
+  }
+
+  // 3. Clientes que faltam (já fechados, marcados como importados)
+  const clientesNovos = new Map()
+  for (const r of registros) {
+    if (acharCliente(r) || clientesNovos.has(normalizar(r.cliente))) continue
+    const idAssessor = acharAssessor(r) || idFallback
+    if (!idAssessor) { erros.push(`Cliente "${r.cliente}": sem assessor e sem reserva`); continue }
+    clientesNovos.set(normalizar(r.cliente), {
+      nome: r.cliente, codigo: r.codCliente || null, id_assessor: idAssessor,
+      status_funil: 'fechado', importado: true,
+    })
+  }
+  if (clientesNovos.size) {
+    const lote = [...clientesNovos.values()]
+    for (let i = 0; i < lote.length; i += 100) {
+      const { data, error } = await supabase.from('clientes').insert(lote.slice(i, i + 100)).select('id, nome, codigo')
+      if (error) { erros.push(`Falha ao criar clientes (lote ${i / 100 + 1}): ${error.message}`); continue }
+      for (const c of data) { clientePorNome.set(normalizar(c.nome), c.id); if (c.codigo) clientePorCod.set(normalizar(c.codigo), c.id) }
+    }
+    criados.push(`${clientesNovos.size} cliente(s)`)
+  }
+
+  // 4. Apólices — UPSERT por (cliente + seguradora + nº da apólice)
+  const { data: apExistentes } = await supabase.from('apolices')
+    .select('id, id_cliente, id_seguradora, numero_apolice')
+  const chaveAp = (idC, idS, num) => `${idC}|${idS}|${normalizar(num ?? '')}`
+  const apMap = new Map((apExistentes ?? []).map((a) => [chaveAp(a.id_cliente, a.id_seguradora, a.numero_apolice), a.id]))
+  // colunas opcionais (migrações 012/013) — só enviamos se o banco já as tiver
+  const temTipo = (apExistentes ?? []).some((a) => 'tipo_produto' in a) || (apExistentes ?? []).length === 0
+  const temMotivo = (apExistentes ?? []).some((a) => 'motivo_cancelamento' in a) || (apExistentes ?? []).length === 0
+
+  let ok = 0, atualizados = 0
+  const novas = []
+  for (const r of registros) {
+    const idCliente = acharCliente(r)
+    const idSeg = segPorNome.get(normalizar(r.seguradora))
+    if (!idCliente || !idSeg) { erros.push(`Apólice de "${r.cliente}" (${r.seguradora}): cliente/seguradora não resolvidos`); continue }
+    if (!r.vigencia) { erros.push(`Apólice de "${r.cliente}": sem data de vigência`); continue }
+    const patch = {
+      valor_premio_mensal: r.premioMensal ?? 0,
+      percentual_comissao: r.percentual,
+      data_vigencia: r.vigencia,
+      status: r.status,
+      numero_apolice: r.numeroApolice,
+      ...(temTipo && r.tipoProduto ? { tipo_produto: r.tipoProduto } : {}),
+      ...(temMotivo ? { motivo_cancelamento: r.status === 'cancelada' ? (r.motivoCancelamento || null) : null } : {}),
+    }
+    const existenteId = apMap.get(chaveAp(idCliente, idSeg, r.numeroApolice))
+    if (existenteId) {
+      const { error } = await supabase.from('apolices').update(patch).eq('id', existenteId)
+      if (error) erros.push(`Atualizar apólice de "${r.cliente}": ${error.message}`); else atualizados += 1
+    } else {
+      novas.push({ ...patch, id_cliente: idCliente, id_seguradora: idSeg, capital_segurado: 0, importada: true })
+    }
+  }
+  for (let i = 0; i < novas.length; i += 100) {
+    const { data, error } = await supabase.from('apolices').insert(novas.slice(i, i + 100)).select('id')
+    if (error) erros.push(`Falha ao inserir apólices (lote ${i / 100 + 1}): ${error.message}`)
+    else ok += data.length
+  }
+
+  return { ok, atualizados, erros, criados }
+}
+
+function ImportarPlanilhaGeral({ onVoltar }) {
+  const [analise, setAnalise] = useState(null) // { aba, abas, registros, ignoradas }
+  const [nomeArquivo, setNomeArquivo] = useState('')
+  const [lendo, setLendo] = useState(false)
+  const [arrastando, setArrastando] = useState(false)
+  const [erroLeitura, setErroLeitura] = useState(null)
+  const [importando, setImportando] = useState(false)
+  const [resultado, setResultado] = useState(null)
+
+  async function receber(file) {
+    if (!file) return
+    setResultado(null); setErroLeitura(null); setAnalise(null); setLendo(true)
+    setNomeArquivo(file.name)
+    try {
+      const buf = await file.arrayBuffer()
+      const r = lerPlanilhaGeral(buf)
+      if (!r.registros.length) {
+        setErroLeitura(`Não encontrei apólices na aba "${r.aba ?? '—'}". Confira se subiu a planilha certa (abas: ${(r.abas ?? []).join(', ')}).`)
+      } else {
+        setAnalise(r)
+      }
+    } catch (e) {
+      setErroLeitura(`Não consegui ler o arquivo: ${e.message}`)
+    }
+    setLendo(false)
+  }
+
+  async function importar() {
+    setImportando(true)
+    const r = await importarPlanilhaGeral(analise.registros)
+    setResultado(r)
+    setImportando(false)
+  }
+
+  const resumo = analise && (() => {
+    const regs = analise.registros
+    const ativas = regs.filter((x) => x.status === 'ativa').length
+    const canceladas = regs.filter((x) => x.status === 'cancelada').length
+    const premio = regs.filter((x) => x.status === 'ativa').reduce((s, x) => s + (x.premioMensal ?? 0), 0)
+    const segs = [...new Set(regs.map((x) => x.seguradora))].sort()
+    return { total: regs.length, ativas, canceladas, premio, segs }
+  })()
+
+  return (
+    <div>
+      <PageHeader titulo="Planilha geral (Seguros Fechados)"
+        subtitulo="Suba o .xlsx do escritório — o Hub lê a aba de apólices e atualiza os números do mês">
+        <Button variant="secondary" onClick={() => onVoltar('apolices')}>← Voltar</Button>
+      </PageHeader>
+
+      <ComoFunciona id="planilha_geral" titulo="Como funciona a planilha geral">
+        Esta é a sua planilha-mestre de seguros fechados. Suba o arquivo <strong>.xlsx</strong> original
+        (sem converter nada) — o Hub encontra a aba das apólices vigentes, entende as colunas sozinho,
+        junta as grafias diferentes da mesma seguradora e importa tudo. <strong>Todo mês</strong> que você
+        subir a planilha atualizada, as apólices que já existem têm o prêmio e o status atualizados, e as
+        novas entram automaticamente. Assessores, seguradoras e clientes que faltarem são criados na hora.
+      </ComoFunciona>
+
+      <Card className="p-5">
+        <label
+          onDragOver={(e) => { e.preventDefault(); setArrastando(true) }}
+          onDragLeave={() => setArrastando(false)}
+          onDrop={(e) => { e.preventDefault(); setArrastando(false); receber(e.dataTransfer.files?.[0]) }}
+          className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-10 text-center transition-colors ${
+            arrastando ? 'border-laranja-400 bg-laranja-50' : 'border-slate-300 bg-slate-50/50 hover:border-laranja-300 hover:bg-laranja-50/40'}`}>
+          <span className="rounded-xl bg-white p-3 text-laranja-600 shadow-sm"><FileSpreadsheet size={24} /></span>
+          <span className="text-sm font-medium text-slate-700">Arraste a planilha aqui, ou clique para escolher</span>
+          <span className="text-xs text-slate-400">Arquivo .xlsx da planilha geral de seguros fechados</span>
+          <input type="file" accept=".xlsx,.xls" className="hidden"
+            onChange={(e) => receber(e.target.files?.[0])} />
+        </label>
+
+        {lendo && <div className="mt-4"><Spinner /></div>}
+        {erroLeitura && (
+          <p className="mt-4 flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" /> {erroLeitura}
+          </p>
+        )}
+
+        {resumo && !resultado && (
+          <div className="mt-5 border-t border-slate-100 pt-5">
+            <p className="mb-3 text-sm text-slate-500">
+              Li <strong>{nomeArquivo}</strong> · aba <strong>“{analise.aba}”</strong>
+              {analise.ignoradas > 0 && <> · {analise.ignoradas} linha(s) incompleta(s) ignorada(s)</>}
+            </p>
+            <div className="mb-4 grid gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-slate-200/70 bg-white p-3">
+                <p className="text-xs text-slate-400">Apólices na planilha</p>
+                <p className="font-display text-xl font-semibold text-slate-900">{resumo.total}</p>
+              </div>
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
+                <p className="text-xs text-emerald-600">Ativas</p>
+                <p className="font-display text-xl font-semibold text-emerald-700">{resumo.ativas}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200/70 bg-white p-3">
+                <p className="text-xs text-slate-400">Canceladas</p>
+                <p className="font-display text-xl font-semibold text-slate-500">{resumo.canceladas}</p>
+              </div>
+              <div className="rounded-xl border border-laranja-200/70 bg-laranja-50/50 p-3">
+                <p className="text-xs text-laranja-600">Prêmio mensal ativo</p>
+                <p className="font-display text-xl font-semibold text-slate-900">{brl(resumo.premio)}</p>
+              </div>
+            </div>
+            <p className="mb-3 text-xs text-slate-500">
+              <strong>{resumo.segs.length} seguradoras</strong> (grafias unificadas): {resumo.segs.join(', ')}
+            </p>
+            <div className="mb-4 overflow-x-auto rounded-lg border border-slate-100">
+              <table className="w-full text-left text-xs">
+                <thead><tr className="bg-slate-50 text-slate-500">
+                  {['Cliente', 'Assessor', 'Seguradora', 'Apólice', 'Prêmio/mês', '% Com.', 'Vigência', 'Status'].map((h) => (
+                    <th key={h} className="px-3 py-2 font-medium">{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {analise.registros.slice(0, 6).map((r, i) => (
+                    <tr key={i} className="border-t border-slate-100">
+                      <td className="px-3 py-2 text-slate-700">{r.cliente}</td>
+                      <td className="px-3 py-2 text-slate-500">{r.assessor ?? '—'}</td>
+                      <td className="px-3 py-2 text-slate-500">{r.seguradora}</td>
+                      <td className="px-3 py-2 text-slate-500">{r.numeroApolice ?? '—'}</td>
+                      <td className="px-3 py-2 text-slate-700">{r.premioMensal != null ? brl(r.premioMensal) : '—'}</td>
+                      <td className="px-3 py-2 text-slate-500">{r.percentual != null ? `${r.percentual}%` : '—'}</td>
+                      <td className="px-3 py-2 text-slate-500">{r.vigencia ?? '—'}</td>
+                      <td className="px-3 py-2">
+                        <Badge tom={r.status === 'ativa' ? 'green' : r.status === 'cancelada' ? 'red' : 'yellow'}>{r.status}</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Button onClick={importar} disabled={importando}>
+              {importando ? <><RefreshCw size={15} className="animate-spin" /> Importando...</>
+                : <><Upload size={15} /> Importar / atualizar {resumo.total} apólice(s)</>}
+            </Button>
+          </div>
+        )}
+
+        {importando && !resultado && <div className="mt-4"><Spinner /></div>}
+
+        {resultado && (
+          <div className="mt-5 rounded-lg border border-slate-100 bg-slate-50 p-4">
+            <p className="flex flex-wrap items-center gap-2 font-medium text-slate-800">
+              <CheckCircle2 size={17} className="text-emerald-600" />
+              {resultado.ok} apólice(s) nova(s) · {resultado.atualizados} atualizada(s)
+              {resultado.criados?.length > 0 && ` · criados: ${resultado.criados.join(', ')}`}
+            </p>
+            {resultado.erros.length > 0 && (
+              <div className="mt-2">
+                <p className="mb-1 flex items-center gap-1 text-sm font-medium text-amber-700">
+                  <AlertTriangle size={14} /> {resultado.erros.length} aviso(s):
+                </p>
+                <ul className="max-h-40 list-inside list-disc overflow-y-auto text-xs text-slate-500">
+                  {resultado.erros.slice(0, 50).map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              </div>
+            )}
+            <p className="mt-3 text-xs text-slate-400">
+              As apólices importadas aparecem na seção “Pré-sistema” de cada cliente e alimentam o Pós-Venda,
+              a carteira e os relatórios. Suba a planilha de novo no próximo mês para atualizar os números.
+            </p>
           </div>
         )}
       </Card>

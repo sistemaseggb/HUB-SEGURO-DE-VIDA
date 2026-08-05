@@ -133,6 +133,12 @@ Abra o link da Vercel e confirme, na ordem:
 
 Passou nos 8? Está **100% no ar**. 🚀
 
+### C1. Limpar seus testes antes de entregar (visão de ADM)
+Depois de testar à vontade, deixe o banco limpo para a Natália começar do zero:
+no **SQL Editor**, rode o arquivo **`supabase/limpar_dados_teste.sql`**. Ele
+apaga os clientes/apólices de teste e mantém seus cadastros (seguradoras,
+assessores, metas). Tem uma opção B no arquivo para zerar tudo.
+
 ---
 
 ## Trazer a base antiga (opcional, quando quiser)

@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Cake, MessageCircle, ShieldCheck, Wallet, TrendingUp, AlertCircle } from 'lucide-react'
+import { Cake, MessageCircle, ShieldCheck, Wallet, TrendingUp, AlertCircle, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, dataBR, whatsapp } from '../lib/format'
-import { PageHeader, Card, Badge, Spinner, EmptyState, StatTile, ComoFunciona } from '../components/ui'
+import { PageHeader, Card, Badge, Spinner, EmptyState, StatTile, ComoFunciona, Select } from '../components/ui'
 import { CHART } from '../lib/constants'
 
 export default function PosVenda() {
@@ -12,6 +12,8 @@ export default function PosVenda() {
   const [carteira, setCarteira] = useState({})
   const [porSeg, setPorSeg] = useState([])
   const [semContato, setSemContato] = useState([])
+  const [busca, setBusca] = useState('')
+  const [filtroSeg, setFiltroSeg] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -31,6 +33,24 @@ export default function PosVenda() {
       setSemContato(sc.data ?? [])
     })
   }, [])
+
+  // Filtro da carteira: busca por cliente/seguradora + filtro por seguradora.
+  // Essencial quando a carteira tem centenas de apólices.
+  const apolicesFiltradas = useMemo(() => {
+    const q = busca.trim().toLowerCase()
+    return (apolices ?? []).filter((a) => {
+      if (filtroSeg && (a.seguradoras?.nome ?? '') !== filtroSeg) return false
+      if (!q) return true
+      return (a.clientes?.nome ?? '').toLowerCase().includes(q)
+        || (a.seguradoras?.nome ?? '').toLowerCase().includes(q)
+        || (a.numero_apolice ?? '').toLowerCase().includes(q)
+    })
+  }, [apolices, busca, filtroSeg])
+
+  const nomesSeg = useMemo(
+    () => [...new Set((apolices ?? []).map((a) => a.seguradoras?.nome).filter(Boolean))].sort(),
+    [apolices],
+  )
 
   if (!apolices) return <Spinner />
 
@@ -164,15 +184,35 @@ export default function PosVenda() {
 
         {/* Carteira ativa */}
         <Card className="xl:col-span-2">
-          <div className="border-b border-slate-100 p-5 pb-3">
-            <h2 className="font-semibold text-slate-900">Apólices ativas ({apolices.length})</h2>
+          <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-5 pb-3">
+            <h2 className="font-semibold text-slate-900">
+              Apólices ativas <span className="text-slate-400">({apolicesFiltradas.length}{apolicesFiltradas.length !== apolices.length ? ` de ${apolices.length}` : ''})</span>
+            </h2>
+            {apolices.length > 0 && (
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
+                  <input value={busca} onChange={(e) => setBusca(e.target.value)}
+                    placeholder="Buscar cliente, seguradora ou nº..."
+                    className="w-56 rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-laranja-400 focus:outline-none" />
+                </div>
+                {nomesSeg.length > 1 && (
+                  <Select value={filtroSeg} onChange={(e) => setFiltroSeg(e.target.value)} style={{ width: 'auto' }}>
+                    <option value="">Todas as seguradoras</option>
+                    {nomesSeg.map((n) => <option key={n} value={n}>{n}</option>)}
+                  </Select>
+                )}
+              </div>
+            )}
           </div>
           {apolices.length === 0
             ? <EmptyState icone={ShieldCheck} titulo="Nenhuma apólice ativa"
                 texto="As vendas registradas nos clientes aparecem aqui automaticamente." />
-            : (
-              <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm">
-                <thead>
+            : apolicesFiltradas.length === 0
+              ? <p className="py-10 text-center text-sm text-slate-400">Nenhuma apólice encontrada para “{busca || filtroSeg}”.</p>
+              : (
+              <div className="max-h-[560px] overflow-auto"><table className="w-full min-w-[640px] text-left text-sm">
+                <thead className="sticky top-0 bg-white">
                   <tr className="border-b border-slate-100 text-xs uppercase text-slate-400">
                     <th className="px-5 py-3 font-medium">Cliente</th>
                     <th className="px-3 py-3 font-medium">Seguradora</th>
@@ -182,7 +222,7 @@ export default function PosVenda() {
                   </tr>
                 </thead>
                 <tbody>
-                  {apolices.map((a) => (
+                  {apolicesFiltradas.map((a) => (
                     <tr key={a.id} className="border-b border-slate-50 hover:bg-slate-50">
                       <td className="px-5 py-3">
                         <Link to={`/clientes/${a.clientes?.id}`}
@@ -192,7 +232,7 @@ export default function PosVenda() {
                       </td>
                       <td className="px-3 py-3 text-slate-500">{a.seguradoras?.nome}</td>
                       <td className="px-3 py-3">{brl(a.valor_premio_mensal)}</td>
-                      <td className="px-3 py-3">{brl(a.capital_segurado)}</td>
+                      <td className="px-3 py-3">{Number(a.capital_segurado) > 0 ? brl(a.capital_segurado) : '—'}</td>
                       <td className="px-3 py-3 text-slate-500">{dataBR(a.data_vigencia)}</td>
                     </tr>
                   ))}
