@@ -43,10 +43,13 @@ e registrar os dados; o sistema cuida do resto.
   temperatura no topo. Botão **Gerar proposta** cria a apresentação.
 - **Proposta** — apresentação em tela cheia com navegação de deck (setas do
   teclado, bolinhas laterais, contador): capa, diagnóstico, "quanto tempo a
-  família aguentaria hoje?" (autonomia sem × com o plano), capital, 5 pilares,
-  blindagem patrimonial, gap, **o investimento** (prêmio/dia, % da renda e
-  alavancagem R$ 1 → R$ N, quando a cotação está no planejamento) e próximos
-  passos — exportável em PDF pelo navegador.
+  família aguentaria hoje?" (sem vender nada × vendendo tudo × com o plano),
+  capital recomendado, futuro dos filhos, **raio-X do patrimônio** (o que trava
+  no inventário e o que vai direto ao beneficiário), sucessão com a conta do
+  primeiro mês, **planejamento empresarial** (acordo de sócios, homem-chave e
+  aval), gap, o quadro completo da apólice e **o investimento** — mensal e
+  anual lado a lado, com o desconto à vista e a economia calculada. Exportável
+  em PDF pelo navegador.
 - **Formulário público** (`/f/<token>`) — onboarding pós-venda estilo Typeform:
   etapas curtas, progresso salvo automaticamente (o cliente pode parar e voltar),
   sem login, seguro por token via RPC. Campos configuráveis em
@@ -147,6 +150,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 16. [`supabase/migrations/016_filhos_custo_mensal.sql`](supabase/migrations/016_filhos_custo_mensal.sql)
 17. [`supabase/migrations/017_proposta_publica.sql`](supabase/migrations/017_proposta_publica.sql)
 18. [`supabase/migrations/018_roteiro_reuniao.sql`](supabase/migrations/018_roteiro_reuniao.sql)
+19. [`supabase/migrations/019_planejamento_completo.sql`](supabase/migrations/019_planejamento_completo.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -270,9 +274,18 @@ npm run dev
 - [x] Planejamento por **5 pilares** (migração 014): família, invalidez,
       doenças graves, DIT e sucessão/inventário — sugestões calculadas, gap
       vs cobertura atual e resumo ao vivo
+- [x] **Planejamento completo** (migração 019): tipo de estudo (PF, PJ ou os
+      dois) e focos; raio-X do patrimônio por classe, com previdência fora do
+      inventário e o déficit de liquidez calculado; bloco empresarial com
+      acordo de sócios, homem-chave e dívidas avalizadas
+- [x] **Apólice inteira no estudo**: morte acidental, fraturas, diária de
+      internação hospitalar (DIH) e assistência funeral individual e familiar,
+      além das diárias com limite de dias e franquia
+- [x] **Prêmio mensal e anual** lado a lado: o desconto à vista aparece na
+      proposta com a economia calculada, e o cliente escolhe a forma
 - [x] Apresentação renovada: logo do escritório (public/logo.png), slide de
-      diagnóstico, blindagem patrimonial (custo do inventário), gap de
-      cobertura e próximos passos
+      diagnóstico, raio-X patrimonial, sucessão com a conta do primeiro mês,
+      planejamento empresarial, gap de cobertura e próximos passos
 - [x] DPS completa no formulário público (padrão das seguradoras) com
       impressão limpa para transcrever ao portal + destaque dos "sim"
 - [x] Dossiê 1-página do cliente: estudo, apólices, últimas conversas e

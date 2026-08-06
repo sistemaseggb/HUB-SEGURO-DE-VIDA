@@ -61,11 +61,38 @@ await passo('Clientes lista', async () => {
   await shot('04-clientes')
 })
 
-await passo('Cliente 360 → Planejamento por pilares', async () => {
+await passo('Cliente 360 → Planejamento com a apólice completa', async () => {
   await page.click('text=Carlos Eduardo Menezes')
-  await page.waitForSelector('text=Os 5 pilares da proteção', { timeout: 6000 })
+  await page.waitForSelector('text=As coberturas da apólice', { timeout: 6000 })
   await page.waitForSelector('text=Resumo do estudo', { timeout: 3000 })
+  // os grupos do catálogo de coberturas, incluindo as novas
+  for (const t of ['Proteção essencial', 'Proteção em vida', 'Acidentes', 'Assistências']) {
+    await page.waitForSelector(`text=${t}`, { timeout: 3000 })
+  }
+  for (const c of ['Morte acidental (MA)', 'Fraturas', 'Diária por internação hospitalar (DIH)',
+    'Assistência funeral — individual', 'Assistência funeral — familiar']) {
+    await page.waitForSelector(`text=${c}`, { timeout: 3000 })
+  }
   await shot('05-planejamento')
+})
+
+await passo('Planejamento → raio-X do patrimônio e sucessão', async () => {
+  await page.waitForSelector('text=Raio-X do patrimônio', { timeout: 5000 })
+  await page.waitForSelector('text=Previdência (VGBL/PGBL)', { timeout: 3000 })
+  await page.waitForSelector('text=Déficit de liquidez', { timeout: 3000 })
+  // a barra do mapa patrimonial e a legenda do que trava no inventário
+  await page.waitForSelector('text=/passa por inventário/i', { timeout: 3000 })
+})
+
+await passo('Planejamento → bloco da empresa (PJ) e prêmio anual', async () => {
+  await page.waitForSelector('text=A empresa', { timeout: 5000 })
+  // razão social é valor de input, não texto da página
+  await page.waitForSelector('input[value="Cardiocare Serviços Médicos Ltda"]', { timeout: 3000 })
+  await page.waitForSelector('text=Quota do cliente', { timeout: 3000 })
+  await page.waitForSelector('text=Capital de homem-chave', { timeout: 3000 })
+  await page.waitForSelector('text=Prêmio anual à vista', { timeout: 3000 })
+  await page.waitForSelector('text=Economia no anual', { timeout: 3000 })
+  await shot('05b-planejamento-pj')
 })
 
 await passo('Planejamento → filhos com gasto até os 24', async () => {
@@ -114,20 +141,38 @@ await passo('Proposta (slides) com estudo completo', async () => {
   const url = page.url()
   const idCliente = url.match(/clientes\/([a-f0-9-]+)/)?.[1]
   await page.goto(`${BASE}/proposta/${idCliente}`)
-  await page.waitForSelector('text=/estudo de proteção e blindagem/i', { timeout: 6000 })
+  // Carlos é um estudo PF + PJ: a capa muda de acordo com o tipo
+  await page.waitForSelector('text=/estudo de proteção pessoal e empresarial/i', { timeout: 6000 })
   await shot('08-proposta-capa')
   await page.waitForSelector('text=/não é sobre morrer/i', { timeout: 3000 })
   await page.waitForSelector('text=/cada filho protegido até os 24/i', { timeout: 3000 })
+  await page.waitForSelector('text=/raio-x do patrimônio/i', { timeout: 3000 })
   await page.waitForSelector('text=/inventário custa caro/i', { timeout: 3000 })
+  await page.waitForSelector('text=/a conta do primeiro mês/i', { timeout: 3000 })
+  await page.waitForSelector('text=/não pode virar sócia de ninguém/i', { timeout: 3000 })
   await page.waitForSelector('text=/quatro passos simples/i', { timeout: 3000 })
   await page.waitForSelector('button:has-text("Copiar link do cliente")', { timeout: 3000 })
+})
+
+await passo('Proposta → quadro de coberturas e as duas formas de pagamento', async () => {
+  // as coberturas novas aparecem no quadro da apólice
+  for (const c of ['Morte acidental', 'Fraturas', 'Diária de internação',
+    'Funeral individual', 'Funeral familiar']) {
+    await page.waitForSelector(`text=${c}`, { timeout: 3000 })
+  }
+  // mensal e anual lado a lado, com a escolha do cliente destacada
+  await page.waitForSelector('text=Anual à vista', { timeout: 3000 })
+  await page.waitForSelector('text=sua escolha', { timeout: 3000 })
+  await page.waitForSelector('text=/10% de desconto/', { timeout: 3000 })
+  await page.waitForSelector('text=/economia de/i', { timeout: 3000 })
+  await shot('08b-proposta-investimento')
 })
 
 await passo('Proposta pública pelo link (/p/<token>, sem login)', async () => {
   const anonima = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
   await anonima.goto(`${BASE}/p/demo-proposta-carlos`)
   await anonima.waitForSelector('text=Estudo preparado por', { timeout: 6000 })
-  await anonima.waitForSelector('text=/estudo de proteção e blindagem/i', { timeout: 3000 })
+  await anonima.waitForSelector('text=/estudo de proteção pessoal e empresarial/i', { timeout: 3000 })
   await anonima.screenshot({ path: 'e2e-shots/16-proposta-publica.png' })
   await anonima.context().close()
 })

@@ -125,13 +125,28 @@ function semear() {
     id: idDemo(), id_cliente: rodrigo.id, profissao: 'Engenheiro civil (autônomo)', estado_civil: 'Casado(a)',
     renda_mensal: 22000, custo_vida_mensal: 14000, patrimonio_total: 900_000, dividas_total: 120_000,
     num_dependentes: 1, dependentes: [{ nome: 'Sofia', idade: 3, custo_mensal: 2100 }], anos_protecao: 21,
-    // (11.900 base × 12 × 21) + (2.100 da Sofia × 12 × 21) + 120 mil de dívidas
-    capital_sugerido: 3_648_000, objetivos: 'Proteger a renda de autônomo (DIT) e a faculdade da Sofia.',
+    // em branco: o estudo usa a própria sugestão — (11.900 base × 12 × 21) +
+    // (2.100 da Sofia × 12 × 21) + 120 mil de dívidas = 3,648 mi
+    capital_sugerido: null, objetivos: 'Proteger a renda de autônomo (DIT) e a faculdade da Sofia.',
     observacoes_reuniao: 'Sem CLT — a DIT é o centro do estudo. Quer parcela abaixo de R$ 500.',
     capital_invalidez: null, capital_doencas_graves: null, dit_diaria: 700,
     verba_sucessoria: null, cobertura_atual: 0, itcmd_pct: 4, custas_pct: 8,
     premio_estimado: 480,
     conjuge_nome: 'Paula', filhos_idades: '3 anos',
+    // migração 019 — planejamento completo
+    tipo_planejamento: 'pf', focos: ['renda', 'educacao', 'dividas'],
+    patrimonio_imoveis: 650_000, patrimonio_investimentos: 160_000, patrimonio_empresa: null,
+    patrimonio_veiculos: 90_000, patrimonio_outros: null,
+    previdencia_saldo: 60_000, previdencia_tipo: 'VGBL', previdencia_aporte_mensal: 800,
+    regime_bens: 'Comunhão parcial', tem_holding: false, tem_testamento: false, herdeiros_menores: true,
+    pj_razao_social: null, pj_valuation: null, pj_participacao_pct: null, pj_num_socios: null,
+    pj_faturamento_anual: null, pj_lucro_anual: null, pj_divida_avalizada: null,
+    capital_socios: null, capital_homem_chave: null, capital_aval: null,
+    capital_morte_acidental: null, capital_fraturas: null,
+    dih_diaria: 700, dih_dias: 30, dit_dias: 90, dit_franquia_dias: 15,
+    funeral_individual: 15_000, funeral_familiar: 15_000,
+    // anual com 5% de desconto sobre as 12 parcelas de R$ 480
+    premio_anual: 5_472, forma_pagamento: 'mensal',
     token_proposta: 'demo-proposta-rodrigo', roteiro: {},
     created_at: iso(diasAtras(10)), updated_at: iso(diasAtras(2)),
   }, {
@@ -144,12 +159,30 @@ function semear() {
       { nome: 'Lucas', idade: 9, custo_mensal: 3800 },
     ],
     anos_protecao: 10,
-    capital_sugerido: 3_490_000, objetivos: 'Garantir a faculdade dos filhos e blindar o patrimônio da família.',
+    // em branco: o estudo calcula (20.000 base × 12 × 10) + 1,375 mi dos filhos
+    // até os 24 + 250 mil de dívidas = 4,025 mi
+    capital_sugerido: null, objetivos: 'Garantir a faculdade dos filhos, blindar o patrimônio e proteger a sociedade da clínica.',
     observacoes_reuniao: 'Preocupado com sucessão da clínica. Esposa não trabalha fora. Quer revisar previdência no 2º semestre.',
-    capital_invalidez: 3_490_000, capital_doencas_graves: 1_152_000, dit_diaria: 1600,
-    verba_sucessoria: 456_000, cobertura_atual: 800_000, itcmd_pct: 4, custas_pct: 8,
+    capital_invalidez: null, capital_doencas_graves: null, dit_diaria: 1600,
+    verba_sucessoria: null, cobertura_atual: 800_000, itcmd_pct: 4, custas_pct: 8,
     premio_estimado: 1890,
     conjuge_nome: 'Mariana', filhos_idades: '6 e 9 anos',
+    // migração 019 — estudo PF + PJ, com sucessão e acordo de sócios
+    tipo_planejamento: 'pf_pj',
+    focos: ['renda', 'educacao', 'sucessao', 'blindagem', 'empresarial'],
+    patrimonio_imoveis: 2_300_000, patrimonio_investimentos: 700_000, patrimonio_empresa: 600_000,
+    patrimonio_veiculos: 200_000, patrimonio_outros: null,
+    previdencia_saldo: 450_000, previdencia_tipo: 'PGBL', previdencia_aporte_mensal: 4_000,
+    regime_bens: 'Comunhão parcial', tem_holding: false, tem_testamento: false, herdeiros_menores: true,
+    pj_razao_social: 'Cardiocare Serviços Médicos Ltda', pj_valuation: 1_500_000,
+    pj_participacao_pct: 40, pj_num_socios: 3,
+    pj_faturamento_anual: 4_200_000, pj_lucro_anual: 900_000, pj_divida_avalizada: 350_000,
+    capital_socios: null, capital_homem_chave: null, capital_aval: null,
+    capital_morte_acidental: null, capital_fraturas: null,
+    dih_diaria: 1600, dih_dias: 60, dit_dias: 180, dit_franquia_dias: 15,
+    funeral_individual: 20_000, funeral_familiar: 20_000,
+    // anual com 10% de desconto sobre as 12 parcelas de R$ 1.890
+    premio_anual: 20_412, forma_pagamento: 'anual',
     token_proposta: 'demo-proposta-carlos',
     roteiro: { blocos: {
       abertura: { feito: true, nota: 'Muito receptivo. Falou da clínica e dos dois filhos.' },

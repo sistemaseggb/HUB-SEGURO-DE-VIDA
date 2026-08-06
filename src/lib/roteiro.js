@@ -60,16 +60,19 @@ export const BLOCOS_ROTEIRO = [
   },
   {
     id: 'educacao',
-    titulo: 'Educação — os pilares da proteção',
+    titulo: 'Educação — as camadas da proteção',
     objetivo: 'Ensinar que seguro de vida é muito mais que morte. Cliente educado decide melhor.',
     tempo: '10 min',
     falas: [
-      'Explique os 5 pilares: morte, invalidez, doenças graves, DIT e sucessão.',
+      'Comece pelas essenciais: morte, invalidez e doenças graves.',
+      'Depois as que pagam no dia a dia: DIT (dia parado), diária de internação, fraturas e morte acidental.',
+      'Feche com as assistências: o funeral é acionado por telefone, em horas, sem a família gastar nada.',
       'Doenças graves e invalidez pagam EM VIDA — desmonta o "só serve se eu morrer".',
       'Reforce: o seguro não substitui o patrimônio, ele impede que seja consumido.',
     ],
     perguntas: [
       'Você sabia que o seguro paga em vida no diagnóstico de uma doença grave?',
+      'Se ficasse 30 dias internado, quem pagaria as contas da casa nesse mês?',
     ],
   },
   {

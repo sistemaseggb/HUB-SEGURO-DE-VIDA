@@ -6,18 +6,23 @@ import {
   Phone, Mail, Handshake, StickyNote, Flame, ChartPie, HeartHandshake, RefreshCw, CheckCircle2,
   Users2, Wallet, Shield, Landmark, Sparkles, Plus, Baby, Archive, TrendingDown,
   ListChecks, Lightbulb, MessageSquareQuote, Clock3,
+  Building2, PiggyBank, Coins, HeartPulse, Ambulance, AlertTriangle,
 } from 'lucide-react'
 import { ETAPAS_FORM, ROTULOS_FORM } from '../lib/formularioConfig'
 import { supabase } from '../lib/supabase'
 import { ETAPAS, etapaLabel, STATUS_REUNIAO } from '../lib/constants'
 import { brl, brlCompacto, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib/format'
-import { calcularEstudo, normalizarFilhos, IDADE_INDEPENDENCIA, PILARES } from '../lib/estudo'
+import {
+  calcularEstudo, normalizarFilhos, IDADE_INDEPENDENCIA, MESES_VITALICIO,
+  COBERTURAS, GRUPOS_COBERTURA, TIPOS_PLANEJAMENTO, FOCOS, CLASSES_PATRIMONIO,
+} from '../lib/estudo'
 import { BLOCOS_ROTEIRO } from '../lib/roteiro'
 import {
   Button, Card, Input, InputMoeda, Select, Textarea, Campo, Modal, Badge, Spinner, ComoFunciona,
 } from '../components/ui'
 import { useToast } from '../components/Toast'
 import LinhaProtecao from '../components/LinhaProtecao'
+import MapaPatrimonio from '../components/MapaPatrimonio'
 
 const ABAS = [
   { nome: 'Planejamento', icone: ChartPie },
@@ -325,9 +330,13 @@ function AbaHistorico({ idCliente, cliente }) {
   )
 }
 
-// ─── PLANEJAMENTO: o estudo completo por pilares que vira a proposta ─────────
-// Seções: família → vida financeira → 5 pilares (com sugestão calculada e
-// botão "usar") → sucessão/inventário → objetivos. Tudo alimenta os slides.
+// ─── PLANEJAMENTO: a construção da apólice, do diagnóstico ao prêmio ────────
+// A aba é a mesa de trabalho da consultora e a fonte única dos slides. Ordem:
+//   tipo e focos → família → filhos → vida financeira → raio-X do patrimônio →
+//   empresa (PJ) → sucessão → coberturas da apólice → investimento →
+//   inteligência do estudo → objetivos.
+// Nenhum número é calculado aqui: tudo vem de calcularEstudo(), para a tela e
+// a apresentação nunca mostrarem contas diferentes.
 const SECAO = 'mb-2 mt-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400 first:mt-0'
 
 // Objetivos comuns em consultoria de vida — chips que a consultora agrega com
@@ -338,38 +347,76 @@ const OBJETIVOS_SUGERIDOS = [
   'Quitar dívidas e financiamentos',
   'Planejamento sucessório e blindagem patrimonial',
   'Proteger a renda de autônomo',
+  'Proteger a sociedade e a continuidade da empresa',
   'Complementar a aposentadoria',
   'Deixar um legado',
 ]
 
-// Campo de pilar: valor com pontuação + sugestão calculada com botão "usar".
+const ICONE_GRUPO = {
+  essencial: Shield, vida: HeartPulse, acidentes: Ambulance,
+  assistencia: HeartHandshake, sucessao: Landmark, empresarial: Building2,
+}
+
+const fmtMeses = (m) => (m == null ? '—' : m >= MESES_VITALICIO ? 'vitalícia' : `${m} meses`)
+
+// Campo de cobertura: valor com pontuação + sugestão calculada com botão "usar".
 // Fica FORA da AbaPlanejamento: se fosse recriado a cada render, o React
 // remontaria o input a cada tecla e o campo perderia o foco.
-function CampoPilar({ pilar, estudo, plano, setPlano }) {
-  const sugestao = estudo.sugestoes[pilar.id]
-  const valorForm = plano[pilar.campo]
+function CampoCobertura({ cob, estudo, plano, setPlano }) {
+  const sugestao = estudo.sugestoes[cob.id] ?? 0
+  const valorForm = plano[cob.campo]
   const sugestaoArredondada = Math.round(sugestao * 100) / 100
+  const diaria = cob.tipo === 'diaria' ? estudo.diariaPorId[cob.id] : null
+  const mudar = (campo, valor) => setPlano({ ...plano, [campo]: valor })
+
   return (
     <div className="rounded-xl border border-slate-200/70 bg-white p-4">
-      <p className="font-medium text-slate-800">{pilar.rotulo}</p>
-      <p className="mb-3 mt-0.5 text-xs text-slate-400">{pilar.descricao}</p>
+      <p className="font-medium text-slate-800">{cob.rotulo}</p>
+      <p className="mb-3 mt-0.5 text-xs text-slate-400">{cob.descricao}</p>
       <InputMoeda value={valorForm ?? ''}
         placeholder={sugestao > 0 ? Math.round(sugestao).toLocaleString('pt-BR') : '0'}
-        onChange={(e) => setPlano({ ...plano, [pilar.campo]: e.target.value })} />
-      <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-        <span className="text-slate-400" title={pilar.comoCalcula}>
-          Sugestão: <strong className="text-slate-600">{pilar.porDia ? `${brl(sugestao)}/dia` : brlCompacto(sugestao)}</strong>
+        onChange={(e) => mudar(cob.campo, e.target.value)} />
+
+      {/* Diárias: o que vale mesmo é diária × limite de dias */}
+      {diaria && (
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <Campo label="Limite de diárias">
+            <Input type="number" min="1" max="1095" value={plano[cob.campoDias] ?? ''}
+              placeholder={String(cob.diasPadrao)}
+              onChange={(e) => mudar(cob.campoDias, e.target.value)} />
+          </Campo>
+          {cob.campoFranquia && (
+            <Campo label="Franquia (dias)" dica="Dias de afastamento antes de a diária começar a contar">
+              <Input type="number" min="0" max="120" value={plano[cob.campoFranquia] ?? ''}
+                placeholder={String(cob.franquiaPadrao)}
+                onChange={(e) => mudar(cob.campoFranquia, e.target.value)} />
+            </Campo>
+          )}
+        </div>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span className="text-slate-400" title={cob.comoCalcula}>
+          Sugestão: <strong className="text-slate-600">
+            {cob.tipo === 'diaria' ? `${brl(sugestao)}/dia` : brlCompacto(sugestao)}
+          </strong>
         </span>
         {sugestao > 0 && String(valorForm ?? '') === '' && (
           <span className="text-slate-300">em branco = usa a sugestão</span>
         )}
         {sugestao > 0 && String(valorForm ?? '') !== '' && Number(valorForm) !== sugestaoArredondada && (
           <button type="button" className="font-semibold text-blue-600 hover:underline"
-            onClick={() => setPlano({ ...plano, [pilar.campo]: sugestaoArredondada })}>
+            onClick={() => mudar(cob.campo, sugestaoArredondada)}>
             usar sugestão
           </button>
         )}
       </div>
+      {diaria && diaria.total > 0 && (
+        <p className="mt-1.5 border-t border-slate-100 pt-1.5 text-xs text-slate-500">
+          Até <strong className="tabular text-slate-700">{brlCompacto(diaria.total)}</strong> em {diaria.dias} diárias
+          {diaria.franquia ? ` · a partir do ${diaria.franquia + 1}º dia` : ''}
+        </p>
+      )}
     </div>
   )
 }
@@ -377,25 +424,46 @@ function CampoPilar({ pilar, estudo, plano, setPlano }) {
 function AbaPlanejamento({ idCliente }) {
   const toast = useToast()
   const [plano, setPlano] = useState(null)
+  const [colunas, setColunas] = useState(null)
   const [salvo, setSalvo] = useState(false)
 
   useEffect(() => {
-    supabase.from('planejamentos').select('*').eq('id_cliente', idCliente).maybeSingle()
-      .then(({ data }) => setPlano(data ?? {
+    // Migrações são aplicadas à mão no Supabase: perguntamos ao banco quais
+    // colunas existem antes de montar o formulário. Assim uma instalação
+    // atrasada continua funcionando, só com menos blocos.
+    const probe = (coluna) => supabase.from('planejamentos').select(coluna).limit(1)
+      .then(({ error }) => !error)
+    Promise.all([
+      supabase.from('planejamentos').select('*').eq('id_cliente', idCliente).maybeSingle(),
+      probe('capital_invalidez'), probe('premio_estimado'), probe('tipo_planejamento'),
+    ]).then(([{ data }, tem014, tem015, tem019]) => {
+      setColunas({ tem014, tem015, tem019 })
+      setPlano(data ?? {
         id_cliente: idCliente, profissao: '', estado_civil: '', renda_mensal: '',
         custo_vida_mensal: '', patrimonio_total: '', dividas_total: '',
         num_dependentes: 0, dependentes: [], anos_protecao: 10, capital_sugerido: '',
         objetivos: '', observacoes_reuniao: '',
-      }))
+        // as chaves das migrações aplicadas precisam existir no objeto: é por
+        // elas que o estudo sabe quais coberturas pode oferecer
+        ...(tem014 && {
+          capital_invalidez: '', capital_doencas_graves: '', dit_diaria: '',
+          verba_sucessoria: '', cobertura_atual: '', conjuge_nome: '',
+        }),
+        ...(tem015 && { premio_estimado: '' }),
+        ...(tem019 && { tipo_planejamento: 'pf', focos: [] }),
+      })
+    })
   }, [idCliente])
 
-  if (!plano) return <Spinner />
+  if (!plano || !colunas) return <Spinner />
 
+  const { tem014, tem015, tem019 } = colunas
   const estudo = calcularEstudo(plano)
   const set = (k) => (e) => setPlano({ ...plano, [k]: e.target.value })
-  // Colunas das migrações 014/015: só enviamos ao banco se já existirem
-  const tem014 = 'capital_invalidez' in plano
-  const tem015 = 'premio_estimado' in plano
+  const setValor = (k, v) => setPlano({ ...plano, [k]: v })
+  const focos = Array.isArray(plano.focos) ? plano.focos : []
+  const alternarFoco = (id) => setValor('focos', focos.includes(id)
+    ? focos.filter((f) => f !== id) : [...focos, id])
 
   // Filhos: lista estruturada guardada na coluna jsonb `dependentes`
   // (formato [{nome, idade, custo_mensal}]) — o gasto some quando fazem 24
@@ -406,6 +474,17 @@ function AbaPlanejamento({ idCliente }) {
     setPlano({ ...plano, dependentes: [...filhos, { nome: '', idade: '', custo_mensal: '' }] })
   const removerFilho = (i) =>
     setPlano({ ...plano, dependentes: filhos.filter((_, j) => j !== i) })
+
+  // Coberturas visíveis: o catálogo filtrado pelas migrações aplicadas e pelo
+  // tipo de planejamento (as empresariais só aparecem quando há PJ no estudo)
+  const gruposVisiveis = GRUPOS_COBERTURA
+    .map((g) => ({
+      ...g,
+      itens: COBERTURAS.filter((c) => c.grupo === g.id)
+        .filter((c) => (c.requer !== '014' || tem014) && (c.requer !== '019' || tem019))
+        .filter((c) => !c.pj || estudo.temPJ),
+    }))
+    .filter((g) => g.itens.length > 0)
 
   async function salvar(e) {
     e.preventDefault()
@@ -419,34 +498,70 @@ function AbaPlanejamento({ idCliente }) {
         custo_mensal: f.custo_mensal === '' || f.custo_mensal == null ? null : Number(f.custo_mensal),
       }))
     const idades = filhosLimpos.map((f) => f.idade).filter((i) => i != null)
+    // número vazio vira null (e não 0): null significa "usa a sugestão"
+    const num = (v) => (v === '' || v == null ? null : Number(v))
     const payload = {
       id_cliente: idCliente,
       profissao: plano.profissao || null,
       estado_civil: plano.estado_civil || null,
-      renda_mensal: plano.renda_mensal || null,
-      custo_vida_mensal: plano.custo_vida_mensal || null,
-      patrimonio_total: plano.patrimonio_total || null,
-      dividas_total: plano.dividas_total || 0,
-      capital_sugerido: plano.capital_sugerido || null, // vazio = banco calcula sozinho
+      renda_mensal: num(plano.renda_mensal),
+      custo_vida_mensal: num(plano.custo_vida_mensal),
+      patrimonio_total: num(plano.patrimonio_total),
+      dividas_total: num(plano.dividas_total) ?? 0,
+      capital_sugerido: num(plano.capital_sugerido),
       dependentes: filhosLimpos,
-      num_dependentes: filhosLimpos.length > 0 ? filhosLimpos.length : (plano.num_dependentes || 0),
-      anos_protecao: plano.anos_protecao || 10,
+      num_dependentes: filhosLimpos.length > 0 ? filhosLimpos.length : (Number(plano.num_dependentes) || 0),
+      anos_protecao: Number(plano.anos_protecao) || 10,
       objetivos: plano.objetivos || null,
       observacoes_reuniao: plano.observacoes_reuniao || null,
-      ...(tem015 && { premio_estimado: plano.premio_estimado || null }),
+      ...(tem015 && { premio_estimado: num(plano.premio_estimado) }),
       ...(tem014 && {
-        capital_invalidez: plano.capital_invalidez || null,
-        capital_doencas_graves: plano.capital_doencas_graves || null,
-        dit_diaria: plano.dit_diaria || null,
-        verba_sucessoria: plano.verba_sucessoria || null,
-        cobertura_atual: plano.cobertura_atual || 0,
-        itcmd_pct: plano.itcmd_pct ?? 4,
-        custas_pct: plano.custas_pct ?? 8,
+        capital_invalidez: num(plano.capital_invalidez),
+        capital_doencas_graves: num(plano.capital_doencas_graves),
+        dit_diaria: num(plano.dit_diaria),
+        verba_sucessoria: num(plano.verba_sucessoria),
+        cobertura_atual: num(plano.cobertura_atual) ?? 0,
+        itcmd_pct: num(plano.itcmd_pct) ?? 4,
+        custas_pct: num(plano.custas_pct) ?? 8,
         conjuge_nome: plano.conjuge_nome || null,
         // texto-resumo das idades (mantém compatibilidade com telas antigas)
-        filhos_idades: idades.length > 0
-          ? `${idades.join(', ')} anos`
-          : plano.filhos_idades || null,
+        filhos_idades: idades.length > 0 ? `${idades.join(', ')} anos` : plano.filhos_idades || null,
+      }),
+      ...(tem019 && {
+        tipo_planejamento: plano.tipo_planejamento || 'pf',
+        focos,
+        patrimonio_imoveis: num(plano.patrimonio_imoveis),
+        patrimonio_investimentos: num(plano.patrimonio_investimentos),
+        patrimonio_empresa: num(plano.patrimonio_empresa),
+        patrimonio_veiculos: num(plano.patrimonio_veiculos),
+        patrimonio_outros: num(plano.patrimonio_outros),
+        previdencia_saldo: num(plano.previdencia_saldo),
+        previdencia_tipo: plano.previdencia_tipo || null,
+        previdencia_aporte_mensal: num(plano.previdencia_aporte_mensal),
+        regime_bens: plano.regime_bens || null,
+        tem_holding: !!plano.tem_holding,
+        tem_testamento: !!plano.tem_testamento,
+        herdeiros_menores: !!plano.herdeiros_menores,
+        pj_razao_social: plano.pj_razao_social || null,
+        pj_valuation: num(plano.pj_valuation),
+        pj_participacao_pct: num(plano.pj_participacao_pct),
+        pj_num_socios: num(plano.pj_num_socios),
+        pj_faturamento_anual: num(plano.pj_faturamento_anual),
+        pj_lucro_anual: num(plano.pj_lucro_anual),
+        pj_divida_avalizada: num(plano.pj_divida_avalizada),
+        capital_socios: num(plano.capital_socios),
+        capital_homem_chave: num(plano.capital_homem_chave),
+        capital_aval: num(plano.capital_aval),
+        capital_morte_acidental: num(plano.capital_morte_acidental),
+        capital_fraturas: num(plano.capital_fraturas),
+        dih_diaria: num(plano.dih_diaria),
+        dih_dias: num(plano.dih_dias),
+        dit_dias: num(plano.dit_dias),
+        dit_franquia_dias: num(plano.dit_franquia_dias),
+        funeral_individual: num(plano.funeral_individual),
+        funeral_familiar: num(plano.funeral_familiar),
+        premio_anual: num(plano.premio_anual),
+        forma_pagamento: plano.forma_pagamento || 'mensal',
       }),
     }
     const { data, error } = await supabase.from('planejamentos').upsert(payload, { onConflict: 'id_cliente' })
@@ -461,24 +576,37 @@ function AbaPlanejamento({ idCliente }) {
   // Prontidão da proposta: o que já dá para apresentar e o que ainda pega mal
   const pct = Math.round((estudo.completude.feitos / estudo.completude.total) * 100)
   const pronto = estudo.completude.feitos >= estudo.completude.total - 1
-  const alertas = []
-  if (estudo.renda <= 0) alertas.push('Preencha a renda mensal — vários cálculos dependem dela.')
-  if (estudo.custoVida <= 0) alertas.push('Preencha o custo de vida — é a base da proteção da família.')
-  if (estudo.renda > 0 && estudo.custoVida > estudo.renda)
-    alertas.push('O custo de vida está maior que a renda — confira os valores com o cliente.')
-  if (!tem015 || !(Number(plano.premio_estimado) > 0))
-    alertas.push('Sem prêmio cotado: a proposta não terá o slide “O investimento”. Cote nas seguradoras e preencha.')
-  if (estudo.patrimonio <= 0)
-    alertas.push('Sem patrimônio: a proposta não mostrará a blindagem/inventário.')
+  const pendencias = []
+  if (estudo.renda <= 0) pendencias.push('Preencha a renda mensal — vários cálculos dependem dela.')
+  if (estudo.custoVida <= 0) pendencias.push('Preencha o custo de vida — é a base da proteção da família.')
+  if (!estudo.investimento)
+    pendencias.push('Sem prêmio cotado: a proposta não terá o slide “O investimento”. Cote nas seguradoras e preencha.')
+  else if (!estudo.investimento.temDescontoAnual)
+    pendencias.push('Informe o prêmio anual: quase toda seguradora dá desconto à vista, e o cliente tem o direito de escolher.')
+  if (estudo.patrimonioBruto <= 0)
+    pendencias.push('Sem patrimônio: a proposta não mostrará a sucessão nem a blindagem.')
+  else if (tem019 && !estudo.detalhado)
+    pendencias.push('Detalhe o patrimônio por classe: é o que separa o que trava no inventário do que vai direto ao beneficiário.')
+  if (estudo.temPJ && estudo.pj.valuation <= 0)
+    pendencias.push('Estudo com PJ: informe o valuation e a participação para calcular o acordo de sócios.')
 
   return (
     <Card className="p-5">
       <ComoFunciona id="planejamento" titulo="Como montar o planejamento">
-        Preencha os dados que você levantou na reunião — renda, custo de vida, patrimônio, dívidas e os
-        filhos. O sistema calcula sozinho os <strong>5 pilares da proteção</strong> e o capital ideal.
-        Cada número aqui alimenta a <strong>proposta</strong> e a linha do tempo. Deixe um pilar em branco
-        para usar a sugestão automática, ou digite o valor que você definiu.
+        Preencha o que você levantou na reunião: família, renda, custo de vida, <strong>cada classe do
+        patrimônio</strong> e, se houver, a empresa. O sistema calcula sozinho todas as coberturas da
+        apólice, o custo do inventário e o déficit de liquidez. Deixe uma cobertura em branco para usar
+        a sugestão automática, ou digite o valor que você cotou. Tudo aqui alimenta a{' '}
+        <strong>proposta</strong> — o que estiver na tela é exatamente o que o cliente vai ver.
       </ComoFunciona>
+
+      {!tem019 && (
+        <p className="mb-4 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
+          Rode a migração <strong>019_planejamento_completo.sql</strong> no Supabase para liberar o
+          raio-X do patrimônio, o planejamento empresarial, as coberturas de morte acidental, fraturas,
+          internação e funeral, e o prêmio anual com desconto.
+        </p>
+      )}
 
       {/* Prontidão da proposta */}
       <div className="mb-5 rounded-2xl border border-slate-200/70 bg-slate-50/60 p-4">
@@ -507,9 +635,29 @@ function AbaPlanejamento({ idCliente }) {
             </Button>
           </Link>
         </div>
-        {alertas.length > 0 && (
+
+        {/* Números que não fecham — corrigidos antes de a reunião começar */}
+        {estudo.inconsistencias.length > 0 && (
           <ul className="mt-3 space-y-1.5 border-t border-slate-200/70 pt-3">
-            {alertas.map((a, i) => (
+            {estudo.inconsistencias.map((inc, i) => (
+              <li key={i} className={`flex items-start gap-2 text-xs ${inc.grave ? 'text-red-700' : 'text-amber-800'}`}>
+                <AlertTriangle size={13} className={`mt-0.5 shrink-0 ${inc.grave ? 'text-red-500' : 'text-amber-500'}`} />
+                <span>
+                  {inc.texto}
+                  {inc.corrigir && (
+                    <button type="button" className="ml-1.5 font-semibold text-blue-600 hover:underline"
+                      onClick={() => setValor(inc.corrigir, inc.valor)}>
+                      corrigir para {brlCompacto(inc.valor)}
+                    </button>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {pendencias.length > 0 && (
+          <ul className="mt-3 space-y-1.5 border-t border-slate-200/70 pt-3">
+            {pendencias.map((a, i) => (
               <li key={i} className="flex items-start gap-2 text-xs text-slate-500">
                 <span className="mt-0.5 text-amber-500">▹</span> {a}
               </li>
@@ -519,6 +667,48 @@ function AbaPlanejamento({ idCliente }) {
       </div>
 
       <form onSubmit={salvar}>
+        {/* ── Tipo de planejamento e focos ─────────────────────────────────── */}
+        {tem019 && (
+          <>
+            <p className={SECAO}><ChartPie size={13} /> Que planejamento estamos construindo</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {TIPOS_PLANEJAMENTO.map((t) => {
+                const ativo = (plano.tipo_planejamento || 'pf') === t.id
+                return (
+                  <button key={t.id} type="button" onClick={() => setValor('tipo_planejamento', t.id)}
+                    className={`rounded-xl border p-3 text-left transition-colors ${
+                      ativo ? 'border-laranja-300 bg-laranja-50/60 ring-1 ring-laranja-200'
+                        : 'border-slate-200/70 bg-white hover:border-slate-300'}`}>
+                    <p className={`text-sm font-semibold ${ativo ? 'text-laranja-800' : 'text-slate-800'}`}>
+                      {ativo ? '✓ ' : ''}{t.rotulo}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">{t.descricao}</p>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="mt-3">
+              <p className="mb-1.5 text-xs text-slate-400">
+                Focos do estudo — definem quais capítulos a proposta apresenta e a ordem das coberturas.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {FOCOS.map((f) => {
+                  const ativo = focos.includes(f.id)
+                  return (
+                    <button key={f.id} type="button" onClick={() => alternarFoco(f.id)} title={f.descricao}
+                      className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                        ativo ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-laranja-300 hover:text-laranja-700'}`}>
+                      {ativo ? '✓ ' : '+ '}{f.rotulo}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── Família e perfil ─────────────────────────────────────────────── */}
         <p className={SECAO}><Users2 size={13} /> Família e perfil</p>
         <div className="grid gap-4 md:grid-cols-3">
           <Campo label="Profissão"><Input value={plano.profissao ?? ''} onChange={set('profissao')} /></Campo>
@@ -538,6 +728,31 @@ function AbaPlanejamento({ idCliente }) {
             <Campo label="Nº de dependentes">
               <Input type="number" min="0" value={plano.num_dependentes ?? 0} onChange={set('num_dependentes')} />
             </Campo>
+          )}
+          {tem019 && (
+            <Campo label="Regime de bens" dica="Muda quem herda o quê — meação e herança são coisas diferentes">
+              <Select value={plano.regime_bens ?? ''} onChange={set('regime_bens')}>
+                <option value="">—</option>
+                {['Comunhão parcial', 'Comunhão universal', 'Separação total', 'Separação obrigatória',
+                  'Participação final nos aquestos'].map((o) => <option key={o} value={o}>{o}</option>)}
+              </Select>
+            </Campo>
+          )}
+          {tem019 && (
+            <div className="flex flex-col justify-center gap-1.5 md:col-span-2">
+              {[
+                ['herdeiros_menores', 'Há herdeiros menores de idade', 'O inventário vira judicial obrigatoriamente — mais lento e mais caro'],
+                ['tem_holding', 'Já possui holding familiar', 'Reduz custas, mas não elimina o ITCMD nem a necessidade de liquidez'],
+                ['tem_testamento', 'Já possui testamento', 'Organiza a partilha; não antecipa o dinheiro do imposto'],
+              ].map(([campo, rotulo, dica]) => (
+                <label key={campo} className="flex cursor-pointer items-start gap-2 text-sm text-slate-600" title={dica}>
+                  <input type="checkbox" checked={!!plano[campo]}
+                    onChange={(e) => setValor(campo, e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-laranja-600 focus:ring-laranja-500" />
+                  <span>{rotulo} <span className="text-xs text-slate-400">· {dica}</span></span>
+                </label>
+              ))}
+            </div>
           )}
         </div>
 
@@ -604,15 +819,15 @@ function AbaPlanejamento({ idCliente }) {
           )}
         </div>
 
+        {/* ── Vida financeira ──────────────────────────────────────────────── */}
         <p className={SECAO}><Wallet size={13} /> Vida financeira</p>
         <div className="grid gap-4 md:grid-cols-3">
           <Campo label="Renda mensal"><InputMoeda value={plano.renda_mensal ?? ''} onChange={set('renda_mensal')} /></Campo>
           <Campo label="Custo de vida mensal" dica={estudo.custoFilhosMensal > 0 ? `Inclui os ${brl(estudo.custoFilhosMensal)} dos filhos` : 'Quanto a família gasta por mês, no total'}>
             <InputMoeda value={plano.custo_vida_mensal ?? ''} onChange={set('custo_vida_mensal')} />
           </Campo>
-          <Campo label="Dívidas totais"><InputMoeda value={plano.dividas_total ?? ''} onChange={set('dividas_total')} /></Campo>
-          <Campo label="Patrimônio total" dica="Base do cálculo de inventário">
-            <InputMoeda value={plano.patrimonio_total ?? ''} onChange={set('patrimonio_total')} />
+          <Campo label="Dívidas totais" dica="Financiamentos, consignados, cartão — o que a família herdaria">
+            <InputMoeda value={plano.dividas_total ?? ''} onChange={set('dividas_total')} />
           </Campo>
           <Campo label="Anos de proteção" dica="Horizonte do estudo">
             <Input type="number" min="1" value={plano.anos_protecao ?? 10} onChange={set('anos_protecao')} />
@@ -622,27 +837,119 @@ function AbaPlanejamento({ idCliente }) {
               <InputMoeda value={plano.cobertura_atual ?? ''} onChange={set('cobertura_atual')} />
             </Campo>
           )}
-          {tem015 && (
-            <Campo label="Prêmio cotado (por mês)" dica="Cotação nas seguradoras — vira o slide 'O investimento'">
-              <InputMoeda value={plano.premio_estimado ?? ''} onChange={set('premio_estimado')} />
+          {!tem019 && (
+            <Campo label="Patrimônio total" dica="Base do cálculo de inventário">
+              <InputMoeda value={plano.patrimonio_total ?? ''} onChange={set('patrimonio_total')} />
             </Campo>
           )}
         </div>
 
-        <p className={SECAO}><Shield size={13} /> Os 5 pilares da proteção</p>
-        {!tem014 && (
-          <p className="mb-3 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
-            Rode a migração <strong>014_planejamento_detalhado.sql</strong> no Supabase para liberar
-            invalidez, doenças graves, DIT, sucessão e o gap de cobertura.
-          </p>
-        )}
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <CampoPilar pilar={PILARES[0]} estudo={estudo} plano={plano} setPlano={setPlano} />
-          {tem014 && PILARES.slice(1).map((p) => (
-            <CampoPilar key={p.id} pilar={p} estudo={estudo} plano={plano} setPlano={setPlano} />
-          ))}
-        </div>
+        {/* ── Raio-X do patrimônio ─────────────────────────────────────────── */}
+        {tem019 && (
+          <>
+            <p className={SECAO}><PiggyBank size={13} /> Raio-X do patrimônio</p>
+            <p className="mb-3 text-xs text-slate-400">
+              Cada classe se comporta de um jeito quando o titular falta. Imóveis, investimentos, empresa
+              e veículos <strong>travam no inventário</strong> até o ITCMD ser pago — e o imposto se paga
+              em dinheiro, não em imóvel. Previdência e seguro <strong>não passam por inventário</strong>:
+              vão direto ao beneficiário indicado, em dias.
+            </p>
+            <div className="grid gap-4 md:grid-cols-3">
+              {CLASSES_PATRIMONIO.filter((c) => c.id !== 'previdencia').map((c) => (
+                <Campo key={c.id} label={c.rotulo} dica={c.nota}>
+                  <InputMoeda value={plano[c.campo] ?? ''} onChange={set(c.campo)} />
+                </Campo>
+              ))}
+              <Campo label="Previdência (VGBL/PGBL)" dica="Não entra no inventário nem na base do ITCMD">
+                <InputMoeda value={plano.previdencia_saldo ?? ''} onChange={set('previdencia_saldo')} />
+              </Campo>
+              <Campo label="Tipo de previdência">
+                <Select value={plano.previdencia_tipo ?? ''} onChange={set('previdencia_tipo')}>
+                  <option value="">—</option>
+                  {['VGBL', 'PGBL', 'Ambos'].map((o) => <option key={o} value={o}>{o}</option>)}
+                </Select>
+              </Campo>
+              <Campo label="Aporte mensal na previdência" dica="Entra na leitura de quanto já é destinado ao longo prazo">
+                <InputMoeda value={plano.previdencia_aporte_mensal ?? ''} onChange={set('previdencia_aporte_mensal')} />
+              </Campo>
+            </div>
 
+            {estudo.patrimonioBruto > 0 && (
+              <>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <Metrica rotulo="Patrimônio bruto" valor={brl(estudo.patrimonioBruto)}
+                    detalhe="bens + previdência" />
+                  <Metrica rotulo="Patrimônio líquido" valor={brl(estudo.patrimonioLiquido)}
+                    detalhe={estudo.dividas > 0 ? `já descontadas as dívidas de ${brlCompacto(estudo.dividas)}` : 'sem dívidas'}
+                    tom={estudo.patrimonioLiquido < 0 ? 'ruim' : 'neutro'} />
+                  <Metrica rotulo="Trava no inventário" valor={brl(estudo.bensInventariaveis)}
+                    detalhe={estudo.pctIliquido != null ? `${estudo.pctIliquido}% do total é ilíquido` : 'passa por ITCMD'}
+                    tom="ruim" />
+                  <Metrica rotulo="Chega em dias" valor={brl(estudo.liquidezImediata)}
+                    detalhe="previdência + seguro que já existe" tom="bom" />
+                </div>
+                <div className="mt-4 rounded-xl border border-slate-200/70 bg-white p-4">
+                  <MapaPatrimonio estudo={estudo} />
+                </div>
+              </>
+            )}
+
+            <div className="mt-3 grid gap-4 md:grid-cols-3">
+              <Campo label="Patrimônio total declarado" dica="Consolidado que aparece no dossiê — mantenha igual à soma das classes">
+                <InputMoeda value={plano.patrimonio_total ?? ''} onChange={set('patrimonio_total')} />
+              </Campo>
+            </div>
+          </>
+        )}
+
+        {/* ── Empresa (PJ) ─────────────────────────────────────────────────── */}
+        {tem019 && estudo.temPJ && (
+          <>
+            <p className={SECAO}><Building2 size={13} /> A empresa</p>
+            <p className="mb-3 text-xs text-slate-400">
+              Sem acordo de sócios, a família herda a quota e vira sócia de quem ficou — sem saber tocar
+              o negócio e sem poder vender. Com capital, os sócios compram a participação à vista e todo
+              mundo segue a vida. O <strong>aval do sócio também não morre com ele</strong>: vira dívida
+              do espólio e alcança o patrimônio pessoal.
+            </p>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Campo label="Razão social">
+                <Input value={plano.pj_razao_social ?? ''} onChange={set('pj_razao_social')} />
+              </Campo>
+              <Campo label="Valuation da empresa" dica="Valor de mercado — base do acordo de sócios">
+                <InputMoeda value={plano.pj_valuation ?? ''} onChange={set('pj_valuation')} />
+              </Campo>
+              <Campo label="Participação do cliente (%)">
+                <Input type="number" step="0.5" min="0" max="100" value={plano.pj_participacao_pct ?? ''}
+                  onChange={set('pj_participacao_pct')} />
+              </Campo>
+              <Campo label="Nº de sócios">
+                <Input type="number" min="1" value={plano.pj_num_socios ?? ''} onChange={set('pj_num_socios')} />
+              </Campo>
+              <Campo label="Faturamento anual">
+                <InputMoeda value={plano.pj_faturamento_anual ?? ''} onChange={set('pj_faturamento_anual')} />
+              </Campo>
+              <Campo label="Lucro anual" dica="Base do capital de homem-chave — sem ele, estimamos 20% do faturamento">
+                <InputMoeda value={plano.pj_lucro_anual ?? ''} onChange={set('pj_lucro_anual')} />
+              </Campo>
+              <Campo label="Dívidas da empresa com aval do sócio" dica="O aval alcança o patrimônio pessoal da família">
+                <InputMoeda value={plano.pj_divida_avalizada ?? ''} onChange={set('pj_divida_avalizada')} />
+              </Campo>
+            </div>
+            {estudo.pj.quota > 0 && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <Metrica rotulo="Quota do cliente" valor={brl(estudo.pj.quota)}
+                  detalhe={`${estudo.pj.participacao}% de ${brlCompacto(estudo.pj.valuation)}`} />
+                <Metrica rotulo="Capital de homem-chave" valor={brl(estudo.sugestoes.homem_chave)}
+                  detalhe={estudo.pj.lucro > 0 ? '2× o lucro anual' : '2× o lucro estimado (20% do faturamento)'} />
+                <Metrica rotulo="Exposição pelo aval" valor={brl(estudo.pj.dividaAval)}
+                  detalhe="alcança o patrimônio pessoal" tom={estudo.pj.dividaAval > 0 ? 'ruim' : 'neutro'} />
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Sucessão ─────────────────────────────────────────────────────── */}
         {tem014 && (
           <>
             <p className={SECAO}><Landmark size={13} /> Sucessão — o custo do inventário</p>
@@ -658,19 +965,121 @@ function AbaPlanejamento({ idCliente }) {
                 <p className="font-display text-xl font-semibold text-slate-900 tabular-nums">
                   {brl(estudo.custoInventario)}
                   <span className="ml-2 text-sm font-normal text-slate-400">
-                    ({(estudo.itcmd + estudo.custas).toFixed(1).replace('.', ',')}% de {brlCompacto(estudo.patrimonio)})
+                    ({(estudo.itcmd + estudo.custas).toFixed(1).replace('.', ',')}% de {brlCompacto(estudo.bensInventariaveis)})
                   </span>
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
+                  Incide só sobre o que passa por inventário
+                  {estudo.previdencia > 0 && <> — os {brlCompacto(estudo.previdencia)} de previdência ficam de fora</>}.
                   É a liquidez que a família precisa ter <strong>em dinheiro</strong> para destravar os bens.
-                  O seguro paga direto ao beneficiário, fora do inventário.
                 </p>
               </div>
             </div>
+            {tem019 && estudo.custoInventario > 0 && (
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <Metrica rotulo="A família tem hoje, em dias" valor={brl(estudo.liquidezImediata)}
+                  detalhe="previdência + seguro atual" tom="bom" />
+                <Metrica rotulo="Precisa pagar" valor={brl(estudo.custoInventario)}
+                  detalhe="à vista, antes de acessar os bens" />
+                <Metrica rotulo="Déficit de liquidez" valor={brl(estudo.deficitLiquidez)}
+                  detalhe={estudo.deficitLiquidez > 0 ? 'sai da venda de bens às pressas' : 'coberto ✓'}
+                  tom={estudo.deficitLiquidez > 0 ? 'ruim' : 'bom'} />
+              </div>
+            )}
           </>
         )}
 
-        {/* Inteligência do estudo: leituras que viram argumento de venda */}
+        {/* ── Coberturas da apólice ────────────────────────────────────────── */}
+        <p className={SECAO}><Shield size={13} /> As coberturas da apólice</p>
+        {!tem014 && (
+          <p className="mb-3 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
+            Rode a migração <strong>014_planejamento_detalhado.sql</strong> no Supabase para liberar
+            invalidez, doenças graves, DIT, sucessão e o gap de cobertura.
+          </p>
+        )}
+        {gruposVisiveis.map((g) => {
+          const Icone = ICONE_GRUPO[g.id] ?? Shield
+          return (
+            <div key={g.id} className="mt-4 first:mt-0">
+              <div className="mb-2 flex flex-wrap items-baseline gap-x-2">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+                  <Icone size={14} className="text-laranja-600" /> {g.rotulo}
+                </p>
+                <p className="text-xs text-slate-400">{g.descricao}</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {g.itens.map((c) => (
+                  <CampoCobertura key={c.id} cob={c} estudo={estudo} plano={plano} setPlano={setPlano} />
+                ))}
+              </div>
+            </div>
+          )
+        })}
+
+        {/* ── O investimento: mensal E anual ───────────────────────────────── */}
+        {tem015 && (
+          <>
+            <p className={SECAO}><Coins size={13} /> O investimento — o cliente escolhe como pagar</p>
+            <p className="mb-3 text-xs text-slate-400">
+              Cote as duas formas. O pagamento anual quase sempre sai com desconto, e essa escolha é do
+              cliente — a proposta mostra as duas lado a lado, com a economia em destaque.
+            </p>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Campo label="Prêmio mensal cotado" dica="12 parcelas — a forma mais comum">
+                <InputMoeda value={plano.premio_estimado ?? ''} onChange={set('premio_estimado')} />
+              </Campo>
+              {tem019 && (
+                <>
+                  <Campo label="Prêmio anual à vista" dica="Normalmente com desconto sobre 12× o mensal">
+                    <InputMoeda value={plano.premio_anual ?? ''} onChange={set('premio_anual')} />
+                    {Number(plano.premio_estimado) > 0 && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
+                        aplicar desconto:
+                        {[3, 5, 8, 10].map((d) => (
+                          <button key={d} type="button"
+                            onClick={() => setValor('premio_anual',
+                              Math.round(Number(plano.premio_estimado) * 12 * (1 - d / 100) * 100) / 100)}
+                            className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-semibold text-slate-600 hover:border-laranja-300 hover:text-laranja-700">
+                            {d}%
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </Campo>
+                  <Campo label="Preferência do cliente" dica="Destacada na proposta como a opção escolhida">
+                    <Select value={plano.forma_pagamento ?? 'mensal'} onChange={set('forma_pagamento')}>
+                      <option value="mensal">Mensal</option>
+                      <option value="anual">Anual à vista</option>
+                    </Select>
+                  </Campo>
+                </>
+              )}
+            </div>
+            {estudo.investimento && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Metrica rotulo="Mensal" valor={`${brl(estudo.investimento.mensal)}/mês`}
+                  detalhe={`${brl(estudo.investimento.doze)} em 12 parcelas`} />
+                <Metrica rotulo="Anual à vista" valor={brl(estudo.investimento.anual)}
+                  detalhe={estudo.investimento.temDescontoAnual
+                    ? `equivale a ${brl(estudo.investimento.mensalEquivalente)}/mês`
+                    : 'sem desconto informado'}
+                  tom={estudo.investimento.temDescontoAnual ? 'bom' : 'neutro'} />
+                <Metrica rotulo="Economia no anual"
+                  valor={estudo.investimento.economiaAnual > 0 ? brl(estudo.investimento.economiaAnual) : '—'}
+                  detalhe={estudo.investimento.descontoPct != null
+                    ? `${String(estudo.investimento.descontoPct).replace('.', ',')}% de desconto` : 'cote o anual'}
+                  tom={estudo.investimento.economiaAnual > 0 ? 'bom' : 'neutro'} />
+                <Metrica rotulo="Peso na renda"
+                  valor={estudo.investimento.pctRenda != null
+                    ? `${String(estudo.investimento.pctRenda).replace('.', ',')}%` : '—'}
+                  detalhe={`${brl(estudo.investimento.diario)} por dia`}
+                  tom={estudo.investimento.pctRenda != null && estudo.investimento.pctRenda > 15 ? 'ruim' : 'neutro'} />
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Inteligência do estudo ───────────────────────────────────────── */}
         <div className="mt-6 rounded-xl border border-slate-200/70 bg-white p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -686,14 +1095,30 @@ function AbaPlanejamento({ idCliente }) {
           </div>
           <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg bg-slate-50 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-slate-400">Autonomia da família hoje</p>
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">Autonomia com o que é líquido</p>
               <p className={`font-display text-lg font-semibold tabular-nums ${
-                estudo.autonomiaAtualMeses != null && estudo.autonomiaAtualMeses < 24 ? 'text-red-600' : 'text-slate-900'}`}>
-                {estudo.autonomiaAtualMeses == null ? '—'
-                  : estudo.autonomiaAtualMeses >= 1200 ? 'vitalícia'
-                  : `${estudo.autonomiaAtualMeses} meses`}
+                estudo.mesesLiquidos != null && estudo.mesesLiquidos < 24 ? 'text-red-600' : 'text-slate-900'}`}>
+                {fmtMeses(estudo.mesesLiquidos)}
               </p>
-              <p className="text-xs text-slate-400">se a renda parasse hoje, sem o plano</p>
+              <p className="text-xs text-slate-400">
+                {estudo.mesesLiquidos == null
+                  ? 'detalhe o patrimônio por classe para separar o líquido do ilíquido'
+                  : 'investimentos + previdência + seguro atual, sem vender nada'}
+              </p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">Vendendo tudo que construiu</p>
+              <p className="font-display text-lg font-semibold tabular-nums text-slate-900">
+                {fmtMeses(estudo.mesesVendendoTudo)}
+              </p>
+              <p className="text-xs text-slate-400">inclusive a casa — e depois não sobra nada</p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">Com o plano</p>
+              <p className="font-display text-lg font-semibold tabular-nums text-emerald-600">
+                {fmtMeses(estudo.mesesComPlano)}
+              </p>
+              <p className="text-xs text-slate-400">e o patrimônio fica intacto</p>
             </div>
             <div className="rounded-lg bg-slate-50 p-3">
               <p className="text-[11px] uppercase tracking-wide text-slate-400">Fôlego mensal</p>
@@ -714,7 +1139,7 @@ function AbaPlanejamento({ idCliente }) {
                     até o mais novo fazer {IDADE_INDEPENDENCIA} —{' '}
                     {Number(plano.anos_protecao) !== estudo.anosSugeridosPorFilhos && (
                       <button type="button" className="font-semibold text-laranja-700 hover:underline"
-                        onClick={() => setPlano({ ...plano, anos_protecao: estudo.anosSugeridosPorFilhos })}>
+                        onClick={() => setValor('anos_protecao', estudo.anosSugeridosPorFilhos)}>
                         usar no estudo
                       </button>
                     )}
@@ -741,6 +1166,29 @@ function AbaPlanejamento({ idCliente }) {
                   <p className="text-xs text-slate-400">preencha o prêmio cotado</p>
                 </>
               )}
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">Gap de proteção</p>
+              <p className={`font-display text-lg font-semibold tabular-nums ${
+                estudo.gap > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                {estudo.gap > 0 ? brlCompacto(estudo.gap) : 'Coberto ✓'}
+              </p>
+              <p className="text-xs text-slate-400">
+                {estudo.recursosLiquidos > 0
+                  ? `${brlCompacto(estudo.gapReal)} considerando a reserva líquida`
+                  : 'capital recomendado − o que já possui'}
+              </p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">Importância segurada total</p>
+              <p className="font-display text-lg font-semibold tabular-nums text-slate-900">
+                {brlCompacto(estudo.capitalTotal)}
+              </p>
+              <p className="text-xs text-slate-400">
+                {estudo.ativas.filter((c) => c.soma).length} coberturas · até{' '}
+                {brlCompacto(estudo.capitalMaximoEvento)} num único evento
+                {estudo.totalDiarias > 0 && ` · + ${brlCompacto(estudo.totalDiarias)} em diárias`}
+              </p>
             </div>
           </div>
         </div>
@@ -772,7 +1220,7 @@ function AbaPlanejamento({ idCliente }) {
                   inclui {brlCompacto(estudo.capitalFilhos)} para os filhos até os {IDADE_INDEPENDENCIA}
                 </p>
               ) : estudo.mesesProtegidos > 0 && (
-                <p className="text-xs text-slate-500">{estudo.mesesProtegidos} meses de padrão de vida</p>
+                <p className="text-xs text-slate-500">{fmtMeses(estudo.mesesProtegidos)} de padrão de vida</p>
               )}
             </div>
             {tem014 && (
@@ -780,16 +1228,26 @@ function AbaPlanejamento({ idCliente }) {
                 <div>
                   <p className="text-xs text-slate-400">+ Sucessão (inventário)</p>
                   <p className="font-semibold tabular-nums text-slate-900">{brlCompacto(estudo.valores.sucessao)}</p>
+                  <p className="text-xs text-slate-500">
+                    {estudo.deficitLiquidez > 0
+                      ? `${brlCompacto(estudo.deficitLiquidez)} de déficit sem o seguro`
+                      : 'liquidez do inventário resolvida'}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">Já possui de cobertura</p>
                   <p className="font-semibold tabular-nums text-slate-900">{brlCompacto(estudo.coberturaAtual)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400">Gap de proteção</p>
-                  <p className={`font-semibold tabular-nums ${estudo.gap > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                    {estudo.gap > 0 ? brlCompacto(estudo.gap) : 'Coberto ✓'}
+                  <p className="text-xs text-slate-400">
+                    {estudo.temPJ ? 'Capital PF + PJ' : 'Importância segurada'}
                   </p>
+                  <p className="font-semibold tabular-nums text-slate-900">{brlCompacto(estudo.capitalTotal)}</p>
+                  {estudo.temPJ && estudo.capitalPJ > 0 && (
+                    <p className="text-xs text-slate-500">
+                      {brlCompacto(estudo.capitalPF)} pessoal · {brlCompacto(estudo.capitalPJ)} empresa
+                    </p>
+                  )}
                 </div>
               </>
             )}
@@ -807,7 +1265,7 @@ function AbaPlanejamento({ idCliente }) {
                   <button key={o} type="button" disabled={jaTem}
                     onClick={() => {
                       const atual = String(plano.objetivos ?? '').trim()
-                      setPlano({ ...plano, objetivos: atual ? `${atual}; ${o}` : o })
+                      setValor('objetivos', atual ? `${atual}; ${o}` : o)
                     }}
                     className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
                       jaTem
@@ -829,6 +1287,18 @@ function AbaPlanejamento({ idCliente }) {
         </div>
       </form>
     </Card>
+  )
+}
+
+// Cartão de leitura do estudo: um número com o contexto que o explica.
+function Metrica({ rotulo, valor, detalhe, tom = 'neutro' }) {
+  const cor = tom === 'bom' ? 'text-emerald-600' : tom === 'ruim' ? 'text-red-600' : 'text-slate-900'
+  return (
+    <div className="rounded-xl border border-slate-200/70 bg-slate-50/60 p-3">
+      <p className="text-[11px] uppercase tracking-wide text-slate-400">{rotulo}</p>
+      <p className={`font-display text-lg font-semibold tabular-nums ${cor}`}>{valor}</p>
+      {detalhe && <p className="mt-0.5 text-xs text-slate-400">{detalhe}</p>}
+    </div>
   )
 }
 
@@ -1612,13 +2082,32 @@ async function imprimirDossie(cliente, contato) {
     <div class="grade">
       <div class="celula"><p>Renda</p><b>${estudo.renda > 0 ? brl(estudo.renda) : '—'}</b></div>
       <div class="celula"><p>Custo de vida</p><b>${estudo.custoVida > 0 ? brl(estudo.custoVida) : '—'}</b></div>
-      <div class="celula"><p>Patrimônio</p><b>${estudo.patrimonio > 0 ? brlCompacto(estudo.patrimonio) : '—'}</b></div>
+      <div class="celula"><p>Patrimônio bruto</p><b>${estudo.patrimonioBruto > 0 ? brlCompacto(estudo.patrimonioBruto) : '—'}</b></div>
       <div class="celula"><p>Dívidas</p><b>${estudo.dividas > 0 ? brlCompacto(estudo.dividas) : '—'}</b></div>
-      <div class="celula"><p>Proteção família</p><b>${brlCompacto(estudo.valores.morte)}</b></div>
-      <div class="celula"><p>Doenças graves</p><b>${brlCompacto(estudo.valores.doencas_graves)}</b></div>
-      <div class="celula"><p>Sucessão</p><b>${brlCompacto(estudo.valores.sucessao)}</b></div>
+      <div class="celula"><p>Trava no inventário</p><b>${brlCompacto(estudo.bensInventariaveis)}</b></div>
+      <div class="celula"><p>Custo do inventário</p><b>${brlCompacto(estudo.custoInventario)}</b></div>
+      <div class="celula"><p>Déficit de liquidez</p><b>${estudo.deficitLiquidez > 0 ? brlCompacto(estudo.deficitLiquidez) : 'Coberto ✓'}</b></div>
       <div class="celula"><p>Gap vs atual</p><b>${estudo.gap > 0 ? brlCompacto(estudo.gap) : 'Coberto ✓'}</b></div>
     </div>
+    <h2>Coberturas do plano (${brlCompacto(estudo.capitalTotal)} de importância segurada)</h2>
+    <table><tr><th>Cobertura</th><th>Valor</th><th>O que resolve</th></tr>
+      ${estudo.ativas.map((c) => `<tr>
+        <td>${esc(c.curto)}</td>
+        <td class="num">${c.tipo === 'diaria'
+          ? `${brl(c.valor)}/dia${c.dias ? ` · até ${c.dias} diárias` : ''}`
+          : brl(c.valor)}</td>
+        <td>${esc(c.descricao)}</td></tr>`).join('')}
+    </table>
+    ${estudo.investimento ? `<p style="margin-top:6px"><strong>Investimento:</strong>
+      ${brl(estudo.investimento.mensal)}/mês${estudo.investimento.temDescontoAnual
+        ? ` · ou ${brl(estudo.investimento.anual)} à vista no ano (economia de ${brl(estudo.investimento.economiaAnual)})`
+        : ''}${estudo.investimento.pctRenda != null ? ` · ${String(estudo.investimento.pctRenda).replace('.', ',')}% da renda` : ''}</p>` : ''}
+    ${estudo.temPJ && estudo.pj.valuation > 0 ? `<p style="margin-top:3px"><strong>Empresa:</strong>
+      ${esc(estudo.pj.razaoSocial || 'sociedade')} · valuation ${brlCompacto(estudo.pj.valuation)} ·
+      participação ${estudo.pj.participacao}% (${brlCompacto(estudo.pj.quota)})${
+        estudo.pj.dividaAval > 0 ? ` · aval de ${brlCompacto(estudo.pj.dividaAval)}` : ''}</p>` : ''}
+    ${estudo.inconsistencias.length > 0 ? `<div class="aviso"><strong>Revisar antes da reunião:</strong>
+      ${estudo.inconsistencias.map((i) => esc(i.texto)).join(' · ')}</div>` : ''}
     ${filhosDossie ? `<p style="margin-top:6px"><strong>Filhos:</strong> ${filhosDossie}</p>` : ''}
     ${plano.objetivos ? `<p style="margin-top:6px"><strong>Objetivos:</strong> ${esc(plano.objetivos)}</p>` : ''}
     ${plano.observacoes_reuniao ? `<p style="margin-top:3px"><strong>Notas da última reunião:</strong> ${esc(plano.observacoes_reuniao)}</p>` : ''}`
