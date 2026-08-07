@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { analisarTranscricao, resumoExecutivo } from '../lib/transcricao.js'
-import { brl, dataBR } from '../lib/format'
+import { brl, dataBR, hojeLocal } from '../lib/format'
 import { Button, Card, Input, Select, Spinner, ComoFunciona, Badge } from '../components/ui'
 import { useToast } from '../components/toastContexto'
 
@@ -64,7 +64,7 @@ export default function AbaTranscricao({ idCliente, cliente }) {
   const [lista, setLista] = useState(null)
   const [texto, setTexto] = useState('')
   const [titulo, setTitulo] = useState('')
-  const [data, setData] = useState(() => new Date().toISOString().slice(0, 10))
+  const [data, setData] = useState(hojeLocal)
   const [origem, setOrigem] = useState('tactiq')
   const [editando, setEditando] = useState(null)
   const [plano, setPlano] = useState(null)
@@ -269,7 +269,7 @@ export default function AbaTranscricao({ idCliente, cliente }) {
 
   function limpar() {
     setEditando(null); setTexto(''); setTitulo('')
-    setData(new Date().toISOString().slice(0, 10))
+    setData(hojeLocal())
   }
 
   if (lista === null) return <Spinner />

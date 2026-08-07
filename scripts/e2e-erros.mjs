@@ -81,6 +81,21 @@ await passo('5. Rota inexistente redireciona para o Dashboard', async () => {
   await page.waitForSelector('text=/Boa (tarde|noite)|Bom dia/i', { timeout: 6000 })
 })
 
+await passo('5b. Cliente que não existe avisa em vez de carregar para sempre', async () => {
+  await page.goto(BASE + '/clientes/00000000-0000-0000-0000-000000000999')
+  await page.waitForSelector('text=Cliente não encontrado', { timeout: 6000 })
+})
+
+await passo('5c. Assessor que não existe avisa em vez de carregar para sempre', async () => {
+  await page.goto(BASE + '/assessores/00000000-0000-0000-0000-000000000999')
+  await page.waitForSelector('text=Assessor não encontrado', { timeout: 6000 })
+})
+
+await passo('5d. Proposta de cliente que não existe não quebra', async () => {
+  await page.goto(BASE + '/proposta/00000000-0000-0000-0000-000000000999')
+  await page.waitForSelector('text=Proposta não encontrada', { timeout: 6000 })
+})
+
 await passo('6. Novo cliente pela UI + aparece na lista', async () => {
   await page.goto(BASE + '/clientes')
   await page.click('button:has-text("Novo lead")')

@@ -6,7 +6,7 @@ import {
   CalendarClock, Sun, Snowflake, GraduationCap,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { brl, brlCompacto, mesBR, dataBR, whatsapp } from '../lib/format'
+import { brl, brlCompacto, mesBR, dataBR, mesLocal, whatsapp } from '../lib/format'
 import { CHART, etapaLabel } from '../lib/constants'
 import { Card, StatTile, Skeleton, Badge, EmptyState } from '../components/ui'
 
@@ -346,7 +346,7 @@ export default function Dashboard() {
   }
 
   const mesAtual = useMemo(() => {
-    const chave = new Date().toISOString().slice(0, 7)
+    const chave = mesLocal()
     return {
       dash: dashboard.find((d) => String(d.mes).startsWith(chave)) ?? {},
       com: comissoes.find((d) => String(d.mes).startsWith(chave)) ?? {},
@@ -378,7 +378,7 @@ export default function Dashboard() {
       porMes.set(m, acc)
     }
     const meses = [...porMes.keys()].sort()
-    const atual = new Date().toISOString().slice(0, 7)
+    const atual = mesLocal()
     const ref = porMes.has(atual) ? atual : meses[meses.length - 1]
     return {
       ref,

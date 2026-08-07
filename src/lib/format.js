@@ -27,6 +27,11 @@ export const hojeLocal = () => {
   return new Date(d - off).toISOString().slice(0, 10)
 }
 
+// Mês corrente no fuso local, "AAAA-MM". Mesmo motivo do hojeLocal: no último
+// dia do mês, depois das 21h, o toISOString() já devolveria o mês seguinte — e
+// o Dashboard leria a meta do mês errado bem na hora de fechar o mês.
+export const mesLocal = () => hojeLocal().slice(0, 7)
+
 // Converte um Date para "AAAA-MM-DD" no fuso local
 export const diaLocal = (data) => {
   const d = new Date(data)

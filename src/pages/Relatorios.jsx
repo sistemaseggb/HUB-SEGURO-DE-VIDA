@@ -59,7 +59,7 @@ function FragmentoAssessor({ a }) {
   )
 }
 import { supabase } from '../lib/supabase'
-import { brl, mesBR, dataBR } from '../lib/format'
+import { brl, mesBR, dataBR, mesLocal } from '../lib/format'
 import { etapaLabel, CHART } from '../lib/constants'
 import { baixarCSV } from '../lib/csv'
 import { configSplit, splitComissao } from '../lib/fechamento'
@@ -83,7 +83,7 @@ async function buscarComissoesPaginado(colunas, filtro = (q) => q) {
 // Relatórios gerenciais: fechamento de comissões (quanto pagar a cada assessor),
 // análise de perdas e velocidade do funil. Tudo exportável em CSV.
 export default function Relatorios() {
-  const [mes, setMes] = useState(new Date().toISOString().slice(0, 7))
+  const [mes, setMes] = useState(mesLocal)
   const [comissoes, setComissoes] = useState(null)
   const [splitMensal, setSplitMensal] = useState([])
   const [motivos, setMotivos] = useState([])

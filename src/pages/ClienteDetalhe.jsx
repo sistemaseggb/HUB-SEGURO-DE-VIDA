@@ -62,7 +62,9 @@ export default function ClienteDetalhe() {
       supabase.from('vw_clientes_contato').select('dias_sem_contato, ultimo_contato').eq('id', id).maybeSingle(),
       supabase.from('apolices').select('valor_premio_mensal, capital_segurado, comissao_gerada, status').eq('id_cliente', id),
     ])
-    setCliente(c.data)
+    // Cliente que não existe (link antigo, cliente excluído noutra aba) não
+    // pode virar carregando eterno: marcamos explicitamente para a tela avisar.
+    setCliente(c.data ?? (c.error ? 'nao-encontrado' : null))
     setPrioridade(pr.data)
     setContato(ct.data)
     // resumo de valor do cliente para o cabeçalho (só apólices ativas)
@@ -114,6 +116,25 @@ export default function ClienteDetalhe() {
     navigate('/clientes')
   }
 
+  if (cliente === 'nao-encontrado') {
+    return (
+      <div>
+        <Link to="/clientes" className="mb-4 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
+          <ArrowLeft size={15} /> Clientes
+        </Link>
+        <Card className="p-8 text-center">
+          <p className="font-semibold text-slate-800">Cliente não encontrado</p>
+          <p className="mx-auto mt-2 max-w-sm text-sm text-slate-500">
+            Este cliente não existe mais ou o link está desatualizado. Volte para a lista e
+            procure pelo nome.
+          </p>
+          <Link to="/clientes" className="mt-4 inline-block">
+            <Button variant="secondary">Ver todos os clientes</Button>
+          </Link>
+        </Card>
+      </div>
+    )
+  }
   if (!cliente) return <Spinner />
 
   return (

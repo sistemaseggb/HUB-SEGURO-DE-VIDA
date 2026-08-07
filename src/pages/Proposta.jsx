@@ -90,7 +90,11 @@ export default function Proposta({ publica = false }) {
       Promise.all([
         supabase.from('clientes').select('*').eq('id', id).single(),
         supabase.from('planejamentos').select('*').eq('id_cliente', id).maybeSingle(),
-      ]).then(([c, p]) => setDados({ cliente: c.data, plano: p.data }))
+      ]).then(([c, p]) => setDados(c.data
+        ? { cliente: c.data, plano: p.data }
+        // cliente inexistente cairia em cliente.nome.split() na primeira linha
+        // do slide de capa — melhor cair no estado de "não encontrada"
+        : { naoEncontrada: true }))
     }
   }, [id, token, publica])
 

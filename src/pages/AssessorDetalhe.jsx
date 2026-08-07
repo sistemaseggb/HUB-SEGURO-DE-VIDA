@@ -19,7 +19,8 @@ export default function AssessorDetalhe() {
       supabase.from('vw_assessor_resumo').select('*').eq('id', id).single(),
       supabase.from('clientes').select('id, nome, codigo, status_funil, telefone').eq('id_assessor', id).order('created_at', { ascending: false }),
     ])
-    setResumo(r.data)
+    // assessor inexistente não pode virar carregando eterno
+    setResumo(r.data ?? (r.error ? 'nao-encontrado' : null))
     setClientes(c.data ?? [])
     // extrato importado das seguradoras: pelo vínculo direto e pelo código
     const filtro = r.data?.codigo
@@ -32,6 +33,24 @@ export default function AssessorDetalhe() {
 
   useEffect(() => { carregar() }, [carregar])
 
+  if (resumo === 'nao-encontrado') {
+    return (
+      <div>
+        <Link to="/cadastros" className="mb-4 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
+          <ArrowLeft size={15} /> Cadastros
+        </Link>
+        <Card className="p-8 text-center">
+          <p className="font-semibold text-slate-800">Assessor não encontrado</p>
+          <p className="mx-auto mt-2 max-w-sm text-sm text-slate-500">
+            Este assessor não existe mais ou o link está desatualizado.
+          </p>
+          <Link to="/cadastros" className="mt-4 inline-block">
+            <Button variant="secondary">Ver cadastros</Button>
+          </Link>
+        </Card>
+      </div>
+    )
+  }
   if (!resumo) return <Spinner />
 
   return (
