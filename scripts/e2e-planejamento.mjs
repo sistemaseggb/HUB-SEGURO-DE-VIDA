@@ -100,6 +100,21 @@ const perdido = await page.evaluate(() =>
   [...document.querySelectorAll('input')].some((i) => i.value.includes('99.000') || i.value.includes('99000')))
 ok(perdido, 'alteração NÃO salva sobrevive à troca de aba (senão a consultora perde o trabalho)')
 
+// ── 5b. O roteiro leva ao bloco certo ──
+{
+  const chip = page.locator('button:has-text("Coberturas")').first()
+  const antes = await page.evaluate(() => window.scrollY)
+  await chip.click()
+  await page.waitForTimeout(900)
+  const visivel = await page.evaluate(() => {
+    const el = document.getElementById('sec-coberturas')
+    if (!el) return false
+    const b = el.getBoundingClientRect()
+    return b.top > -10 && b.top < window.innerHeight
+  })
+  ok(visivel, `roteiro: clicar em "Coberturas" leva ao bloco (rolagem saiu de ${antes}px)`)
+}
+
 // ── 6. Proposta com o estudo preenchido ──
 const url = page.url(); const id = url.match(/clientes\/([a-f0-9-]+)/)?.[1]
 await page.goto(`${B}/proposta/${id}`); await page.waitForTimeout(1500)

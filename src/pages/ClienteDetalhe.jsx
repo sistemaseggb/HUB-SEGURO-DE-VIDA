@@ -342,7 +342,7 @@ function AbaHistorico({ idCliente, cliente }) {
 //   inteligência do estudo → objetivos.
 // Nenhum número é calculado aqui: tudo vem de calcularEstudo(), para a tela e
 // a apresentação nunca mostrarem contas diferentes.
-const SECAO = 'mb-2 mt-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400 first:mt-0'
+const SECAO = 'mb-2 mt-6 flex scroll-mt-20 items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400 first:mt-0'
 
 // Objetivos comuns em consultoria de vida — chips que a consultora agrega com
 // um clique. Enriquecem a capa e o fechamento da proposta.
@@ -682,6 +682,10 @@ function AbaPlanejamento({ idCliente }) {
     return true
   }
 
+  // o autosalvamento é agendado num efeito lá em cima (antes do carregando),
+  // então ele alcança a gravação por referência
+  gravarRef.current = gravar
+
   async function salvar(e) {
     e.preventDefault()
     if (await gravar(montarPayload())) toast.ok('Planejamento salvo.')
@@ -703,6 +707,35 @@ function AbaPlanejamento({ idCliente }) {
     pendencias.push('Detalhe o patrimônio por classe: é o que separa o que trava no inventário do que vai direto ao beneficiário.')
   if (estudo.temPJ && estudo.pj.valuation <= 0)
     pendencias.push('Estudo com PJ: informe o valuation e a participação para calcular o acordo de sócios.')
+
+  // ── Roteiro do preenchimento ──────────────────────────────────────────────
+  // O formulário é longo porque a apólice é grande. Em vez de pedir que ela
+  // role atrás do que falta, o roteiro mostra a espinha do estudo: cada bloco
+  // com o que já está em pé, e um clique leva direto até ele. Serve também
+  // durante a reunião — é a ordem natural da conversa com o cliente.
+  const cheio = (v) => v != null && String(v).trim() !== '' && Number(v) !== 0
+  const roteiro = [
+    tem019 && { id: 'sec-tipo', rotulo: 'Tipo e focos', icone: ChartPie, ok: focos.length > 0,
+      resumo: focos.length > 0 ? `${focos.length} foco(s)` : 'escolha os focos' },
+    { id: 'sec-familia', rotulo: 'Família', icone: Users2,
+      ok: cheio(plano.profissao) || filhos.length > 0 || cheio(plano.conjuge_nome),
+      resumo: filhos.length > 0 ? `${filhos.length} filho(s)` : (plano.estado_civil || 'quem depende dele') },
+    { id: 'sec-financeira', rotulo: 'Vida financeira', icone: Wallet,
+      ok: estudo.renda > 0 && estudo.custoVida > 0,
+      resumo: estudo.renda > 0 ? `renda ${brlCompacto(estudo.renda)}` : 'renda e custo de vida' },
+    tem019 && { id: 'sec-patrimonio', rotulo: 'Patrimônio', icone: PiggyBank, ok: estudo.detalhado,
+      resumo: estudo.patrimonioBruto > 0 ? brlCompacto(estudo.patrimonioBruto) : 'por classe de bem' },
+    tem019 && estudo.temPJ && { id: 'sec-empresa', rotulo: 'Empresa', icone: Building2,
+      ok: estudo.pj.valuation > 0,
+      resumo: estudo.pj.valuation > 0 ? `quota ${brlCompacto(estudo.pj.quota)}` : 'valuation e sócios' },
+    tem014 && { id: 'sec-sucessao', rotulo: 'Sucessão', icone: Landmark, ok: estudo.custoInventario > 0,
+      resumo: estudo.custoInventario > 0 ? `inventário ${brlCompacto(estudo.custoInventario)}` : 'depende do patrimônio' },
+    { id: 'sec-coberturas', rotulo: 'Coberturas', icone: Shield, ok: estudo.ativas.length > 0,
+      resumo: estudo.ativas.length > 0 ? `${estudo.ativas.length} na apólice` : 'nada montado ainda' },
+    tem015 && { id: 'sec-investimento', rotulo: 'Investimento', icone: Coins, ok: !!estudo.investimento,
+      resumo: estudo.investimento ? `${brl(estudo.investimento.mensal)}/mês` : 'prêmio cotado' },
+  ].filter(Boolean)
+  const irPara = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
   return (
     <Card className="p-5">
@@ -780,11 +813,30 @@ function AbaPlanejamento({ idCliente }) {
         )}
       </div>
 
+      {/* Roteiro: a espinha do estudo em uma linha. Um clique leva ao bloco. */}
+      <div className="mb-5 flex flex-wrap gap-1.5">
+        {roteiro.map((s) => {
+          const Icone = s.icone
+          return (
+            <button key={s.id} type="button" onClick={() => irPara(s.id)}
+              title={s.ok ? `${s.rotulo}: ${s.resumo}` : `Falta preencher: ${s.resumo}`}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                s.ok
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300'
+                  : 'border-slate-200 bg-white text-slate-500 hover:border-laranja-300 hover:text-laranja-700'}`}>
+              <Icone size={13} className={s.ok ? 'text-emerald-600' : 'text-slate-400'} />
+              <span className="font-medium">{s.rotulo}</span>
+              <span className={s.ok ? 'text-emerald-600/80' : 'text-slate-400'}>· {s.resumo}</span>
+            </button>
+          )
+        })}
+      </div>
+
       <form onSubmit={salvar}>
         {/* ── Tipo de planejamento e focos ─────────────────────────────────── */}
         {tem019 && (
           <>
-            <p className={SECAO}><ChartPie size={13} /> Que planejamento estamos construindo</p>
+            <p id="sec-tipo" className={SECAO}><ChartPie size={13} /> Que planejamento estamos construindo</p>
             <div className="grid gap-3 sm:grid-cols-3">
               {TIPOS_PLANEJAMENTO.map((t) => {
                 const ativo = (plano.tipo_planejamento || 'pf') === t.id
@@ -823,7 +875,7 @@ function AbaPlanejamento({ idCliente }) {
         )}
 
         {/* ── Família e perfil ─────────────────────────────────────────────── */}
-        <p className={SECAO}><Users2 size={13} /> Família e perfil</p>
+        <p id="sec-familia" className={SECAO}><Users2 size={13} /> Família e perfil</p>
         <div className="grid gap-4 md:grid-cols-3">
           <Campo label="Profissão"><Input value={plano.profissao ?? ''} onChange={set('profissao')} /></Campo>
           <Campo label="Estado civil">
@@ -934,7 +986,7 @@ function AbaPlanejamento({ idCliente }) {
         </div>
 
         {/* ── Vida financeira ──────────────────────────────────────────────── */}
-        <p className={SECAO}><Wallet size={13} /> Vida financeira</p>
+        <p id="sec-financeira" className={SECAO}><Wallet size={13} /> Vida financeira</p>
         <div className="grid gap-4 md:grid-cols-3">
           <Campo label="Renda mensal"><InputMoeda value={plano.renda_mensal ?? ''} onChange={set('renda_mensal')} /></Campo>
           <Campo label="Custo de vida mensal" dica={estudo.custoFilhosMensal > 0 ? `Inclui os ${brl(estudo.custoFilhosMensal)} dos filhos` : 'Quanto a família gasta por mês, no total'}>
@@ -961,7 +1013,7 @@ function AbaPlanejamento({ idCliente }) {
         {/* ── Raio-X do patrimônio ─────────────────────────────────────────── */}
         {tem019 && (
           <>
-            <p className={SECAO}><PiggyBank size={13} /> Raio-X do patrimônio</p>
+            <p id="sec-patrimonio" className={SECAO}><PiggyBank size={13} /> Raio-X do patrimônio</p>
             <p className="mb-3 text-xs text-slate-400">
               Cada classe se comporta de um jeito quando o titular falta. Imóveis, investimentos, empresa
               e veículos <strong>travam no inventário</strong> até o ITCMD ser pago — e o imposto se paga
@@ -1021,7 +1073,7 @@ function AbaPlanejamento({ idCliente }) {
         {/* ── Empresa (PJ) ─────────────────────────────────────────────────── */}
         {tem019 && estudo.temPJ && (
           <>
-            <p className={SECAO}><Building2 size={13} /> A empresa</p>
+            <p id="sec-empresa" className={SECAO}><Building2 size={13} /> A empresa</p>
             <p className="mb-3 text-xs text-slate-400">
               Sem acordo de sócios, a família herda a quota e vira sócia de quem ficou — sem saber tocar
               o negócio e sem poder vender. Com capital, os sócios compram a participação à vista e todo
@@ -1070,7 +1122,7 @@ function AbaPlanejamento({ idCliente }) {
         {/* ── Sucessão ─────────────────────────────────────────────────────── */}
         {tem014 && (
           <>
-            <p className={SECAO}><Landmark size={13} /> Sucessão — o custo do inventário</p>
+            <p id="sec-sucessao" className={SECAO}><Landmark size={13} /> Sucessão — o custo do inventário</p>
             <div className="grid items-end gap-4 md:grid-cols-4">
               <Campo label="ITCMD do estado (%)" dica="RS 6 · PR 4 · SC até 8">
                 <Input type="number" step="0.5" min="0" max="20" value={plano.itcmd_pct ?? 4} onChange={set('itcmd_pct')} />
@@ -1108,7 +1160,7 @@ function AbaPlanejamento({ idCliente }) {
         )}
 
         {/* ── Coberturas da apólice ────────────────────────────────────────── */}
-        <p className={SECAO}><Shield size={13} /> As coberturas da apólice</p>
+        <p id="sec-coberturas" className={SECAO}><Shield size={13} /> As coberturas da apólice</p>
         {!tem014 && (
           <p className="mb-3 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
             Rode a migração <strong>014_planejamento_detalhado.sql</strong> no Supabase para liberar
@@ -1137,7 +1189,7 @@ function AbaPlanejamento({ idCliente }) {
         {/* ── O investimento: mensal E anual ───────────────────────────────── */}
         {tem015 && (
           <>
-            <p className={SECAO}><Coins size={13} /> O investimento — o cliente escolhe como pagar</p>
+            <p id="sec-investimento" className={SECAO}><Coins size={13} /> O investimento — o cliente escolhe como pagar</p>
             <p className="mb-3 text-xs text-slate-400">
               Cote as duas formas. O pagamento anual quase sempre sai com desconto, e essa escolha é do
               cliente — a proposta mostra as duas lado a lado, com a economia em destaque.
