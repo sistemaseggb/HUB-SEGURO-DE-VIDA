@@ -4,7 +4,7 @@ import {
   ShieldAlert, Flame, ListChecks, CalendarPlus, Wand2, RefreshCw, ChevronDown,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { analisarTranscricao, resumoExecutivo } from '../lib/transcricao'
+import { analisarTranscricao, resumoExecutivo } from '../lib/transcricao.js'
 import { brl, dataBR } from '../lib/format'
 import { Button, Card, Input, Select, Spinner, ComoFunciona, Badge } from '../components/ui'
 import { useToast } from '../components/toastContexto'

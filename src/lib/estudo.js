@@ -62,8 +62,14 @@ const q = (v, teto = TETO_VALOR) => {
   if (!Number.isFinite(x) || x <= 0) return 0
   return Math.min(x, teto)
 }
-// Percentual: sempre entre 0 e 100
-const pctVal = (v, padrao) => (definido(v) ? Math.min(Math.max(n(v), 0), 100) : padrao)
+// Percentual: sempre entre 0 e um teto declarado (100 quando não se diz outro)
+const pctVal = (v, padrao, teto = 100) => (definido(v) ? Math.min(Math.max(n(v), 0), teto) : padrao)
+// Alíquotas do inventário. Os tetos não são decoração: sem eles um dígito a
+// mais digitado na pressa (40 em vez de 4) faz o custo do inventário passar do
+// próprio patrimônio, e a proposta sai com um número que não existe no mundo.
+// O ITCMD brasileiro vai até 8%; custas + honorários raramente passam de 12%.
+const TETO_ITCMD = 20
+const TETO_CUSTAS = 30
 // Contagem inteira dentro de uma faixa (anos, dias, idades)
 const inteiro = (v, padrao, min, max) => {
   if (!definido(v)) return padrao
@@ -311,8 +317,8 @@ export function calcularEstudo(plano) {
   const custoVida = q(plano.custo_vida_mensal)
   const dividas = q(plano.dividas_total)
   const anos = inteiro(plano.anos_protecao, 10, 1, TETO_ANOS) || 10
-  const itcmd = pctVal(plano.itcmd_pct, 4)
-  const custas = pctVal(plano.custas_pct, 8)
+  const itcmd = pctVal(plano.itcmd_pct, 4, TETO_ITCMD)
+  const custas = pctVal(plano.custas_pct, 8, TETO_CUSTAS)
 
   const tipo = plano.tipo_planejamento || 'pf'
   const focos = Array.isArray(plano.focos) ? plano.focos : []
@@ -655,7 +661,7 @@ export function calcularEstudo(plano) {
       razaoSocial: plano.pj_razao_social ?? '', valuation: pjValuation,
       participacao: pjParticipacao, quota: pjQuota, lucro: pjLucro, lucroBase: pjLucroBase,
       faturamento: pjFaturamento, dividaAval: pjDividaAval,
-      numSocios: n(plano.pj_num_socios),
+      numSocios: inteiro(plano.pj_num_socios, 0, 0, 999),
     },
     // leitura do estudo
     coberturaAtual, gap, gapReal, mesesProtegidos, mesesLiquidos, mesesVendendoTudo,

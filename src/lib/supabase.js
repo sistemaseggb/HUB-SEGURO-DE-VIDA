@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { criarSupabaseDemo } from './demoDb'
+import { criarSupabaseDemo } from './demoDb.js'
 
 // As credenciais vêm do arquivo .env (nunca commitado no git).
 // Use SEMPRE a chave "anon / publishable" aqui — jamais a secret key.

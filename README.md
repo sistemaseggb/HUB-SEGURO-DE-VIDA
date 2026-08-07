@@ -87,16 +87,27 @@ preenchida), login com qualquer e-mail/senha e um selo "✨ Demonstração" no
 topo. Nada é salvo — recarregou, voltou ao início. Para forçar o modo demo
 mesmo com `.env`, use `VITE_DEMO=1 npm run dev`.
 
-### Testes de ponta a ponta
+### Testes
 
 ```bash
-npm run build && npm run test:e2e
+npm run build && npm test        # lint + motor + ponta a ponta
 ```
 
-A suíte sobe o servidor de preview sozinha (e reaproveita um que já esteja
-rodando), então basta um terminal.
+Ou em separado: `npm run test:motor` (rápido, não precisa de navegador) e
+`npm run test:e2e`. A suíte de navegador sobe o servidor de preview sozinha
+(e reaproveita um que já esteja rodando), então basta um terminal.
 
-São duas suítes (45 verificações): a **principal** navega o sistema inteiro
+**`test:motor`** — `calcularEstudo()` é a única fonte dos números do
+planejamento *e* da proposta: se ele erra, a consultora apresenta o erro para
+o cliente. O teste joga 4.000 combinações de entrada (inclusive negativo,
+texto, vazio, 10^18) e 2.000 transcrições montadas ao acaso, cobrando
+invariantes que precisam valer sempre — nada de NaN/Infinity/negativo na tela,
+patrimônio bruto igual à soma das classes, custo do inventário nunca maior que
+o que trava, maior evento indenizável nunca maior que a soma das importâncias,
+porcentagens dentro de 0–100. Reproduzível: `CASOS=20000 SEMENTE=7 npm run
+test:motor`.
+
+**`test:e2e`** — quatro suítes. A **principal** navega o sistema inteiro
 nas duas visões — consultora (login, dashboard, pipeline, cliente 360 com o
 planejamento completo, transcrição da reunião, apólices, DPS, proposta,
 relatórios com fechamento, pós-venda, agenda, mensagens, cadastros) e cliente
@@ -105,7 +116,13 @@ caminhos que quebram sistemas:
 link inválido, formulário já concluído, obrigatórios vazios, proposta sem
 planejamento, rota inexistente, venda com comissão automática, popups de
 dossiê/DPS, pendências de classificação, busca, exclusão com confirmação,
-celular (375px) e F5. Capturas em `e2e-shots/`.
+celular (375px) e F5. A de **planejamento** usa a aba como a consultora usa,
+com o cliente na frente: valores hostis campo a campo, o estudo preenchido, a
+alteração não salva que precisa sobreviver à troca de aba, o dado que tem que
+voltar ao sair e retornar no cliente, o roteiro que leva ao bloco certo e a
+proposta sem número quebrado. A de **celular** cobra que nenhuma tela role
+para o lado a 375px — todas as páginas e todas as abas do Cliente 360 — e
+aponta o elemento culpado quando falha. Capturas em `e2e-shots/`.
 
 ### Marca
 
@@ -288,6 +305,14 @@ npm run dev
       além das diárias com limite de dias e franquia
 - [x] **Prêmio mensal e anual** lado a lado: o desconto à vista aparece na
       proposta com a economia calculada, e o cliente escolhe a forma
+- [x] **Nada se perde durante a reunião**: o planejamento se grava sozinho
+      pouco depois que ela para de digitar, descarrega o que estiver pendente
+      ao sair da aba, avisa antes de fechar o navegador e mostra o estado
+      ("Salvando…", "Salvo às 14:32") numa barra fixa com Salvar e Proposta
+      sempre ao alcance
+- [x] **Roteiro do preenchimento**: a espinha do estudo em uma linha — cada
+      bloco com o que já está em pé ("renda R$ 48 mil", "13 na apólice") e um
+      clique que leva direto até ele, na ordem da conversa com o cliente
 - [x] **Transcrição da reunião** (migração 020): cole o texto do Tactiq (ou
       solte o arquivo) e receba na hora o resumo executivo, os números que o
       cliente falou prontos para aplicar no planejamento, as objeções com a

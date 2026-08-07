@@ -27,7 +27,7 @@
 // principal existe sem nenhuma configuração.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { BLOCOS_ROTEIRO } from './roteiro'
+import { BLOCOS_ROTEIRO } from './roteiro.js'
 
 // ─── Normalização ────────────────────────────────────────────────────────────
 const semAcento = (s) => String(s ?? '')
