@@ -131,7 +131,7 @@ export default function Importar() {
 
       <Card className="p-5">
         {/* Escolha do tipo */}
-        <div className="mb-4 flex gap-2">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           {Object.entries(MODELOS).map(([id, m]) => (
             <button key={id}
               onClick={() => { setModo(id); setAnalise(null); setResultado(null); setTexto('') }}
@@ -154,7 +154,7 @@ export default function Importar() {
           </Button>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Campo label="Cole aqui o conteúdo da planilha (copie as células no Excel/Sheets e cole)"
             dica="Primeira linha deve ser o cabeçalho. Separador , ; ou TAB — detectado sozinho.">
             <Textarea rows={7} value={texto}
@@ -657,7 +657,7 @@ function ImportarComissoes({ onVoltar }) {
       </ComoFunciona>
 
       <Card className="p-5">
-        <div className="mb-4 flex gap-2">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           {Object.entries(MODELOS).map(([id, m]) => (
             <button key={id} onClick={() => onVoltar(id)}
               className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">

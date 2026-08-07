@@ -127,9 +127,12 @@ celular (375px) e F5. A de **planejamento** usa a aba como a consultora usa,
 com o cliente na frente: valores hostis campo a campo, o estudo preenchido, a
 alteração não salva que precisa sobreviver à troca de aba, o dado que tem que
 voltar ao sair e retornar no cliente, o roteiro que leva ao bloco certo e a
-proposta sem número quebrado. A de **celular** cobra que nenhuma tela role
-para o lado a 375px — todas as páginas e todas as abas do Cliente 360 — e
-aponta o elemento culpado quando falha. Capturas em `e2e-shots/`.
+proposta sem número quebrado. A **varredura geral** passa por TUDO: cada
+rota e cada aba do Cliente 360, no computador e no celular, com clientes em
+quatro estados — do lead recém-cadastrado (sem nada preenchido) ao PF+PJ
+completo, mais um cliente perdido. Em cada parada cobra que não haja erro de
+console, NaN/Infinity/undefined na tela, tela em branco nem rolagem horizontal
+a 375px — apontando o elemento culpado quando falha. Capturas em `e2e-shots/`.
 
 ### Marca
 

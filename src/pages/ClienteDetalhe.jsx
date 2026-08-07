@@ -886,7 +886,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
         {tem019 && (
           <>
             <p id="sec-tipo" className={SECAO}><ChartPie size={13} /> Que planejamento estamos construindo</p>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {TIPOS_PLANEJAMENTO.map((t) => {
                 const ativo = (plano.tipo_planejamento || 'pf') === t.id
                 return (
@@ -925,7 +925,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
 
         {/* ── Família e perfil ─────────────────────────────────────────────── */}
         <p id="sec-familia" className={SECAO}><Users2 size={13} /> Família e perfil</p>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Campo label="Profissão"><Input value={plano.profissao ?? ''} onChange={set('profissao')} /></Campo>
           <Campo label="Estado civil">
             <Select value={plano.estado_civil ?? ''} onChange={set('estado_civil')}>
@@ -1036,7 +1036,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
 
         {/* ── Vida financeira ──────────────────────────────────────────────── */}
         <p id="sec-financeira" className={SECAO}><Wallet size={13} /> Vida financeira</p>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Campo label="Renda mensal"><InputMoeda value={plano.renda_mensal ?? ''} onChange={set('renda_mensal')} /></Campo>
           <Campo label="Custo de vida mensal" dica={estudo.custoFilhosMensal > 0 ? `Inclui os ${brl(estudo.custoFilhosMensal)} dos filhos` : 'Quanto a família gasta por mês, no total'}>
             <InputMoeda value={plano.custo_vida_mensal ?? ''} onChange={set('custo_vida_mensal')} />
@@ -1078,7 +1078,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
               em dinheiro, não em imóvel. Previdência e seguro <strong>não passam por inventário</strong>:
               vão direto ao beneficiário indicado, em dias.
             </p>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {CLASSES_PATRIMONIO.filter((c) => c.id !== 'previdencia').map((c) => (
                 <Campo key={c.id} label={c.rotulo} dica={c.nota}>
                   <InputMoeda value={plano[c.campo] ?? ''} onChange={set(c.campo)} />
@@ -1156,7 +1156,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
               mundo segue a vida. O <strong>aval do sócio também não morre com ele</strong>: vira dívida
               do espólio e alcança o patrimônio pessoal.
             </p>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <Campo label="Razão social">
                 <Input value={plano.pj_razao_social ?? ''} onChange={set('pj_razao_social')} />
               </Campo>
@@ -1199,7 +1199,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
         {tem014 && (
           <>
             <p id="sec-sucessao" className={SECAO}><Landmark size={13} /> Sucessão — o custo do inventário</p>
-            <div className="grid items-end gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-4">
               <Campo label="ITCMD do estado (%)" dica="RS 6 · PR 4 · SC até 8">
                 <Input type="number" step="0.5" min="0" max="20" value={plano.itcmd_pct ?? 4} onChange={set('itcmd_pct')} />
               </Campo>
@@ -1303,7 +1303,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
               O aporte da previdência sai da renda. Se a renda parar, o plano de aposentadoria para
               junto — é por isso que proteção e acúmulo são o mesmo assunto, não dois.
             </p>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <Campo label="Renda desejada na aposentadoria"
                 dica="Por mês, em valores de hoje. Em branco = manter o padrão de vida atual">
                 <InputMoeda value={plano.renda_desejada_aposentadoria ?? ''}
@@ -1391,7 +1391,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
                 </p>
                 <p className="text-xs text-slate-400">{g.descricao}</p>
               </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {g.itens.map((c) => (
                   <CampoCobertura key={c.id} cob={c} estudo={estudo} plano={plano} setPlano={setPlano} />
                 ))}
@@ -1408,7 +1408,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
               Cote as duas formas. O pagamento anual quase sempre sai com desconto, e essa escolha é do
               cliente — a proposta mostra as duas lado a lado, com a economia em destaque.
             </p>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <Campo label="Prêmio mensal cotado" dica="12 parcelas — a forma mais comum">
                 <InputMoeda value={plano.premio_estimado ?? ''} onChange={set('premio_estimado')} />
               </Campo>
@@ -1526,7 +1526,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
               <span className="text-xs text-slate-400">estudo {estudo.completude.feitos}/{estudo.completude.total}</span>
             </div>
           </div>
-          <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg bg-slate-50 p-3">
               <p className="text-[11px] uppercase tracking-wide text-slate-400">Autonomia com o que é líquido</p>
               <p className={`font-display text-lg font-semibold tabular-nums ${
@@ -1650,7 +1650,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
         {/* Resumo vivo do estudo */}
         <div className="mt-6 rounded-xl border border-brand-100 bg-brand-50/50 p-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-700">Resumo do estudo (ao vivo)</p>
-          <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <p className="text-xs text-slate-400">Proteção da família</p>
               <p className="font-semibold tabular-nums text-slate-900">{brlCompacto(estudo.valores.morte)}</p>

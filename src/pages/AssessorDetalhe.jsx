@@ -162,7 +162,7 @@ function ExtratoComissoesAssessor({ comissoes }) {
           <Badge>{porCliente.size} cliente(s) com movimento</Badge>
         </div>
       </div>
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div>
           <p className="mb-2 text-xs font-medium uppercase text-slate-400">Últimos meses</p>
           <div className="space-y-1.5">

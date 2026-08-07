@@ -136,10 +136,10 @@ export default function PosVenda() {
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         {/* Régua de relacionamento */}
         <Card className="p-5">
-          <h2 className="mb-4 flex items-center gap-2 font-semibold text-slate-900">
+          <h2 className="mb-4 flex flex-wrap items-center gap-2 font-semibold text-slate-900">
             <Cake size={18} className="text-amber-500" /> Régua de Relacionamento
             <span className="text-xs font-normal text-slate-400">próximos 45 dias</span>
           </h2>
@@ -163,9 +163,11 @@ export default function PosVenda() {
                         {' · '}{dataBR(e.data_evento)}
                       </p>
                     </div>
-                    <Badge tom={e.dias_restantes <= 7 ? 'yellow' : 'slate'}>
-                      {e.dias_restantes === 0 ? 'HOJE!' : `em ${e.dias_restantes}d`}
-                    </Badge>
+                    <span className="shrink-0">
+                      <Badge tom={e.dias_restantes <= 7 ? 'yellow' : 'slate'}>
+                        {e.dias_restantes === 0 ? 'HOJE!' : `em ${e.dias_restantes}d`}
+                      </Badge>
+                    </span>
                     {whatsapp(e.telefone) && (
                       <a target="_blank" rel="noreferrer"
                         href={whatsapp(e.telefone,
@@ -194,7 +196,7 @@ export default function PosVenda() {
                   <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
                   <input value={busca} onChange={(e) => setBusca(e.target.value)}
                     placeholder="Buscar cliente, seguradora ou nº..."
-                    className="w-56 rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-laranja-400 focus:outline-none" />
+                    className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-laranja-400 focus:outline-none sm:w-56" />
                 </div>
                 {nomesSeg.length > 1 && (
                   <Select value={filtroSeg} onChange={(e) => setFiltroSeg(e.target.value)} style={{ width: 'auto' }}>

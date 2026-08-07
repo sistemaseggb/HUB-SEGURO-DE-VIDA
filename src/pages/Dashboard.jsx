@@ -209,7 +209,7 @@ function ResumoSemana() {
       <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-900">
         <CalendarClock size={18} className="text-blue-600" /> Resumo dos últimos 7 dias
       </h2>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-1 grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         {itens.map((i) => (
           <div key={i.rotulo}>
             <p className="text-2xl font-bold text-slate-900">{i.valor}</p>
@@ -454,7 +454,7 @@ export default function Dashboard() {
           <h2 className="mb-4 flex items-center gap-2 font-semibold text-slate-900">
             <Target size={18} className="text-blue-600" /> Metas do mês
           </h2>
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
             {Number(metas.meta_premio_mensal) > 0 && (
               <BarraMeta rotulo="Prêmio vendido"
                 atual={Number(mesAtual.dash.premio_mensal_vendido ?? 0)}
@@ -488,7 +488,7 @@ export default function Dashboard() {
           <p className="mb-4 text-xs text-slate-400">
             Leads ordenados pela prioridade que o sistema calcula sozinho — com a próxima ação sugerida
           </p>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {foco.map((c) => (
               <div key={c.id} className="rounded-lg border border-slate-200 p-3">
                 <div className="mb-1 flex items-center justify-between gap-2">
@@ -529,7 +529,7 @@ export default function Dashboard() {
           <p className="mb-4 text-xs text-slate-400">
             Próximos 30 dias — um contato no aniversário do cliente ou da apólice mantém a carteira viva e gera indicação
           </p>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {regua.slice(0, 6).map((e, i) => (
               <div key={i} className="flex items-center gap-3 rounded-lg border border-slate-200/70 p-3">
                 <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
@@ -580,7 +580,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         {/* Central do dia */}
         <Card className="p-5 xl:row-span-2">
           <h2 className="mb-4 font-semibold text-slate-900">Central do Dia</h2>

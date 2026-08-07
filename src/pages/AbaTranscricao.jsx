@@ -319,7 +319,7 @@ export default function AbaTranscricao({ idCliente, cliente }) {
           </p>
         )}
 
-        <div className="grid gap-4 md:grid-cols-[1fr_170px_170px]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_170px_170px]">
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-slate-600">Título da reunião</span>
             <Input value={titulo} onChange={(e) => setTitulo(e.target.value)}
@@ -524,7 +524,7 @@ function PainelPerfil({ a }) {
       </p>
 
       {itens.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {itens.map((it) => {
             const Icone = it.icone
             return (
@@ -904,7 +904,7 @@ function PainelAvancado({ a }) {
 // ─── Objeções, sinais, citações e compromissos ───────────────────────────────
 function PainelConversa({ a, aoCriarTarefa }) {
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       {a.momentos.length > 0 && (
         <Card className="p-5">
           <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">

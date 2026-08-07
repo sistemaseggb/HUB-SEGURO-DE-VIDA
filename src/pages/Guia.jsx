@@ -169,7 +169,7 @@ export default function Guia() {
 
       {/* Hero */}
       <Card className="risco-marca mb-6 overflow-hidden">
-        <div className="grid gap-6 p-6 md:grid-cols-[1.4fr_1fr] md:p-8">
+        <div className="grid grid-cols-1 gap-6 p-6 md:grid-cols-[1.4fr_1fr] md:p-8">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-laranja-50 px-3 py-1 text-xs font-semibold text-laranja-700">
               <Sparkles size={13} /> Bem-vinda ao seu Hub
@@ -285,7 +285,7 @@ export default function Guia() {
         <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-semibold text-slate-900">
           <Lightbulb size={20} className="text-laranja-500" /> Dicas de ouro
         </h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {DICAS.map((d, i) => (
             <div key={i} className="flex gap-3 rounded-xl border border-slate-200/70 bg-slate-50/60 p-3.5">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-laranja-500 text-xs font-bold text-white">{i + 1}</span>
