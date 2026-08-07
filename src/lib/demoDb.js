@@ -176,7 +176,7 @@ function semear() {
     conjuge_nome: 'Mariana', filhos_idades: '6 e 9 anos',
     // migração 019 — estudo PF + PJ, com sucessão e acordo de sócios
     tipo_planejamento: 'pf_pj',
-    focos: ['renda', 'educacao', 'sucessao', 'blindagem', 'empresarial'],
+    focos: ['renda', 'educacao', 'sucessao', 'blindagem', 'empresarial', 'aposentadoria'],
     patrimonio_imoveis: 2_300_000, patrimonio_investimentos: 700_000, patrimonio_empresa: 600_000,
     patrimonio_veiculos: 200_000, patrimonio_outros: null,
     previdencia_saldo: 450_000, previdencia_tipo: 'PGBL', previdencia_aporte_mensal: 4_000,

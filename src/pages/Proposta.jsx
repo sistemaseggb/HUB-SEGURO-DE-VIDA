@@ -25,8 +25,16 @@ import Logo from '../components/Logo'
 // então vê o preço.
 //
 //   capa → diagnóstico → reenquadramento → autonomia → o número →
-//   futuro dos filhos → raio-X do patrimônio → sucessão → empresa (PJ) →
-//   gap de cobertura → o plano completo → investimento → passos → fechamento
+//   futuro dos filhos → raio-X do patrimônio → sucessão → linha do tempo do
+//   inventário → empresa (PJ) → aposentadoria → gap de cobertura → o plano
+//   completo → investimento → investir ou proteger → o custo da espera →
+//   passos → fechamento
+//
+// Capítulos entram e saem conforme o perfil: o de empresa só com PJ, o de
+// aposentadoria só para quem marcou esse foco, o do custo da espera só com a
+// data de nascimento no cadastro. E os três cartões do reenquadramento são
+// escolhidos pelos FOCOS do cliente — quem veio por sucessão não ouve primeiro
+// sobre a educação dos filhos.
 //
 // Todo número vem de calcularEstudo(): a tela do planejamento e o slide
 // mostram exatamente a mesma conta, sempre.
@@ -148,6 +156,38 @@ export default function Proposta({ publica = false }) {
 
   const rotuloSecao = 'text-sm font-medium uppercase tracking-[0.3em] text-gold-500'
 
+  // O slide de reenquadramento fala do que ELE veio resolver. Os três cartões
+  // são escolhidos pelos focos marcados no planejamento — quem veio por
+  // sucessão não ouve primeiro sobre educação dos filhos. Sem foco marcado,
+  // ficam os três de sempre, na ordem que funciona para a maioria.
+  const CARTOES = {
+    vida: { id: 'vida', icone: Activity, titulo: 'A maior parte paga em vida',
+      texto: <>Invalidez, doenças graves, internação e afastamento pagam <strong className="text-slate-700">enquanto você está aqui</strong> — justamente quando os custos explodem e a renda para.</> },
+    renda: { id: 'renda', icone: Heart, titulo: 'Substitui a sua renda',
+      texto: <>O plano transforma anos de trabalho em um capital que <strong className="text-slate-700">sustenta a família</strong> e realiza os sonhos que você prometeu — com ou sem você.</> },
+    educacao: { id: 'educacao', icone: GraduationCap, titulo: 'Garante a formação dos filhos',
+      texto: <>A faculdade não espera o inventário nem a recuperação de ninguém. O capital <strong className="text-slate-700">chega em dias</strong> e o estudo dos filhos segue como estava planejado.</> },
+    dividas: { id: 'dividas', icone: Wallet, titulo: 'A dívida não passa para eles',
+      texto: <>Financiamento e consignado <strong className="text-slate-700">não morrem com o titular</strong>: viram dívida do espólio. O plano quita e a família herda o bem, não a parcela.</> },
+    sucessao: { id: 'sucessao', icone: ShieldCheck, titulo: 'Protege o que você construiu',
+      texto: <>Dá <strong className="text-slate-700">liquidez imediata</strong> para o inventário — o patrimônio não trava, a família não vende bens às pressas para pagar imposto.</> },
+    blindagem: { id: 'blindagem', icone: Lock, titulo: 'O patrimônio fica inteiro',
+      texto: <>Sem liquidez, o que sustenta a família é a venda do que você construiu. Com o plano, <strong className="text-slate-700">o patrimônio não é consumido</strong> — ele continua rendendo para eles.</> },
+    empresarial: { id: 'empresarial', icone: Briefcase, titulo: 'A empresa continua de pé',
+      texto: <>Os sócios compram a quota da família à vista e <strong className="text-slate-700">ninguém vira sócio de herdeiro</strong>. A empresa segue, e a família recebe em dinheiro.</> },
+    aposentadoria: { id: 'aposentadoria', icone: PiggyBank, titulo: 'O plano de longo prazo sobrevive',
+      texto: <>O aporte da aposentadoria sai da renda. Protegendo a renda, <strong className="text-slate-700">o plano de acúmulo continua</strong> mesmo se você não puder mais trabalhar.</> },
+  }
+  const cartoesReenquadramento = (() => {
+    const escolhidos = e.focos.map((f) => CARTOES[f]).filter(Boolean)
+    // "paga em vida" abre bem qualquer conversa; entra sempre que sobra espaço
+    const complemento = [CARTOES.vida, CARTOES.renda, CARTOES.sucessao]
+    const vistos = new Set()
+    return [...escolhidos, ...complemento]
+      .filter((c) => (vistos.has(c.id) ? false : vistos.add(c.id)))
+      .slice(0, 3)
+  })()
+
   return (
     <div className="proposta">
       {/* barra de ações — some na impressão */}
@@ -265,18 +305,9 @@ export default function Proposta({ publica = false }) {
           <span className="text-laranja-600">É sobre continuar cuidando.</span>
         </h2>
         <div className="mt-12 grid w-full max-w-4xl gap-5 md:grid-cols-3">
-          <Cartao icone={Activity} titulo="A maior parte paga em vida">
-            Invalidez, doenças graves, internação e afastamento pagam <strong className="text-slate-700">enquanto você está aqui</strong> —
-            justamente quando os custos explodem e a renda para.
-          </Cartao>
-          <Cartao icone={Heart} titulo="Substitui a sua renda">
-            O plano transforma anos de trabalho em um capital que <strong className="text-slate-700">sustenta a família</strong>
-            {' '}e realiza os sonhos que você prometeu — com ou sem você.
-          </Cartao>
-          <Cartao icone={ShieldCheck} titulo="Protege o que você construiu">
-            Dá <strong className="text-slate-700">liquidez imediata</strong> para o inventário — o patrimônio não trava,
-            a família não vende bens às pressas para pagar imposto.
-          </Cartao>
+          {cartoesReenquadramento.map((c) => (
+            <Cartao key={c.id} icone={c.icone} titulo={c.titulo}>{c.texto}</Cartao>
+          ))}
         </div>
         <p className="mt-10 max-w-xl text-center text-lg text-slate-600">
           É o único ativo que <strong className="text-slate-900">se multiplica exatamente na hora que você mais precisa</strong>.
@@ -432,10 +463,11 @@ export default function Proposta({ publica = false }) {
               <p className="mt-3 font-display text-4xl font-semibold text-red-600 tabular">{brlCompacto(e.custoInventario)}</p>
               <p className="mt-1 text-sm font-semibold text-red-700">e espera de meses a anos pelos bens</p>
               <p className="mt-2 text-sm text-red-800/80">
-                ITCMD ({e.itcmd.toFixed(1).replace('.', ',')}%) + custas e honorários ({e.custas.toFixed(1).replace('.', ',')}%)
-                sobre os {brlCompacto(e.bensInventariaveis)} que passam por inventário — pagos
+                ITCMD ({e.itcmd.toFixed(1).replace('.', ',')}%) + custas e honorários
+                {' '}({e.sucessao.custasEfetivas.toFixed(1).replace('.', ',')}%)
+                sobre os {brlCompacto(e.sucessao.baseInventario)} que passam por inventário — pagos
                 {' '}<strong>à vista, em dinheiro</strong>, antes de a família acessar qualquer bem.
-                {plano.herdeiros_menores && ' Com herdeiros menores, o inventário é judicial: mais lento e mais caro.'}
+                {e.sucessao.inventarioJudicial && ' Com herdeiro menor de idade o inventário é judicial por lei: mais lento e mais caro.'}
               </p>
             </div>
             <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-7">
@@ -474,7 +506,12 @@ export default function Proposta({ publica = false }) {
               <p className="mt-4 text-sm text-slate-500">
                 {e.deficitLiquidez > 0 ? (
                   <>Sem esse dinheiro, a saída é vender um bem com pressa — e quem compra sabe disso.
-                  {plano.tem_holding && ' A holding organiza a partilha, mas o ITCMD continua sendo pago em dinheiro.'}</>
+                  {e.bensIliquidos > 0 && (
+                    <> Um imóvel vendido com a urgência do inventário costuma sair 20% a 30% abaixo do
+                    valor de mercado: para levantar {brlCompacto(e.deficitLiquidez)} líquidos, a família
+                    entrega perto de <strong>{brlCompacto(e.deficitLiquidez / 0.75)}</strong> em bens.</>
+                  )}
+                  {e.sucessao.temHolding && ' A holding organiza a partilha e corta as custas, mas o ITCMD continua sendo pago em dinheiro.'}</>
                 ) : (
                   <>A liquidez atual já cobre o inventário. O seguro entra para <strong>preservar essa reserva</strong> em
                   vez de consumi-la logo no primeiro mês.</>
@@ -482,6 +519,47 @@ export default function Proposta({ publica = false }) {
               </p>
             </div>
           )}
+        </section>
+      )}
+
+      {/* 8b · A LINHA DO TEMPO DO INVENTÁRIO — o que acontece mês a mês */}
+      {e.tem019 && temPatrimonio && e.custoInventario > 0 && (
+        <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>O que acontece de verdade</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            A conta não espera o inventário terminar
+          </h2>
+          <p className="mt-4 max-w-2xl text-center text-slate-500">
+            Este é o calendário que a família enfrenta —{' '}
+            {e.sucessao.inventarioJudicial
+              ? <>e como há <strong className="text-slate-700">herdeiro menor de idade</strong>, o rito
+                é judicial por lei: cartório não resolve.</>
+              : <>com todos os herdeiros maiores e de acordo, pelo rito mais rápido, o extrajudicial.</>}
+          </p>
+
+          <ol className="mt-10 w-full max-w-3xl space-y-3">
+            <Etapa marco="Semana 1" tom="ruim"
+              titulo="As contas continuam chegando"
+              texto={`Escola, condomínio, financiamento, plano de saúde. Some ${brl(e.custoVida)} por mês que
+                     não param — e a renda de ${brl(e.renda)} parou.`} />
+            <Etapa marco="Mês 1 a 3" tom="ruim"
+              titulo={`ITCMD: ${brlCompacto(e.custoInventario)} à vista`}
+              texto="O imposto vence antes de qualquer bem ser liberado. Sem ele pago, nada anda — e ele
+                     se paga em dinheiro, não em imóvel." />
+            <Etapa marco={`Até o mês ${e.sucessao.prazoInventarioMeses}`} tom="alerta"
+              titulo={`Os ${brlCompacto(e.bensInventariaveis)} seguem travados`}
+              texto={e.sucessao.inventarioJudicial
+                ? 'Inventário judicial: audiências, prazos e a agenda do fórum. A média fica entre um ano e meio e dois anos.'
+                : 'Inventário extrajudicial, o caminho rápido: ainda assim são meses até a escritura de partilha sair.'} />
+            <Etapa marco="Enquanto isso" tom="ruim"
+              titulo="A saída vira vender com pressa"
+              texto="Quem compra de família com inventário aberto sabe que ela precisa vender. O deságio é a
+                     conta invisível — e ela costuma ser maior que o próprio imposto." />
+            <Etapa marco="Com o plano" tom="bom"
+              titulo={`${brlCompacto(e.valores.sucessao)} em dias, direto aos beneficiários`}
+              texto="O capital do seguro não entra em inventário e é livre de ITCMD na maioria dos estados.
+                     A família paga o imposto no prazo, mantém o padrão de vida e não vende nada." />
+          </ol>
         </section>
       )}
 
@@ -526,6 +604,59 @@ export default function Proposta({ publica = false }) {
             Sem capital, os sócios precisam comprar a sua quota do próprio bolso — ou conviver com
             herdeiros na sociedade. <strong className="text-slate-900">O seguro resolve isso à vista</strong>,
             no mês seguinte, sem discussão e sem processo.
+          </p>
+        </section>
+      )}
+
+      {/* 9b · APOSENTADORIA — só para quem veio por esse motivo */}
+      {e.aposentadoria && e.focos.includes('aposentadoria') && (
+        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>Aposentadoria e acúmulo</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            Parar de trabalhar aos {e.aposentadoria.idadeAlvo} sem baixar o padrão de vida
+          </h2>
+          <div className="mt-10 grid w-full max-w-4xl gap-5 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200/70 bg-canvas p-6 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">A meta</p>
+              <p className="mt-2 font-display text-3xl font-semibold text-slate-900 tabular">
+                {brlCompacto(e.aposentadoria.capitalNecessario)}
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                é o capital que paga {brl(e.aposentadoria.alvoMensal)} por mês sem acabar
+              </p>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-6 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">O caminho de hoje leva a</p>
+              <p className="mt-2 font-display text-3xl font-semibold text-amber-700 tabular">
+                {brlCompacto(e.aposentadoria.projetadoLiquido)}
+              </p>
+              <p className="mt-1 text-sm text-amber-900/80">
+                em {e.aposentadoria.anos} anos, já descontado o imposto de renda —
+                {' '}{brl(e.aposentadoria.rendaProjetada)} por mês
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200/70 bg-canvas p-6 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Para chegar lá</p>
+              <p className="mt-2 font-display text-3xl font-semibold text-slate-900 tabular">
+                {e.aposentadoria.aporteNecessario != null
+                  ? `${brl(e.aposentadoria.aporteNecessario)}` : '—'}
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                por mês, contra os {brl(e.aposentadoria.aporteAtual)} de hoje
+              </p>
+            </div>
+          </div>
+          <p className="mt-10 max-w-2xl text-center text-lg text-slate-600">
+            Esse aporte sai da sua renda todo mês. Se a renda parar —
+            {' '}<strong className="text-slate-900">e é justamente disso que este estudo trata</strong> —
+            {' '}o plano de aposentadoria para no mesmo dia.{' '}
+            {e.valores.invalidez > 0
+              ? <>Com {brlCompacto(e.valores.invalidez)} de invalidez na apólice, ele continua de pé mesmo
+                que você não possa mais trabalhar.</>
+              : <>Proteger a renda é o que mantém o plano de aposentadoria vivo.</>}
+          </p>
+          <p className="mt-4 text-xs text-slate-400">
+            Projeção a {(e.aposentadoria.taxaReal * 100).toFixed(0)}% ao ano acima da inflação, em valores de hoje.
           </p>
         </section>
       )}
@@ -606,6 +737,11 @@ export default function Proposta({ publica = false }) {
             <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-laranja-500/10 blur-3xl print:hidden" />
             <p className="relative text-xs font-semibold uppercase tracking-wide text-gold-400">Importância segurada total</p>
             <p className="relative mt-2 font-display text-4xl font-semibold tabular md:text-5xl">{brlCompacto(e.capitalTotal)}</p>
+            {e.renda > 0 && (
+              <p className="relative mt-1 text-sm font-medium text-gold-400">
+                {Math.round(e.capitalTotal / (e.renda * 12))} anos da sua renda atual
+              </p>
+            )}
             <p className="relative mt-2 text-sm text-white/70">
               A amplitude total da sua proteção — capital que a família recebe conforme a necessidade
               de cada momento.
@@ -717,8 +853,119 @@ export default function Proposta({ publica = false }) {
             )}
             {' '}no momento em que ela mais precisar.
           </p>
+          {e.previdenciaAporte > 0 && inv && (
+            <p className="mt-8 max-w-2xl text-center text-lg text-slate-600">
+              Para comparar: você já destina{' '}
+              <strong className="text-slate-900">{brl(e.previdenciaAporte)}</strong> por mês à
+              previdência, que só vale o valor cheio lá na frente. O plano custa{' '}
+              <strong className="text-slate-900">
+                {Math.round((inv.mensal / e.previdenciaAporte) * 100)}%
+              </strong>{' '}
+              disso — e vale o valor cheio já no mês que vem.
+            </p>
+          )}
           <p className="mt-6 max-w-lg text-center text-sm text-slate-400">
             Valores de referência cotados nas seguradoras para o plano completo — sujeitos à análise da proposta.
+          </p>
+        </section>
+      )}
+
+      {/* 12b · INVESTIR OU PROTEGER — a objeção mais comum, respondida com conta */}
+      {e.acumularEmVezDeSegurar && (
+        <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>Uma pergunta justa</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            “Não seria melhor investir esse dinheiro?”
+          </h2>
+          <p className="mt-4 max-w-2xl text-center text-slate-500">
+            É a pergunta certa — e a resposta não é escolher um dos dois. É olhar o prazo.
+          </p>
+          <div className="mt-10 grid w-full max-w-4xl gap-5 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200/70 bg-white p-7 shadow-card">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Investindo os mesmos</p>
+              <p className="mt-2 font-display text-2xl font-semibold text-slate-900 tabular">
+                {brl(e.acumularEmVezDeSegurar.aporteMensal)}<span className="text-base font-normal text-slate-400">/mês</span>
+              </p>
+              <p className="mt-4 font-display text-5xl font-semibold text-slate-900 tabular">
+                {e.acumularEmVezDeSegurar.anos != null
+                  ? `${String(e.acumularEmVezDeSegurar.anos).replace('.', ',')}`
+                  : '∞'}
+              </p>
+              <p className="mt-1 text-lg font-semibold text-slate-700">
+                {e.acumularEmVezDeSegurar.anos != null ? 'anos até chegar ao capital' : 'não chega'}
+              </p>
+              <p className="mt-3 text-sm text-slate-500">
+                {e.acumularEmVezDeSegurar.partindoDe > 0 && (
+                  <>Partindo dos {brlCompacto(e.acumularEmVezDeSegurar.partindoDe)} que você já tem
+                  aplicados, </>
+                )}
+                a {(e.acumularEmVezDeSegurar.taxaReal * 100).toFixed(0)}% ao ano acima da inflação.
+                {' '}<strong>E o risco não espera esse prazo.</strong>
+              </p>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-7 shadow-card">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Com o plano</p>
+              <p className="mt-2 font-display text-2xl font-semibold text-emerald-700 tabular">
+                {brl(e.acumularEmVezDeSegurar.aporteMensal)}<span className="text-base font-normal text-emerald-600/70">/mês</span>
+              </p>
+              <p className="mt-4 font-display text-5xl font-semibold text-emerald-600 tabular">1</p>
+              <p className="mt-1 text-lg font-semibold text-emerald-700">mês até valer o capital inteiro</p>
+              <p className="mt-3 text-sm text-emerald-900/80">
+                Da primeira parcela paga, os {brlCompacto(e.acumularEmVezDeSegurar.alvo)} já estão
+                garantidos. É a única aplicação que vale o valor cheio no dia seguinte.
+              </p>
+            </div>
+          </div>
+          <p className="mt-10 max-w-2xl text-center text-lg text-slate-600">
+            Investimento e seguro <strong className="text-slate-900">não competem</strong> — o seguro é
+            justamente o que impede o seu investimento de ser consumido no pior momento.
+          </p>
+        </section>
+      )}
+
+      {/* 12c · O CUSTO DA ESPERA — a resposta ao "depois eu contrato" */}
+      {e.custoDaEspera && (
+        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>O preço de deixar para depois</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            Esperar não é neutro. Esperar tem preço.
+          </h2>
+          <p className="mt-4 max-w-2xl text-center text-slate-500">
+            O prêmio acompanha a idade. Este é o mesmo plano, contratado mais tarde:
+          </p>
+          <div className={`mt-10 grid w-full gap-5 ${e.custoDaEspera.cenarios.length > 2 ? 'max-w-5xl md:grid-cols-4' : 'max-w-3xl md:grid-cols-3'}`}>
+            <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50/50 p-6 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
+                Hoje · {e.custoDaEspera.idade} anos
+              </p>
+              <p className="mt-2 font-display text-3xl font-semibold text-emerald-600 tabular">
+                {brl(e.custoDaEspera.mensalHoje)}
+              </p>
+              <p className="mt-1 text-sm text-emerald-700">por mês</p>
+            </div>
+            {e.custoDaEspera.cenarios.map((c) => (
+              <div key={c.daquiAAnos} className="rounded-2xl border border-slate-200/70 bg-canvas p-6 text-center">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Em {c.daquiAAnos} ano{c.daquiAAnos > 1 ? 's' : ''} · {c.idadeNaEpoca} anos
+                </p>
+                <p className="mt-2 font-display text-3xl font-semibold text-slate-900 tabular">
+                  {brl(c.mensal)}
+                </p>
+                <p className="mt-1 text-sm text-red-600">
+                  +{String(c.aMaisPct).replace('.', ',')}% · {brl(c.aMaisPorAno)} a mais por ano
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-10 max-w-2xl text-center text-lg text-slate-600">
+            E o preço é a parte menor.{' '}
+            <strong className="text-slate-900">A sua saúde de hoje é o melhor ativo que você tem
+            na análise da seguradora</strong> — e ela não volta. Um exame alterado no meio do caminho
+            muda a conversa de lugar: deixa de ser quanto custa e passa a ser se ainda dá para contratar.
+          </p>
+          <p className="mt-6 text-xs text-slate-400">
+            Estimativa pela curva de agravamento por idade{e.custoDaEspera.fumante && ', com o agravo de fumante'}.
+            A cotação definitiva vem da seguradora.
           </p>
         </section>
       )}
@@ -850,6 +1097,24 @@ function Placar({ icone: Icone, tom, rotulo, valor, texto }) {
 }
 
 // Linha da conta do inventário: precisa pagar − tem disponível = falta
+// Um degrau da linha do tempo do inventário: quando, o que acontece e por quê.
+function Etapa({ marco, titulo, texto, tom = 'neutro' }) {
+  const cor = tom === 'ruim' ? 'border-red-200 bg-red-50/50'
+    : tom === 'alerta' ? 'border-amber-200 bg-amber-50/50'
+      : tom === 'bom' ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200/70 bg-white'
+  const marca = tom === 'ruim' ? 'text-red-600'
+    : tom === 'alerta' ? 'text-amber-700' : tom === 'bom' ? 'text-emerald-600' : 'text-slate-400'
+  return (
+    <li className={`flex flex-col gap-1 rounded-2xl border p-5 sm:flex-row sm:gap-5 ${cor}`}>
+      <p className={`shrink-0 text-xs font-semibold uppercase tracking-wide sm:w-32 ${marca}`}>{marco}</p>
+      <div className="min-w-0">
+        <p className="font-semibold text-slate-900">{titulo}</p>
+        <p className="mt-0.5 text-sm text-slate-600">{texto}</p>
+      </div>
+    </li>
+  )
+}
+
 function Conta({ rotulo, valor, sinal, destaque, ok }) {
   const caixa = destaque ? 'border-red-200 bg-red-50/60'
     : ok ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200/70 bg-slate-50/60'
