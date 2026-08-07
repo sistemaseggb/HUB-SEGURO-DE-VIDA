@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import {
   PageHeader, Card, Button, Input, InputMoeda, Textarea, Campo, Modal, Spinner, Badge, ComoFunciona,
 } from '../components/ui'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastContexto'
 
 export default function Cadastros() {
   return (

@@ -1,6 +1,7 @@
 // Testes de CONFLITOS E ERROS DE USUÁRIO — os caminhos que quebram sistemas.
-// Roda contra o modo demonstração (npm run preview sem .env):
-//   npm run test:e2e   ← roda esta suíte junto com a principal
+// Roda contra o modo demonstração (sem .env o demo liga sozinho):
+//   npm run build && npm run test:e2e   ← roda esta suíte junto com a principal
+// O servidor de preview sobe sozinho se não estiver no ar.
 //
 // Cobre: link de formulário inválido/já concluído, validação de obrigatórios,
 // proposta sem planejamento, rota inexistente, criação de cliente + venda com
@@ -8,7 +9,8 @@
 // busca global, exclusão com confirmação, celular (375px) e F5.
 import { chromium } from 'playwright-core'
 import { existsSync } from 'node:fs'
-const BASE = process.env.E2E_BASE ?? 'http://localhost:4173'
+import { BASE, garantirServidor } from './e2e-servidor.mjs'
+await garantirServidor()
 const erros = []
 const consoleErros = []
 const executablePath = process.env.CHROMIUM_PATH

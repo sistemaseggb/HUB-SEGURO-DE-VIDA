@@ -38,15 +38,19 @@ e registrar os dados; o sistema cuida do resto.
 - **Pipeline** — Kanban com arrastar-e-soltar, dias parados com alerta
   amarelo/vermelho configurável, motivo obrigatório ao perder um cliente.
 - **Clientes** — perfil 360º com abas: Planejamento (dados da reunião),
-  Reuniões, Apólices, **Documentos** (anexos no Storage), Formulário de
-  onboarding, Tarefas e Histórico. Faixa de **Próxima Melhor Ação** e
+  Roteiro, **Transcrição** (análise da gravação do Tactiq), Reuniões, Apólices,
+  **Documentos** (anexos no Storage), Formulário de onboarding, Tarefas e
+  Histórico. Faixa de **Próxima Melhor Ação** e
   temperatura no topo. Botão **Gerar proposta** cria a apresentação.
 - **Proposta** — apresentação em tela cheia com navegação de deck (setas do
   teclado, bolinhas laterais, contador): capa, diagnóstico, "quanto tempo a
-  família aguentaria hoje?" (autonomia sem × com o plano), capital, 5 pilares,
-  blindagem patrimonial, gap, **o investimento** (prêmio/dia, % da renda e
-  alavancagem R$ 1 → R$ N, quando a cotação está no planejamento) e próximos
-  passos — exportável em PDF pelo navegador.
+  família aguentaria hoje?" (sem vender nada × vendendo tudo × com o plano),
+  capital recomendado, futuro dos filhos, **raio-X do patrimônio** (o que trava
+  no inventário e o que vai direto ao beneficiário), sucessão com a conta do
+  primeiro mês, **planejamento empresarial** (acordo de sócios, homem-chave e
+  aval), gap, o quadro completo da apólice e **o investimento** — mensal e
+  anual lado a lado, com o desconto à vista e a economia calculada. Exportável
+  em PDF pelo navegador.
 - **Formulário público** (`/f/<token>`) — onboarding pós-venda estilo Typeform:
   etapas curtas, progresso salvo automaticamente (o cliente pode parar e voltar),
   sem login, seguro por token via RPC. Campos configuráveis em
@@ -83,22 +87,42 @@ preenchida), login com qualquer e-mail/senha e um selo "✨ Demonstração" no
 topo. Nada é salvo — recarregou, voltou ao início. Para forçar o modo demo
 mesmo com `.env`, use `VITE_DEMO=1 npm run dev`.
 
-### Testes de ponta a ponta
+### Testes
 
 ```bash
-npm run build && npm run preview   # terminal 1 (modo demo)
-npm run test:e2e                   # terminal 2
+npm run build && npm test        # lint + motor + ponta a ponta
 ```
 
-São duas suítes (31 verificações): a **principal** navega o sistema inteiro
-nas duas visões — consultora (login, dashboard, pipeline, cliente 360 com
-planejamento por pilares, apólices, DPS, proposta, relatórios com fechamento,
-pós-venda, agenda, mensagens, cadastros) e cliente (formulário público de DPS
-pelo link); a de **erros de usuário** ataca os caminhos que quebram sistemas:
+Ou em separado: `npm run test:motor` (rápido, não precisa de navegador) e
+`npm run test:e2e`. A suíte de navegador sobe o servidor de preview sozinha
+(e reaproveita um que já esteja rodando), então basta um terminal.
+
+**`test:motor`** — `calcularEstudo()` é a única fonte dos números do
+planejamento *e* da proposta: se ele erra, a consultora apresenta o erro para
+o cliente. O teste joga 4.000 combinações de entrada (inclusive negativo,
+texto, vazio, 10^18) e 2.000 transcrições montadas ao acaso, cobrando
+invariantes que precisam valer sempre — nada de NaN/Infinity/negativo na tela,
+patrimônio bruto igual à soma das classes, custo do inventário nunca maior que
+o que trava, maior evento indenizável nunca maior que a soma das importâncias,
+porcentagens dentro de 0–100. Reproduzível: `CASOS=20000 SEMENTE=7 npm run
+test:motor`.
+
+**`test:e2e`** — quatro suítes. A **principal** navega o sistema inteiro
+nas duas visões — consultora (login, dashboard, pipeline, cliente 360 com o
+planejamento completo, transcrição da reunião, apólices, DPS, proposta,
+relatórios com fechamento, pós-venda, agenda, mensagens, cadastros) e cliente
+(formulário público de DPS pelo link); a de **erros de usuário** ataca os
+caminhos que quebram sistemas:
 link inválido, formulário já concluído, obrigatórios vazios, proposta sem
 planejamento, rota inexistente, venda com comissão automática, popups de
 dossiê/DPS, pendências de classificação, busca, exclusão com confirmação,
-celular (375px) e F5. Capturas em `e2e-shots/`.
+celular (375px) e F5. A de **planejamento** usa a aba como a consultora usa,
+com o cliente na frente: valores hostis campo a campo, o estudo preenchido, a
+alteração não salva que precisa sobreviver à troca de aba, o dado que tem que
+voltar ao sair e retornar no cliente, o roteiro que leva ao bloco certo e a
+proposta sem número quebrado. A de **celular** cobra que nenhuma tela role
+para o lado a 375px — todas as páginas e todas as abas do Cliente 360 — e
+aponta o elemento culpado quando falha. Capturas em `e2e-shots/`.
 
 ### Marca
 
@@ -147,6 +171,8 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 16. [`supabase/migrations/016_filhos_custo_mensal.sql`](supabase/migrations/016_filhos_custo_mensal.sql)
 17. [`supabase/migrations/017_proposta_publica.sql`](supabase/migrations/017_proposta_publica.sql)
 18. [`supabase/migrations/018_roteiro_reuniao.sql`](supabase/migrations/018_roteiro_reuniao.sql)
+19. [`supabase/migrations/019_planejamento_completo.sql`](supabase/migrations/019_planejamento_completo.sql)
+20. [`supabase/migrations/020_transcricoes_reuniao.sql`](supabase/migrations/020_transcricoes_reuniao.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -270,9 +296,35 @@ npm run dev
 - [x] Planejamento por **5 pilares** (migração 014): família, invalidez,
       doenças graves, DIT e sucessão/inventário — sugestões calculadas, gap
       vs cobertura atual e resumo ao vivo
+- [x] **Planejamento completo** (migração 019): tipo de estudo (PF, PJ ou os
+      dois) e focos; raio-X do patrimônio por classe, com previdência fora do
+      inventário e o déficit de liquidez calculado; bloco empresarial com
+      acordo de sócios, homem-chave e dívidas avalizadas
+- [x] **Apólice inteira no estudo**: morte acidental, fraturas, diária de
+      internação hospitalar (DIH) e assistência funeral individual e familiar,
+      além das diárias com limite de dias e franquia
+- [x] **Prêmio mensal e anual** lado a lado: o desconto à vista aparece na
+      proposta com a economia calculada, e o cliente escolhe a forma
+- [x] **Nada se perde durante a reunião**: o planejamento se grava sozinho
+      pouco depois que ela para de digitar, descarrega o que estiver pendente
+      ao sair da aba, avisa antes de fechar o navegador e mostra o estado
+      ("Salvando…", "Salvo às 14:32") numa barra fixa com Salvar e Proposta
+      sempre ao alcance
+- [x] **Roteiro do preenchimento**: a espinha do estudo em uma linha — cada
+      bloco com o que já está em pé ("renda R$ 48 mil", "13 na apólice") e um
+      clique que leva direto até ele, na ordem da conversa com o cliente
+- [x] **Transcrição da reunião** (migração 020): cole o texto do Tactiq (ou
+      solte o arquivo) e receba na hora o resumo executivo, os números que o
+      cliente falou prontos para aplicar no planejamento, as objeções com a
+      resposta sugerida, os compromissos virando tarefa e um raio-X de como a
+      reunião foi conduzida — tudo offline, sem chave de API
+- [x] Aprofundamento opcional com **Claude** (Edge Function `analisar-reuniao`):
+      perfil do cliente, dores com evidência, respostas sob medida e a
+      mensagem de follow-up pronta. Sem a chave configurada, a análise local
+      continua funcionando normalmente
 - [x] Apresentação renovada: logo do escritório (public/logo.png), slide de
-      diagnóstico, blindagem patrimonial (custo do inventário), gap de
-      cobertura e próximos passos
+      diagnóstico, raio-X patrimonial, sucessão com a conta do primeiro mês,
+      planejamento empresarial, gap de cobertura e próximos passos
 - [x] DPS completa no formulário público (padrão das seguradoras) com
       impressão limpa para transcrever ao portal + destaque dos "sim"
 - [x] Dossiê 1-página do cliente: estudo, apólices, últimas conversas e

@@ -125,13 +125,28 @@ function semear() {
     id: idDemo(), id_cliente: rodrigo.id, profissao: 'Engenheiro civil (autônomo)', estado_civil: 'Casado(a)',
     renda_mensal: 22000, custo_vida_mensal: 14000, patrimonio_total: 900_000, dividas_total: 120_000,
     num_dependentes: 1, dependentes: [{ nome: 'Sofia', idade: 3, custo_mensal: 2100 }], anos_protecao: 21,
-    // (11.900 base × 12 × 21) + (2.100 da Sofia × 12 × 21) + 120 mil de dívidas
-    capital_sugerido: 3_648_000, objetivos: 'Proteger a renda de autônomo (DIT) e a faculdade da Sofia.',
+    // em branco: o estudo usa a própria sugestão — (11.900 base × 12 × 21) +
+    // (2.100 da Sofia × 12 × 21) + 120 mil de dívidas = 3,648 mi
+    capital_sugerido: null, objetivos: 'Proteger a renda de autônomo (DIT) e a faculdade da Sofia.',
     observacoes_reuniao: 'Sem CLT — a DIT é o centro do estudo. Quer parcela abaixo de R$ 500.',
     capital_invalidez: null, capital_doencas_graves: null, dit_diaria: 700,
     verba_sucessoria: null, cobertura_atual: 0, itcmd_pct: 4, custas_pct: 8,
     premio_estimado: 480,
     conjuge_nome: 'Paula', filhos_idades: '3 anos',
+    // migração 019 — planejamento completo
+    tipo_planejamento: 'pf', focos: ['renda', 'educacao', 'dividas'],
+    patrimonio_imoveis: 650_000, patrimonio_investimentos: 160_000, patrimonio_empresa: null,
+    patrimonio_veiculos: 90_000, patrimonio_outros: null,
+    previdencia_saldo: 60_000, previdencia_tipo: 'VGBL', previdencia_aporte_mensal: 800,
+    regime_bens: 'Comunhão parcial', tem_holding: false, tem_testamento: false, herdeiros_menores: true,
+    pj_razao_social: null, pj_valuation: null, pj_participacao_pct: null, pj_num_socios: null,
+    pj_faturamento_anual: null, pj_lucro_anual: null, pj_divida_avalizada: null,
+    capital_socios: null, capital_homem_chave: null, capital_aval: null,
+    capital_morte_acidental: null, capital_fraturas: null,
+    dih_diaria: 700, dih_dias: 30, dit_dias: 90, dit_franquia_dias: 15,
+    funeral_individual: 15_000, funeral_familiar: 15_000,
+    // anual com 5% de desconto sobre as 12 parcelas de R$ 480
+    premio_anual: 5_472, forma_pagamento: 'mensal',
     token_proposta: 'demo-proposta-rodrigo', roteiro: {},
     created_at: iso(diasAtras(10)), updated_at: iso(diasAtras(2)),
   }, {
@@ -144,12 +159,30 @@ function semear() {
       { nome: 'Lucas', idade: 9, custo_mensal: 3800 },
     ],
     anos_protecao: 10,
-    capital_sugerido: 3_490_000, objetivos: 'Garantir a faculdade dos filhos e blindar o patrimônio da família.',
+    // em branco: o estudo calcula (20.000 base × 12 × 10) + 1,375 mi dos filhos
+    // até os 24 + 250 mil de dívidas = 4,025 mi
+    capital_sugerido: null, objetivos: 'Garantir a faculdade dos filhos, blindar o patrimônio e proteger a sociedade da clínica.',
     observacoes_reuniao: 'Preocupado com sucessão da clínica. Esposa não trabalha fora. Quer revisar previdência no 2º semestre.',
-    capital_invalidez: 3_490_000, capital_doencas_graves: 1_152_000, dit_diaria: 1600,
-    verba_sucessoria: 456_000, cobertura_atual: 800_000, itcmd_pct: 4, custas_pct: 8,
+    capital_invalidez: null, capital_doencas_graves: null, dit_diaria: 1600,
+    verba_sucessoria: null, cobertura_atual: 800_000, itcmd_pct: 4, custas_pct: 8,
     premio_estimado: 1890,
     conjuge_nome: 'Mariana', filhos_idades: '6 e 9 anos',
+    // migração 019 — estudo PF + PJ, com sucessão e acordo de sócios
+    tipo_planejamento: 'pf_pj',
+    focos: ['renda', 'educacao', 'sucessao', 'blindagem', 'empresarial'],
+    patrimonio_imoveis: 2_300_000, patrimonio_investimentos: 700_000, patrimonio_empresa: 600_000,
+    patrimonio_veiculos: 200_000, patrimonio_outros: null,
+    previdencia_saldo: 450_000, previdencia_tipo: 'PGBL', previdencia_aporte_mensal: 4_000,
+    regime_bens: 'Comunhão parcial', tem_holding: false, tem_testamento: false, herdeiros_menores: true,
+    pj_razao_social: 'Cardiocare Serviços Médicos Ltda', pj_valuation: 1_500_000,
+    pj_participacao_pct: 40, pj_num_socios: 3,
+    pj_faturamento_anual: 4_200_000, pj_lucro_anual: 900_000, pj_divida_avalizada: 350_000,
+    capital_socios: null, capital_homem_chave: null, capital_aval: null,
+    capital_morte_acidental: null, capital_fraturas: null,
+    dih_diaria: 1600, dih_dias: 60, dit_dias: 180, dit_franquia_dias: 15,
+    funeral_individual: 20_000, funeral_familiar: 20_000,
+    // anual com 10% de desconto sobre as 12 parcelas de R$ 1.890
+    premio_anual: 20_412, forma_pagamento: 'anual',
     token_proposta: 'demo-proposta-carlos',
     roteiro: { blocos: {
       abertura: { feito: true, nota: 'Muito receptivo. Falou da clínica e dos dois filhos.' },
@@ -253,8 +286,51 @@ function semear() {
       : []),
   ])
 
+  // Transcrição de reunião (migração 020): o Tactiq gera exatamente neste
+  // formato — carimbo de tempo, nome do participante e a fala.
+  const transcricoes = [{
+    id: idDemo(), id_cliente: carlos.id, id_reuniao: null,
+    titulo: 'Reunião de descoberta — Carlos', data_reuniao: dia(diasAtras(30)),
+    origem: 'tactiq', analise: {}, resumo: null,
+    texto: [
+      '# Transcript of Reunião — Carlos Eduardo Menezes',
+      'https://tactiq.io/transcripts/demo',
+      '',
+      '00:00:04 Natália Maschendorf: Carlos, boa tarde! Tudo bem? Obrigada pelo tempo de hoje.',
+      '00:00:11 Carlos Menezes: Boa tarde, Natália. Tudo ótimo.',
+      '00:00:16 Natália Maschendorf: Hoje é uma conversa, não é uma venda. Me conta um pouco de você e da sua família.',
+      '00:00:41 Carlos Menezes: Sou médico cardiologista, tenho uma clínica com mais dois sócios. Sou casado, minha esposa Mariana não trabalha fora. Temos dois filhos, a Alice tem 6 anos e o Lucas tem 9 anos.',
+      '00:01:12 Natália Maschendorf: E como está a sua renda hoje?',
+      '00:01:30 Carlos Menezes: Minha renda gira em torno de R$ 48.000 por mês, entre a clínica e os plantões.',
+      '00:01:42 Natália Maschendorf: E o custo de vida da família, quanto vocês gastam por mês?',
+      '00:01:50 Carlos Menezes: Com escola, condomínio e plano de saúde, o custo de vida fica em uns R$ 27 mil por mês.',
+      '00:02:05 Natália Maschendorf: Tem algum financiamento em aberto?',
+      '00:02:11 Carlos Menezes: Tenho o financiamento do apartamento da praia, uns R$ 250 mil de saldo devedor.',
+      '00:02:22 Natália Maschendorf: E o patrimônio que vocês construíram?',
+      '00:02:29 Carlos Menezes: Os imóveis somam uns R$ 2,3 milhões, tenho R$ 700 mil investido entre CDB e fundos, os carros dão uns R$ 200 mil. E tem a previdência, um PGBL com R$ 450 mil.',
+      '00:03:02 Natália Maschendorf: E a clínica, quanto ela fatura?',
+      '00:03:08 Carlos Menezes: O faturamento é de uns R$ 4,2 milhões por ano. Eu tenho 40% do capital social.',
+      '00:03:32 Natália Maschendorf: Se a sua renda parasse hoje, por quanto tempo a família manteria o padrão de vida?',
+      '00:03:45 Carlos Menezes: Nossa, nunca pensei nisso direito. Sinceramente, me preocupa. Acho que uns dois anos consumindo o que a gente tem.',
+      '00:04:05 Natália Maschendorf: E aí entra o inventário: os bens ficam travados até o ITCMD ser pago, e o imposto se paga em dinheiro.',
+      '00:04:20 Carlos Menezes: Isso eu vivi. Quando meu pai faleceu o inventário levou três anos, minha mãe passou aperto. É exatamente isso que eu não quero para a Mariana.',
+      '00:04:40 Natália Maschendorf: Muita gente acha que seguro só paga se a pessoa morrer, mas a maior parte paga em vida: invalidez, doenças graves, DIT, diária de internação hospitalar, fraturas e morte acidental. Tem também a assistência funeral.',
+      '00:05:10 Carlos Menezes: Não sabia disso de doenças graves. Paga em vida mesmo?',
+      '00:05:30 Natália Maschendorf: Paga no diagnóstico. Deixa eu te mostrar a proposta com o capital e a verba de inventário.',
+      '00:06:15 Carlos Menezes: Faz sentido. E qual seria o investimento mensal?',
+      '00:06:22 Natália Maschendorf: O prêmio ficaria em R$ 1.890 por mês, ou R$ 20.412 à vista no ano, com 10% de desconto.',
+      '00:06:38 Carlos Menezes: Achei um pouco caro. Mas preciso conversar com minha esposa antes de decidir.',
+      '00:07:12 Carlos Menezes: E quando começa a valer a cobertura? Preciso fazer exame?',
+      '00:07:33 Natália Maschendorf: Na maioria dos casos só a declaração de saúde, que é um formulário online.',
+      '00:07:52 Natália Maschendorf: Vou te enviar a proposta hoje ainda pelo link. E vamos marcar a call com a Mariana para quinta-feira.',
+      '00:08:05 Carlos Menezes: Pode ser quinta à noite. Vou falar com ela hoje.',
+    ].join('\n'),
+    created_at: iso(diasAtras(30)), updated_at: iso(diasAtras(30)),
+  }]
+
   return {
     assessores, seguradoras, clientes, apolices, planejamentos, reunioes, interacoes, tarefas,
+    transcricoes,
     formularios_onboarding: formularios, comissoes_importadas, fila_mensagens, historico_funil,
     documentos: [], agenda_externa: [],
     configuracoes: [{

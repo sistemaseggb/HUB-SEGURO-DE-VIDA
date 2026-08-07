@@ -3,7 +3,7 @@
 // docs/PLANILHAS_COMISSAO.md); aqui cada formato vira um "perfil" que é
 // detectado pelo cabeçalho e convertido para o modelo canônico da tabela
 // comissoes_importadas. A usuária só copia as células da planilha e cola.
-import { parseCSV, normalizar, acharColuna } from './csv'
+import { parseCSV, normalizar, acharColuna } from './csv.js'
 
 // Converte dinheiro nos formatos que aparecem nas planilhas:
 // "61.08" (americano), "R$1.539,94" / "273,96" (BR), "2,487.61" (americano

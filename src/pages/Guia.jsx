@@ -51,9 +51,9 @@ const JORNADA = [
     titulo: 'Monte o planejamento financeiro',
     onde: 'Cliente · aba Planejamento',
     para: '/clientes',
-    o_que: 'Preencha renda, custo de vida, patrimônio, dívidas e os filhos (com o gasto de cada um). O sistema calcula sozinho os 5 pilares e o capital sob medida.',
-    porque: 'É o cérebro do estudo. Cada número que você digita alimenta a proposta — inclusive a linha do tempo que mostra o gasto dos filhos acabando aos 24.',
-    acoes: ['Preencha a Vida financeira e os Filhos', 'Confira a Inteligência do estudo e o Resumo ao vivo'],
+    o_que: 'Escolha o tipo de estudo (PF, PJ ou os dois), preencha renda, custo de vida, dívidas, os filhos e cada classe do patrimônio. O sistema calcula sozinho todas as coberturas da apólice, o custo do inventário e o déficit de liquidez.',
+    porque: 'É o cérebro do estudo. Cada número que você digita alimenta a proposta — o raio-X do patrimônio, a linha do tempo dos filhos até os 24 e as duas formas de pagar o prêmio.',
+    acoes: ['Escolha o tipo e os focos do planejamento', 'Detalhe o patrimônio por classe (previdência não passa por inventário)', 'Cote o prêmio mensal e o anual — o cliente escolhe', 'Confira a Inteligência do estudo e os avisos de número que não fecha'],
   },
   {
     n: 5, icone: Presentation, cor: 'text-blue-600 bg-blue-50',

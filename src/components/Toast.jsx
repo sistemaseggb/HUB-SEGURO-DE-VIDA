@@ -1,12 +1,6 @@
-import { createContext, useCallback, useContext, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react'
-
-const ToastContext = createContext(() => {})
-
-// Hook para disparar avisos de qualquer lugar: const toast = useToast(); toast.ok('Salvo!')
-export function useToast() {
-  return useContext(ToastContext)
-}
+import { ToastContext } from './toastContexto'
 
 const ICONE = {
   ok: { Icone: CheckCircle2, cor: 'text-emerald-600', anel: 'ring-emerald-100' },
@@ -26,11 +20,14 @@ export function ToastProvider({ children }) {
   }, [remover])
 
   // API: toast.ok(...), toast.erro(...), toast.info(...)
-  const toast = {
+  // Memoizado porque o provider embrulha o app inteiro: sem isso, cada aviso
+  // que aparece ou some troca a referência do contexto e re-renderiza a tela
+  // toda junto.
+  const toast = useMemo(() => ({
     ok: (t) => push('ok', t),
     erro: (t) => push('erro', t),
     info: (t) => push('info', t),
-  }
+  }), [push])
 
   return (
     <ToastContext.Provider value={toast}>

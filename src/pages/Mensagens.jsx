@@ -4,7 +4,7 @@ import { MessageCircle, RefreshCw, X, Check, Inbox } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { whatsapp, dataBR } from '../lib/format'
 import { PageHeader, Card, Button, Badge, Spinner, EmptyState, ComoFunciona } from '../components/ui'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastContexto'
 
 const ROTULO_TIPO = {
   aniversario_cliente: { texto: 'Aniversário', tom: 'yellow' },
