@@ -115,12 +115,45 @@ ok(perdido, 'alteração NÃO salva sobrevive à troca de aba (senão a consulto
   ok(visivel, `roteiro: clicar em "Coberturas" leva ao bloco (rolagem saiu de ${antes}px)`)
 }
 
+// ── 5c. A ponte: o número da tela é o número do slide ──
+// Este é o erro que mais custa caro — a consultora confere na tela, apresenta
+// no slide e os dois discordam. Tela e proposta chamam o MESMO calcularEstudo,
+// e o teste cobra que continue assim.
+const daTela = await page.evaluate(() => {
+  const achar = (rotulo) => {
+    for (const el of document.querySelectorAll('p, span')) {
+      if (el.textContent.trim().toLowerCase() === rotulo) {
+        const irmao = el.nextElementSibling ?? el.parentElement?.nextElementSibling
+        return irmao?.textContent.trim() ?? null
+      }
+    }
+    return null
+  }
+  return { capital: achar('importância segurada total') }
+})
+
 // ── 6. Proposta com o estudo preenchido ──
-const url = page.url(); const id = url.match(/clientes\/([a-f0-9-]+)/)?.[1]
-await page.goto(`${B}/proposta/${id}`); await page.waitForTimeout(1500)
+// Pelo botão, não por page.goto: no modo demonstração o banco vive na memória
+// da aba, e um carregamento cheio apagaria o estudo que acabamos de preencher
+// — as conferências abaixo passariam olhando para uma tela vazia.
+await page.click('a[href^="/proposta/"]')
+await page.waitForSelector('text=Importância segurada total', { timeout: 15000 })
+await page.waitForTimeout(800)
 const t6 = await page.evaluate(() => document.body.innerText)
 ok(!/NaN|Infinity|R\$\s*-|undefined/.test(t6), 'proposta sem número inválido')
 ok(!/\b0 meses\b/.test(t6) || t6.includes('vitalícia'), 'proposta sem "0 meses" solto')
+
+const daProposta = await page.evaluate(() => {
+  for (const el of document.querySelectorAll('p')) {
+    if (el.textContent.trim().toLowerCase() === 'importância segurada total') {
+      return el.nextElementSibling?.textContent.trim() ?? null
+    }
+  }
+  return null
+})
+const normaliza = (v) => (v ?? '').replace(/\s+/g, ' ').trim()
+ok(daTela.capital != null && daProposta != null && normaliza(daTela.capital) === normaliza(daProposta),
+  `ponte: importância segurada igual na tela e no slide (tela ${normaliza(daTela.capital) || '—'} · slide ${normaliza(daProposta) || '—'})`)
 
 // ── 7. Celular 375px ──
 const mob = await (await browser.newContext({ viewport: { width: 375, height: 780 } })).newPage()
