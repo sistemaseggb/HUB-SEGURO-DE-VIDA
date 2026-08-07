@@ -15,6 +15,7 @@ import { brl, brlCompacto, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib
 import {
   calcularEstudo, normalizarFilhos, IDADE_INDEPENDENCIA, MESES_VITALICIO,
   COBERTURAS, GRUPOS_COBERTURA, TIPOS_PLANEJAMENTO, FOCOS, CLASSES_PATRIMONIO,
+  porqueCobertura,
 } from '../lib/estudo'
 import { BLOCOS_ROTEIRO } from '../lib/roteiro'
 import {
@@ -393,6 +394,7 @@ function CampoCobertura({ cob, estudo, plano, setPlano }) {
   const valorForm = plano[cob.campo]
   const sugestaoArredondada = Math.round(sugestao * 100) / 100
   const diaria = cob.tipo === 'diaria' ? estudo.diariaPorId[cob.id] : null
+  const porque = porqueCobertura(cob.id, estudo)
   const mudar = (campo, valor) => setPlano({ ...plano, [campo]: valor })
 
   return (
@@ -437,11 +439,10 @@ function CampoCobertura({ cob, estudo, plano, setPlano }) {
           </button>
         )}
       </div>
-      {diaria && diaria.total > 0 && (
-        <p className="mt-1.5 border-t border-slate-100 pt-1.5 text-xs text-slate-500">
-          Até <strong className="tabular text-slate-700">{brlCompacto(diaria.total)}</strong> em {diaria.dias} diárias
-          {diaria.franquia ? ` · a partir do ${diaria.franquia + 1}º dia` : ''}
-        </p>
+      {/* De onde saiu esse número, com os valores DESTE cliente. É o que a
+          consultora responde quando ele pergunta "por que tanto?". */}
+      {porque && (
+        <p className="mt-1.5 border-t border-slate-100 pt-1.5 text-xs text-slate-500">{porque}</p>
       )}
     </div>
   )

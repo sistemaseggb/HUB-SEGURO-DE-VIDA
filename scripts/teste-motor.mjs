@@ -16,7 +16,7 @@
 //
 // Roda com `npm run test:motor` (e junto do e2e em `npm run test`).
 // ─────────────────────────────────────────────────────────────────────────────
-import { calcularEstudo, CLASSES_PATRIMONIO } from '../src/lib/estudo.js'
+import { calcularEstudo, CLASSES_PATRIMONIO, porqueCobertura } from '../src/lib/estudo.js'
 import { analisarTranscricao } from '../src/lib/transcricao.js'
 
 const CASOS = Number(process.env.CASOS ?? 4000)
@@ -159,6 +159,20 @@ for (let i = 0; i < CASOS; i++) {
   }
   for (const c of e.ativas) {
     if (!(c.valor > 0)) registrar(i, `cobertura ativa ${c.id} com valor ${c.valor}`)
+    // O porquê é texto que vai para a tela e para o slide: nunca pode sair
+    // com NaN, undefined ou "R$ 0" — seria pior do que não ter porquê nenhum.
+    let pq
+    try {
+      pq = porqueCobertura(c.id, e)
+    } catch (err) {
+      registrar(i, `porquê de ${c.id} explodiu: ${err.message}`)
+      continue
+    }
+    if (pq != null) {
+      if (typeof pq !== 'string' || pq.trim() === '') registrar(i, `porquê de ${c.id} vazio`)
+      else if (/NaN|Infinity|undefined|null/.test(pq)) registrar(i, `porquê de ${c.id}: ${pq.slice(0, 80)}`)
+      else if (/R\$ -/.test(pq)) registrar(i, `porquê de ${c.id} com valor negativo: ${pq.slice(0, 80)}`)
+    }
   }
   // ── idade, sucessão e previdência ──
   if (e.idade != null && (e.idade < 0 || e.idade > 120)) {

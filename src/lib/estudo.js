@@ -399,6 +399,84 @@ export const COBERTURAS = [
   },
 ]
 
+// ─── O PORQUÊ DE CADA NÚMERO ─────────────────────────────────────────────────
+// `comoCalcula` explica a fórmula em abstrato ("24 × a renda mensal"). Isto
+// aqui explica com os números DESTE cliente ("24 × os R$ 48 mil que ele ganha
+// = R$ 1,2 mi, ≈ 2 anos de tratamento sem trabalhar"). É a diferença entre a
+// consultora ler um slide e ela sustentar o número quando o cliente pergunta
+// "de onde saiu isso?".
+//
+// Recebe o estudo já calculado. Devolve null quando não há dado que sustente
+// a frase — inventar um porquê é pior do que não ter nenhum.
+export function porqueCobertura(id, e) {
+  if (!e) return null
+  const m = (v) => `R$ ${Math.round(v).toLocaleString('pt-BR')}`
+  const v = e.valores?.[id] ?? 0
+  if (!(v > 0)) return null
+
+  switch (id) {
+    case 'morte': {
+      if (!(e.custoVida > 0)) return null
+      const partes = [`${m(e.custoVidaBase)}/mês de padrão de vida por ${e.anos} anos`]
+      if (e.capitalFilhos > 0) partes.push(`${m(e.capitalFilhos)} para os filhos até os ${IDADE_INDEPENDENCIA}`)
+      if (e.dividas > 0) partes.push(`${m(e.dividas)} de dívidas quitadas`)
+      return `${partes.join(', mais ')}.`
+    }
+    case 'invalidez':
+      return e.valores.morte > 0 && v === e.valores.morte
+        ? 'O mesmo capital da morte: inválido, ele para de gerar renda igual — e ainda passa a custar tratamento.'
+        : 'A renda para do mesmo jeito da morte, com a diferença de que ele continua aqui para ser sustentado.'
+    case 'doencas_graves':
+      return e.renda > 0
+        ? `24 × os ${m(e.renda)} de renda: cerca de dois anos de tratamento sem depender de trabalhar.`
+        : null
+    case 'dit': {
+      const d = e.diariaPorId?.dit
+      if (!d) return null
+      return `${m(v)} por dia parado, a partir do ${(d.franquia ?? 0) + 1}º dia, até ${d.dias} diárias — ${m(d.total)} no limite.`
+    }
+    case 'dih': {
+      const d = e.diariaPorId?.dih
+      if (!d) return null
+      return `${m(v)} por dia internado, até ${d.dias} diárias (${m(d.total)}) — cobre o que o plano de saúde não paga.`
+    }
+    case 'morte_acidental':
+      return e.valores.morte > 0
+        ? `Soma aos ${m(e.valores.morte)} da morte: num acidente a família recebe ${m(e.valores.morte + v)}.`
+        : null
+    case 'fraturas':
+      return 'Indeniza por tabela conforme o osso — cobre o custo imediato do acidente sem mexer na reserva.'
+    case 'funeral_individual':
+      return 'Acionada por telefone e resolvida em horas: a família não gasta nem decide nada no pior dia.'
+    case 'funeral_familiar':
+      return 'Estende a assistência a cônjuge e filhos — e, em vários produtos, aos pais.'
+    case 'sucessao': {
+      if (!(e.custoInventario > 0)) return null
+      const rito = e.sucessao?.inventarioJudicial ? 'judicial' : 'extrajudicial'
+      const prazo = e.sucessao?.prazoInventarioMeses
+      const base = `${(e.itcmd + (e.sucessao?.custasEfetivas ?? e.custas)).toFixed(1).replace('.', ',')}% de ${m(e.sucessao?.baseInventario ?? e.bensInventariaveis)}`
+      const falta = e.deficitLiquidez > 0
+        ? ` Hoje faltam ${m(e.deficitLiquidez)} em dinheiro para pagar isso.`
+        : ''
+      return `${base} — o imposto vence antes de qualquer bem ser liberado, e o inventário ${rito} leva cerca de ${prazo} meses.${falta}`
+    }
+    case 'socios':
+      return e.pj?.valuation > 0
+        ? `${e.pj.participacao}% de ${m(e.pj.valuation)}: é o que os sócios precisam ter em caixa para comprar a quota da família em vez de virar sócios dela.`
+        : null
+    case 'homem_chave':
+      return e.pj?.lucroBase > 0
+        ? `2 × ${m(e.pj.lucroBase)} de lucro anual — o fôlego para a empresa se reorganizar sem quem a fazia girar.`
+        : null
+    case 'aval':
+      return e.pj?.dividaAval > 0
+        ? `${m(e.pj.dividaAval)} de dívida com aval pessoal: morrer não cancela o aval, ele vira dívida do espólio e alcança o patrimônio da família.`
+        : null
+    default:
+      return null
+  }
+}
+
 // ─── FILHOS ──────────────────────────────────────────────────────────────────
 // Normaliza a lista de filhos do planejamento (coluna jsonb `dependentes`,
 // formato [{nome, idade, custo_mensal}]) e calcula, por filho, quantos anos de
@@ -959,6 +1037,82 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
     inconsistencias.push({
       grave: false, corrigir: 'patrimonio_empresa', valor: Math.round(pjQuota),
       texto: 'A participação na empresa não está no patrimônio — o inventário vai cobrar ITCMD sobre ela.',
+    })
+  }
+
+  // ── Conferências que só existem com a idade e a apólice montada ───────────
+  // O horizonte acaba antes de o filho mais novo virar adulto: a família fica
+  // descoberta justamente nos anos em que ainda depende da renda.
+  if (janelaProtecao?.curto && anosSugeridosPorFilhos != null && anos < anosSugeridosPorFilhos) {
+    inconsistencias.push({
+      grave: true, corrigir: 'anos_protecao', valor: anosSugeridosPorFilhos,
+      texto: `A proteção acaba em ${anos} anos, mas o filho mais novo só completa ${IDADE_INDEPENDENCIA} daqui a ${anosSugeridosPorFilhos} — sobram ${anosSugeridosPorFilhos - anos} anos descobertos.`,
+    })
+  }
+  // Capital menor que a dívida: a família herda o saldo devedor.
+  if (dividas > 0 && valores.morte > 0 && valores.morte < dividas) {
+    inconsistencias.push({
+      grave: true,
+      texto: `O capital de morte (${Math.round(valores.morte).toLocaleString('pt-BR')}) é menor que as dívidas (${Math.round(dividas).toLocaleString('pt-BR')}) — do jeito que está, a família recebe o seguro e ainda fica devendo.`,
+    })
+  }
+  // Franquia igual ou maior que o limite: a diária nunca chega a pagar.
+  for (const d of diarias) {
+    if (d.franquia != null && d.valor > 0 && d.franquia >= d.dias) {
+      const cob = COBERTURAS.find((c) => c.id === d.id)
+      inconsistencias.push({
+        grave: true,
+        texto: `${cob?.curto ?? d.id}: a franquia de ${d.franquia} dias é maior ou igual ao limite de ${d.dias} diárias — essa cobertura nunca paga.`,
+      })
+    }
+  }
+  // Idade + horizonte passando do limite de produto
+  if (idade != null && idade + anos > IDADE_LIMITE_PRODUTO) {
+    inconsistencias.push({
+      grave: false,
+      texto: `Com ${idade} anos e ${anos} de proteção, a apólice iria até os ${idade + anos} — acima dos ${IDADE_LIMITE_PRODUTO} a maioria dos produtos não renova. Confirme o prazo com a seguradora.`,
+    })
+  }
+  // Sociedade que não fecha: participações incompatíveis com o nº de sócios
+  const numSociosInf = inteiro(plano.pj_num_socios, 0, 0, 999)
+  if (temPJ && numSociosInf > 1 && pjParticipacao > 0
+    && pjParticipacao * numSociosInf > 100 + 0.5 && pjParticipacao > 100 / numSociosInf) {
+    const sobra = Math.round((100 - pjParticipacao) * 10) / 10
+    if (sobra >= 0 && numSociosInf - 1 > 0 && sobra / (numSociosInf - 1) < 1) {
+      inconsistencias.push({
+        grave: false,
+        texto: `${numSociosInf} sócios e ${pjParticipacao}% para o cliente deixam menos de 1% para cada um dos outros — confira a participação ou o número de sócios.`,
+      })
+    }
+  }
+  // Previdência maior que o patrimônio total declarado (um dos dois está errado)
+  if (previdencia > 0 && totalDeclarado > 0 && !detalhado && previdencia > totalDeclarado) {
+    inconsistencias.push({
+      grave: false,
+      texto: 'A previdência sozinha é maior que o patrimônio total declarado — confira se o total já inclui o saldo do VGBL/PGBL (não deveria: previdência entra à parte).',
+    })
+  }
+  // Foco de aposentadoria marcado e nada para calcular
+  if (focos.includes('aposentadoria') && !aposentadoria) {
+    inconsistencias.push({
+      grave: false,
+      texto: idade == null
+        ? 'Foco em aposentadoria, mas sem a data de nascimento do cliente no cadastro o estudo não consegue projetar nada.'
+        : 'Foco em aposentadoria sem renda desejada nem custo de vida — preencha um dos dois para o estudo projetar a meta.',
+    })
+  }
+  // Idade-alvo já passou
+  if (idade != null && definido(plano.idade_aposentadoria) && idadeAposentar <= idade) {
+    inconsistencias.push({
+      grave: false,
+      texto: `A idade de aposentadoria (${idadeAposentar}) não é maior que a idade atual (${idade}) — sem prazo à frente não há o que projetar.`,
+    })
+  }
+  // O prêmio saiu numa forma só, mas a proposta mostra as duas
+  if (premioMensal > 0 && premioAnualCotado === 0) {
+    inconsistencias.push({
+      grave: false,
+      texto: 'Só o prêmio mensal foi cotado. Cote o anual também: quase toda seguradora dá desconto à vista, e a escolha é do cliente.',
     })
   }
 
