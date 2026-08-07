@@ -66,6 +66,14 @@ function planoAleatorio() {
     dit_dias: escolher(['', 0, 30, 720, 9999, -4]), dit_franquia_dias: escolher(['', 0, 15, 400, -2]),
     funeral_individual: v(), funeral_familiar: v(),
   }
+  plano.regime_bens = escolher(['', null, 'Comunhão parcial', 'Comunhão universal',
+    'Separação total', 'Separação obrigatória', 'Participação final nos aquestos', 'inventado'])
+  plano.tem_holding = escolher([true, false, null, 'x'])
+  plano.tem_testamento = escolher([true, false, null])
+  plano.herdeiros_menores = escolher([true, false, null])
+  plano.previdencia_tipo = escolher(['VGBL', 'PGBL', 'Ambos', '', null, 'x'])
+  plano.fumante = escolher([true, false, null, 'sim'])
+  plano.idade_aposentadoria = escolher(['', null, 55, 65, 90, 200, -3, 'abc'])
   for (const c of CLASSES_PATRIMONIO) plano[c.campo] = v()
   // filhos: da lista vazia à lista com lixo dentro
   plano.dependentes = escolher([
@@ -100,9 +108,13 @@ function numerosImpossiveis(no, caminho = '') {
 console.log(`Motor do estudo: ${CASOS} combinações (semente ${process.env.SEMENTE ?? 20260807})`)
 for (let i = 0; i < CASOS; i++) {
   const plano = planoAleatorio()
+  const nascimento = escolher([
+    null, '', '1985-03-18', '1960-12-01', '2005-07-09', '1948-01-31',
+    '9999-99-99', 'não é data', '2030-01-01',
+  ])
   let e
   try {
-    e = calcularEstudo(plano)
+    e = calcularEstudo(plano, { dataNascimento: nascimento })
   } catch (err) {
     registrar(i, `explodiu: ${err.message}`)
     continue
@@ -147,6 +159,43 @@ for (let i = 0; i < CASOS; i++) {
   }
   for (const c of e.ativas) {
     if (!(c.valor > 0)) registrar(i, `cobertura ativa ${c.id} com valor ${c.valor}`)
+  }
+  // ── idade, sucessão e previdência ──
+  if (e.idade != null && (e.idade < 0 || e.idade > 120)) {
+    registrar(i, `idade ${e.idade} fora de 0..120`)
+  }
+  if (e.sucessao.baseInventario > e.bensInventariaveis + eps) {
+    registrar(i, `base do inventário ${e.sucessao.baseInventario} > bens ${e.bensInventariaveis}`)
+  }
+  if (e.sucessao.meacao > 0 && e.sucessao.meacaoPotencial > 0) {
+    registrar(i, 'meação certa e potencial ao mesmo tempo — são excludentes')
+  }
+  if (e.sucessao.custasEfetivas > e.custas + eps) {
+    registrar(i, `custas efetivas ${e.sucessao.custasEfetivas} > custas informadas ${e.custas}`)
+  }
+  if (![6, 18].includes(e.sucessao.prazoInventarioMeses)) {
+    registrar(i, `prazo de inventário ${e.sucessao.prazoInventarioMeses} fora do esperado`)
+  }
+  if (e.previdenciaLiquida > e.previdencia + eps) {
+    registrar(i, `previdência líquida ${e.previdenciaLiquida} > bruta ${e.previdencia}`)
+  }
+  if (e.previdencia > 0 && e.previdenciaLiquida < e.previdencia * 0.85) {
+    registrar(i, `IR da previdência mordeu demais: ${e.previdenciaLiquida} de ${e.previdencia}`)
+  }
+  if (e.janelaProtecao && (e.janelaProtecao.anos < 1 || e.janelaProtecao.anos > 60)) {
+    registrar(i, `janela de proteção ${e.janelaProtecao.anos} fora de 1..60`)
+  }
+  if (e.custoDaEspera) {
+    if (e.custoDaEspera.estimativa !== true) registrar(i, 'custo da espera sem a marca de estimativa')
+    let anterior = e.custoDaEspera.mensalHoje
+    for (const c of e.custoDaEspera.cenarios) {
+      // esperar nunca pode sair mais barato, e a curva tem que ser monótona
+      if (c.mensal < anterior - eps) {
+        registrar(i, `custo da espera não é monótono: ${anterior} → ${c.mensal}`)
+      }
+      if (c.idadeNaEpoca > 80) registrar(i, `cenário de espera aos ${c.idadeNaEpoca} anos`)
+      anterior = c.mensal
+    }
   }
   for (const inc of e.inconsistencias) {
     if (typeof inc.texto !== 'string' || inc.texto.trim() === '') registrar(i, 'inconsistência sem texto')

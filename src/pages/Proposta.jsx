@@ -84,7 +84,7 @@ export default function Proposta({ publica = false }) {
       // security definer (migração 017) devolve só o plano e o nome dele
       supabase.rpc('fn_proposta_carregar', { p_token: token }).then(({ data, error }) => {
         if (error || !data || data.erro) setDados({ naoEncontrada: true })
-        else setDados({ cliente: { nome: data.cliente_nome }, plano: data.plano })
+        else setDados({ cliente: { nome: data.cliente_nome, idade: data.cliente_idade }, plano: data.plano })
       })
     } else {
       Promise.all([
@@ -130,7 +130,7 @@ export default function Proposta({ publica = false }) {
     setTimeout(() => setCopiado(false), 2000)
   }
 
-  const e = calcularEstudo(plano)
+  const e = calcularEstudo(plano, { dataNascimento: cliente.data_nascimento, idade: cliente.idade })
   const primeiroNome = cliente.nome.split(' ')[0]
   const temPatrimonio = e.patrimonioBruto > 0
   const temGap = e.tem014 && e.coberturaAtual > 0
