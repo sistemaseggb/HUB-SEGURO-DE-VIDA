@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, MessageCircle, Presentation, Copy, Check, Printer,
@@ -143,7 +143,9 @@ export default function ClienteDetalhe() {
               )}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          {/* flex-wrap: no celular esta fileira (etapa + 4 botões) media 615px
+              num visor de 375 e empurrava a página inteira para o lado */}
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <Select
               value={cliente.status_funil}
               onChange={async (e) => {
@@ -424,16 +426,39 @@ function CampoCobertura({ cob, estudo, plano, setPlano }) {
   )
 }
 
+// Rascunhos em memória, por cliente. Quando a consultora sai da aba com algo
+// não salvo, guardamos aqui além de mandar para o banco: se ela voltar antes
+// da gravação terminar, a tela remonta com o que ela digitou, e não com a
+// versão antiga que o banco ainda responderia.
+const rascunhosPlano = new Map()
+const ESPERA_AUTOSALVAR = 1800
+
 function AbaPlanejamento({ idCliente }) {
   const toast = useToast()
   const [plano, setPlano] = useState(null)
   const [colunas, setColunas] = useState(null)
-  const [salvo, setSalvo] = useState(false)
+  const [estadoSalvar, setEstadoSalvar] = useState('ocioso')
+  const [salvoEm, setSalvoEm] = useState(null)
+  // JSON do último payload gravado — a régua para saber o que ainda falta salvar
+  const salvoRef = useRef(null)
+  // o que está pendente agora, lido pela descarga ao desmontar a aba
+  const pendenteRef = useRef(null)
+  const sujoRef = useRef(false)
+  const planoRef = useRef(null)
+  const gravarRef = useRef(null)
+  // qual cliente serviu de base para salvoRef (protege contra troca de cliente)
+  const baseRef = useRef(null)
+  // payload que o banco recusou: não insistimos nele sozinhos, só se ela mudar algo
+  const erroRef = useRef(null)
 
   useEffect(() => {
     // Migrações são aplicadas à mão no Supabase: perguntamos ao banco quais
     // colunas existem antes de montar o formulário. Assim uma instalação
     // atrasada continua funcionando, só com menos blocos.
+    // troca de cliente volta para o carregando: nunca renderizamos o
+    // formulário de um cliente com os dados de outro
+    setPlano(null)
+    setColunas(null)
     const probe = (coluna) => supabase.from('planejamentos').select(coluna).limit(1)
       .then(({ error }) => !error)
     Promise.all([
@@ -441,6 +466,19 @@ function AbaPlanejamento({ idCliente }) {
       probe('capital_invalidez'), probe('premio_estimado'), probe('tipo_planejamento'),
     ]).then(([{ data }, tem014, tem015, tem019]) => {
       setColunas({ tem014, tem015, tem019 })
+      // Rascunho local vence a resposta do banco quando é mais recente que a
+      // linha lida — cobre tanto a gravação ainda em voo quanto a volta rápida
+      // para a aba. Se outra tela (a Transcrição, por exemplo) gravou depois,
+      // o updated_at da linha é maior e o banco vence.
+      const rascunho = rascunhosPlano.get(String(idCliente))
+      if (rascunho) {
+        const gravadoEm = Date.parse(data?.updated_at ?? '')
+        if (!Number.isFinite(gravadoEm) || gravadoEm <= rascunho.em) {
+          setPlano(rascunho.plano)
+          return
+        }
+        rascunhosPlano.delete(String(idCliente))
+      }
       setPlano(data ?? {
         id_cliente: idCliente, profissao: '', estado_civil: '', renda_mensal: '',
         custo_vida_mensal: '', patrimonio_total: '', dividas_total: '',
@@ -457,6 +495,37 @@ function AbaPlanejamento({ idCliente }) {
       })
     })
   }, [idCliente])
+
+  // Grava sozinho pouco depois que ela para de digitar. Reagimos também ao
+  // estadoSalvar: quando uma gravação termina e ainda há coisa nova, o efeito
+  // roda de novo e agenda a próxima — nada fica preso atrás de um upsert.
+  useEffect(() => {
+    if (!sujoRef.current || estadoSalvar === 'salvando') return
+    if (erroRef.current !== null && erroRef.current === JSON.stringify(pendenteRef.current)) return
+    const t = setTimeout(() => {
+      if (sujoRef.current && pendenteRef.current) {
+        gravarRef.current?.(pendenteRef.current, { silencioso: true })
+      }
+    }, ESPERA_AUTOSALVAR)
+    return () => clearTimeout(t)
+  }, [plano, estadoSalvar])
+
+  // Sair da aba (ou do cliente) descarrega o que estiver pendente. Não mexemos
+  // em estado aqui: o componente já está indo embora.
+  useEffect(() => () => {
+    const payload = pendenteRef.current
+    if (!sujoRef.current || !payload) return
+    rascunhosPlano.set(String(idCliente), { plano: planoRef.current, em: Date.now() })
+    supabase.from('planejamentos').upsert(payload, { onConflict: 'id_cliente' })
+      .then(() => {}, () => {})
+  }, [idCliente])
+
+  // Fechar o navegador com algo pendente pede confirmação.
+  useEffect(() => {
+    const aviso = (e) => { if (sujoRef.current) { e.preventDefault(); e.returnValue = '' } }
+    window.addEventListener('beforeunload', aviso)
+    return () => window.removeEventListener('beforeunload', aviso)
+  }, [])
 
   if (!plano || !colunas) return <Spinner />
 
@@ -489,8 +558,10 @@ function AbaPlanejamento({ idCliente }) {
     }))
     .filter((g) => g.itens.length > 0)
 
-  async function salvar(e) {
-    e.preventDefault()
+  // Monta o que vai para o banco a partir do estado atual. É função pura de
+  // propósito: o autosalvamento compara o JSON dela para saber se há mudança
+  // pendente, e a descarga ao sair da aba grava exatamente este objeto.
+  function montarPayload() {
     // limpa linhas vazias e normaliza os tipos antes de gravar o jsonb
     const filhosLimpos = filhos
       .filter((f) => String(f?.nome ?? '').trim() !== ''
@@ -567,13 +638,53 @@ function AbaPlanejamento({ idCliente }) {
         forma_pagamento: plano.forma_pagamento || 'mensal',
       }),
     }
-    const { data, error } = await supabase.from('planejamentos').upsert(payload, { onConflict: 'id_cliente' })
-      .select().single()
-    if (error) return toast.erro(`Erro ao salvar: ${error.message}`)
-    if (data) setPlano(data)
-    setSalvo(true)
-    toast.ok('Planejamento salvo.')
-    setTimeout(() => setSalvo(false), 2500)
+    return payload
+  }
+
+  // ── Autosalvamento ────────────────────────────────────────────────────────
+  // Este formulário tem quase cem campos e é preenchido AO VIVO, durante a
+  // reunião. Antes, um clique em outra aba jogava fora tudo que estava
+  // digitado. Agora o rascunho se grava sozinho quando ela para de digitar, é
+  // descarregado ao sair da aba e o navegador avisa antes de fechar com algo
+  // pendente. O botão continua ali para quem quer salvar na hora.
+  const payloadAtual = montarPayload()
+  const payloadJSON = JSON.stringify(payloadAtual)
+  // Primeira renderização com dados: o que veio do banco vira a régua.
+  if (baseRef.current !== idCliente) {
+    baseRef.current = idCliente
+    salvoRef.current = payloadJSON
+  }
+  const sujo = salvoRef.current !== payloadJSON
+  planoRef.current = plano
+  pendenteRef.current = payloadAtual
+  sujoRef.current = sujo
+
+  async function gravar(payload, { silencioso } = {}) {
+    const json = JSON.stringify(payload)
+    setEstadoSalvar('salvando')
+    const { data, error } = await supabase.from('planejamentos')
+      .upsert(payload, { onConflict: 'id_cliente' }).select().single()
+    if (error) {
+      erroRef.current = json
+      setEstadoSalvar('erro')
+      if (!silencioso) toast.erro(`Erro ao salvar: ${error.message}`)
+      return false
+    }
+    erroRef.current = null
+    rascunhosPlano.delete(String(idCliente))
+    salvoRef.current = json
+    sujoRef.current = pendenteRef.current !== payload
+    setSalvoEm(new Date())
+    setEstadoSalvar('salvo')
+    // no autosalvamento não reescrevemos o estado: a consultora pode estar
+    // digitando neste exato momento e o cursor pularia
+    if (!silencioso && data) setPlano(data)
+    return true
+  }
+
+  async function salvar(e) {
+    e.preventDefault()
+    if (await gravar(montarPayload())) toast.ok('Planejamento salvo.')
   }
 
   // Prontidão da proposta: o que já dá para apresentar e o que ainda pega mal
@@ -1288,12 +1399,62 @@ function AbaPlanejamento({ idCliente }) {
             <Textarea value={plano.observacoes_reuniao ?? ''} onChange={set('observacoes_reuniao')} rows={4} />
           </Campo>
         </div>
-        <div className="mt-4 flex items-center gap-3">
-          <Button type="submit">Salvar planejamento</Button>
-          {salvo && <span className="flex items-center gap-1 text-sm text-emerald-600"><Check size={15} /> Salvo!</span>}
+        {/* Barra de ação fixa: o formulário é longo e é preenchido durante a
+            reunião — salvar e gerar a proposta ficam sempre ao alcance, sem
+            precisar rolar até o fim. */}
+        <div className="sticky bottom-0 z-20 -mx-5 mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white/95 px-5 py-3 backdrop-blur">
+          <EstadoSalvamento estado={estadoSalvar} sujo={sujo} em={salvoEm} />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit">Salvar planejamento</Button>
+            <Link to={`/proposta/${idCliente}`}>
+              <Button type="button" variant="secondary"><Presentation size={16} /> Proposta</Button>
+            </Link>
+          </div>
         </div>
       </form>
     </Card>
+  )
+}
+
+// Diz, em uma linha, se o trabalho está guardado. Como o formulário se salva
+// sozinho, a consultora precisa ver isso sem ter que confiar na memória.
+function EstadoSalvamento({ estado, sujo, em }) {
+  const hora = em
+    ? em.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : null
+  if (estado === 'erro') {
+    return (
+      <span className="flex items-center gap-1 text-sm text-red-600">
+        <AlertTriangle size={15} /> Não consegui salvar — clique em salvar para tentar de novo
+      </span>
+    )
+  }
+  if (estado === 'salvando') {
+    return (
+      <span className="flex items-center gap-1 text-sm text-slate-500">
+        <RefreshCw size={15} className="animate-spin" /> Salvando…
+      </span>
+    )
+  }
+  if (sujo) {
+    return (
+      <span className="flex items-center gap-1 text-sm text-slate-400">
+        <Clock3 size={15} /> Alterações não salvas — guardo sozinho em instantes
+      </span>
+    )
+  }
+  if (estado === 'salvo') {
+    return (
+      <span className="flex items-center gap-1 text-sm text-emerald-600">
+        <Check size={15} /> Salvo{hora ? ` às ${hora}` : ''}
+      </span>
+    )
+  }
+  // nada mudou desde que a tela abriu — o que está aqui já está no banco
+  return (
+    <span className="flex items-center gap-1 text-sm text-slate-400">
+      <Check size={15} /> Tudo salvo — o rascunho se guarda sozinho
+    </span>
   )
 }
 

@@ -86,16 +86,24 @@ export default function MapaPatrimonio({ estudo, titulo = true, compacto = false
 
         {/* Régua: onde termina o que fica travado */}
         {livres.length > 0 && travadas.length > 0 && (
-          <div className="mt-1 flex w-full gap-0.5 text-[10px] uppercase tracking-wide text-slate-400">
-            {/* sem truncate: os blocos podem ser estreitos, e o texto de cada
-                lado corre para fora do próprio bloco sem colidir com o outro */}
-            <div style={{ width: `${pct(estudo.bensInventariaveis)}%` }}
-              className="whitespace-nowrap border-t border-slate-200 pt-1">
-              travado · {brlCompacto(estudo.bensInventariaveis)}
+          <div className="mt-1">
+            {/* A régua é só o traço, na proporção exata do que trava e do que
+                fica livre. Os rótulos vão numa linha própria, nas pontas: se
+                ficassem dentro dos blocos, um bloco estreito com texto sem
+                quebra empurraria a rolagem horizontal da página no celular. */}
+            <div className="flex w-full gap-0.5">
+              <div style={{ width: `${pct(estudo.bensInventariaveis)}%` }}
+                className="min-w-0 border-t border-slate-200" />
+              <div style={{ width: `${pct(total - estudo.bensInventariaveis)}%` }}
+                className="min-w-0 border-t border-emerald-200" />
             </div>
-            <div style={{ width: `${pct(total - estudo.bensInventariaveis)}%` }}
-              className="whitespace-nowrap border-t border-emerald-200 pt-1 text-right text-emerald-600">
-              livre · {brlCompacto(total - estudo.bensInventariaveis)}
+            <div className="mt-1 flex items-baseline justify-between gap-3 text-[10px] uppercase tracking-wide">
+              <span className="min-w-0 truncate text-slate-400">
+                travado · {brlCompacto(estudo.bensInventariaveis)}
+              </span>
+              <span className="min-w-0 truncate text-emerald-600">
+                livre · {brlCompacto(total - estudo.bensInventariaveis)}
+              </span>
             </div>
           </div>
         )}
@@ -131,8 +139,11 @@ export default function MapaPatrimonio({ estudo, titulo = true, compacto = false
         </p>
       )}
 
-      {/* versão em texto para leitores de tela */}
-      <table className="sr-only">
+      {/* Versão em texto para leitores de tela. O sr-only vai no <div>, não na
+          <table>: tabela cresce até o conteúdo mesmo com width:1px e acabava
+          empurrando a rolagem horizontal da página no celular. */}
+      <div className="sr-only">
+      <table>
         <caption>Composição do patrimônio por classe</caption>
         <thead><tr><th>Classe</th><th>Valor</th><th>Participação</th><th>Inventário</th></tr></thead>
         <tbody>
@@ -144,6 +155,7 @@ export default function MapaPatrimonio({ estudo, titulo = true, compacto = false
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }

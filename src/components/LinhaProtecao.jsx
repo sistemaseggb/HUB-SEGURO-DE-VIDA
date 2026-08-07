@@ -198,16 +198,20 @@ export default function LinhaProtecao({ estudo, altura = 200, titulo = true }) {
         )}
       </div>
 
-      {/* versão em texto para leitores de tela */}
-      <table className="sr-only">
-        <caption>Custo mensal garantido pelo plano por ano</caption>
-        <thead><tr><th>Ano</th><th>Família</th><th>Filhos</th></tr></thead>
-        <tbody>
-          {serie.filter((s) => s.t % passoTick === 0).map((s) => (
-            <tr key={s.t}><td>{anoAtual + s.t}</td><td>{brl(s.base)}</td><td>{brl(s.filhos)}</td></tr>
-          ))}
-        </tbody>
-      </table>
+      {/* Versão em texto para leitores de tela. O sr-only vai no <div>, não na
+          <table>: tabela cresce até o conteúdo mesmo com width:1px e acabava
+          empurrando a rolagem horizontal da página no celular. */}
+      <div className="sr-only">
+        <table>
+          <caption>Custo mensal garantido pelo plano por ano</caption>
+          <thead><tr><th>Ano</th><th>Família</th><th>Filhos</th></tr></thead>
+          <tbody>
+            {serie.filter((s) => s.t % passoTick === 0).map((s) => (
+              <tr key={s.t}><td>{anoAtual + s.t}</td><td>{brl(s.base)}</td><td>{brl(s.filhos)}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

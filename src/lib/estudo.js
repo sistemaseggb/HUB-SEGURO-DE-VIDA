@@ -41,8 +41,35 @@ const n = (v) => {
   return Number.isFinite(x) ? x : 0
 }
 
-// Campo numérico "definido pela consultora": vazio/null = usar a sugestão
-const definido = (v) => v != null && v !== '' && Number.isFinite(Number(v))
+// Campo numérico "definido pela consultora": vazio/null = usar a sugestão.
+// Booleano e texto em branco não contam como valor — vieram de um campo vazio.
+const definido = (v) => v != null && typeof v !== 'boolean'
+  && String(v).trim() !== '' && Number.isFinite(Number(v))
+
+// ─── Blindagem da entrada ────────────────────────────────────────────────────
+// Um "-5" digitado por engano num campo de dinheiro não pode virar capital de
+// morte negativo na proposta do cliente, e um zero a mais colado não pode
+// estourar o layout com um número de vinte dígitos. Toda quantidade que entra
+// no estudo passa por aqui; o que sai errado é sinalizado na conferência, não
+// escondido (ver `inconsistencias`).
+const TETO_VALOR = 1e12          // R$ 1 trilhão: acima disso é erro de digitação
+const TETO_ANOS = 60             // horizonte de proteção plausível
+const TETO_DIAS = 1095           // 3 anos de diárias
+
+// Quantidade em dinheiro: nunca negativa, nunca absurda
+const q = (v, teto = TETO_VALOR) => {
+  const x = Number(v)
+  if (!Number.isFinite(x) || x <= 0) return 0
+  return Math.min(x, teto)
+}
+// Percentual: sempre entre 0 e 100
+const pctVal = (v, padrao) => (definido(v) ? Math.min(Math.max(n(v), 0), 100) : padrao)
+// Contagem inteira dentro de uma faixa (anos, dias, idades)
+const inteiro = (v, padrao, min, max) => {
+  if (!definido(v)) return padrao
+  const x = Math.round(n(v))
+  return Math.min(Math.max(x, min), max)
+}
 
 // Idade em que o filho deixa de depender financeiramente (fim da faculdade)
 export const IDADE_INDEPENDENCIA = 24
@@ -238,10 +265,11 @@ export function normalizarFilhos(plano, anosProtecao) {
     .filter((f) => f && (String(f.nome ?? '').trim() !== ''
       || (f.idade !== '' && f.idade != null) || n(f.custo_mensal) > 0))
     .map((f) => {
-      const idade = f.idade === '' || f.idade == null ? null : n(f.idade)
-      const custoMensal = n(f.custo_mensal)
+      // idade fora de 0–120 é digitação errada, não um filho de -5 anos
+      const idade = definido(f.idade) ? Math.min(Math.max(Math.round(n(f.idade)), 0), 120) : null
+      const custoMensal = q(f.custo_mensal, 1e7)
       const anosRestantes = idade == null
-        ? (anosProtecao ?? 0)
+        ? Math.max(anosProtecao ?? 0, 0)
         : Math.max(IDADE_INDEPENDENCIA - idade, 0)
       return {
         nome: String(f.nome ?? '').trim(),
@@ -279,12 +307,12 @@ function mesesSustentados(recursoLiquido, custoBaseMensal, filhos) {
 export function calcularEstudo(plano) {
   if (!plano) return null
 
-  const renda = n(plano.renda_mensal)
-  const custoVida = n(plano.custo_vida_mensal)
-  const dividas = n(plano.dividas_total)
-  const anos = n(plano.anos_protecao) || 10
-  const itcmd = definido(plano.itcmd_pct) ? n(plano.itcmd_pct) : 4
-  const custas = definido(plano.custas_pct) ? n(plano.custas_pct) : 8
+  const renda = q(plano.renda_mensal)
+  const custoVida = q(plano.custo_vida_mensal)
+  const dividas = q(plano.dividas_total)
+  const anos = inteiro(plano.anos_protecao, 10, 1, TETO_ANOS) || 10
+  const itcmd = pctVal(plano.itcmd_pct, 4)
+  const custas = pctVal(plano.custas_pct, 8)
 
   const tipo = plano.tipo_planejamento || 'pf'
   const focos = Array.isArray(plano.focos) ? plano.focos : []
@@ -311,9 +339,9 @@ export function calcularEstudo(plano) {
   // Cada classe se comporta de um jeito no inventário e na hora de virar
   // dinheiro. Quem só tem o total antigo preenchido continua funcionando: as
   // classes ficam vazias e o estudo cai no patrimonio_total.
-  const classes = CLASSES_PATRIMONIO.map((c) => ({ ...c, valor: n(plano[c.campo]) }))
-  const totalDeclarado = n(plano.patrimonio_total)
-  const previdencia = n(plano.previdencia_saldo)
+  const classes = CLASSES_PATRIMONIO.map((c) => ({ ...c, valor: q(plano[c.campo]) }))
+  const totalDeclarado = q(plano.patrimonio_total)
+  const previdencia = q(plano.previdencia_saldo)
 
   // "Detalhado" depende só das classes de BENS. A previdência é um campo à
   // parte (e o mais fácil de preencher primeiro): se ela sozinha ligasse o
@@ -328,7 +356,7 @@ export function calcularEstudo(plano) {
   const patrimonioLiquido = patrimonioBruto - dividas
 
   // O que vira dinheiro rápido — e o que só vira vendendo
-  const investimentos = n(plano.patrimonio_investimentos)
+  const investimentos = q(plano.patrimonio_investimentos)
   const bensIliquidos = detalhado
     ? classes.filter((c) => c.inventario && !c.liquido).reduce((s, c) => s + c.valor, 0)
     : Math.max(totalDeclarado - investimentos, 0)
@@ -340,7 +368,7 @@ export function calcularEstudo(plano) {
   // Inventário: a base é só o que passa por ele. Previdência e seguro ficam
   // fora — esse é o ponto que a maioria dos clientes nunca ouviu.
   const custoInventario = bensInventariaveis * (itcmd + custas) / 100
-  const coberturaAtual = n(plano.cobertura_atual)
+  const coberturaAtual = q(plano.cobertura_atual)
   // Recursos que a família acessa em DIAS, sem alvará e sem inventário
   const liquidezImediata = previdencia + coberturaAtual
   const deficitLiquidez = Math.max(custoInventario - liquidezImediata, 0)
@@ -353,11 +381,11 @@ export function calcularEstudo(plano) {
     : custoVida * 12 * anos + dividas
 
   // ── Bloco empresarial ─────────────────────────────────────────────────────
-  const pjValuation = n(plano.pj_valuation)
-  const pjParticipacao = n(plano.pj_participacao_pct)
-  const pjLucro = n(plano.pj_lucro_anual)
-  const pjFaturamento = n(plano.pj_faturamento_anual)
-  const pjDividaAval = n(plano.pj_divida_avalizada)
+  const pjValuation = q(plano.pj_valuation)
+  const pjParticipacao = pctVal(plano.pj_participacao_pct, 0)
+  const pjLucro = q(plano.pj_lucro_anual)
+  const pjFaturamento = q(plano.pj_faturamento_anual)
+  const pjDividaAval = q(plano.pj_divida_avalizada)
   const pjQuota = pjValuation * pjParticipacao / 100
   // Sem lucro informado, estimamos a margem em 20% do faturamento — é a conta
   // que a consultora refaz com o contador, mas já dá o tamanho da conversa.
@@ -388,15 +416,15 @@ export function calcularEstudo(plano) {
   // ── Valores contratados: o que a consultora definiu, ou a sugestão ────────
   const valores = {}
   for (const c of COBERTURAS) {
-    valores[c.id] = definido(plano[c.campo]) ? n(plano[c.campo]) : (sugestoes[c.id] ?? 0)
+    valores[c.id] = definido(plano[c.campo]) ? q(plano[c.campo]) : q(sugestoes[c.id])
   }
 
   // Diárias: limite de dias e o total potencial em dinheiro (o que a cobertura
   // vale de verdade quando o pior acontece)
   const diarias = COBERTURAS.filter((c) => c.tipo === 'diaria').filter(disponivel).map((c) => {
-    const dias = definido(plano[c.campoDias]) ? n(plano[c.campoDias]) : c.diasPadrao
+    const dias = inteiro(plano[c.campoDias], c.diasPadrao, 1, TETO_DIAS)
     const franquia = c.campoFranquia
-      ? (definido(plano[c.campoFranquia]) ? n(plano[c.campoFranquia]) : c.franquiaPadrao)
+      ? inteiro(plano[c.campoFranquia], c.franquiaPadrao, 0, 365)
       : null
     return { id: c.id, valor: valores[c.id], dias, franquia, total: valores[c.id] * dias }
   })
@@ -427,13 +455,16 @@ export function calcularEstudo(plano) {
   // importâncias é a amplitude da apólice, mas morte e invalidez nunca pagam
   // juntas — e um cliente atento pergunta isso na reunião. Ter os cenários
   // calculados é o que sustenta a resposta.
+  // Só capitais que entram na importância segurada: as assistências são
+  // serviço, não indenização, e somá-las aqui faria o "maior cenário" passar
+  // do total contratado — que é justamente o número que ele deve respeitar.
   const soma = (ids) => ids.reduce((s, id) => {
-    const c = ativas.find((a) => a.id === id)
+    const c = ativas.find((a) => a.id === id && a.soma)
     return s + (c ? c.valor : 0)
   }, 0)
   const cenarios = {
-    morte: soma(['morte', 'sucessao', 'socios', 'homem_chave', 'aval', 'funeral_individual']),
-    morteAcidental: soma(['morte', 'morte_acidental', 'sucessao', 'socios', 'homem_chave', 'aval', 'funeral_individual']),
+    morte: soma(['morte', 'sucessao', 'socios', 'homem_chave', 'aval']),
+    morteAcidental: soma(['morte', 'morte_acidental', 'sucessao', 'socios', 'homem_chave', 'aval']),
     invalidez: soma(['invalidez', 'aval']),
     doencaGrave: soma(['doencas_graves']),
   }
@@ -488,8 +519,8 @@ export function calcularEstudo(plano) {
   }
 
   // ── O investimento: mensal E anual, o cliente escolhe ─────────────────────
-  const premioMensal = n(plano.premio_estimado)
-  const premioAnualCotado = n(plano.premio_anual)
+  const premioMensal = q(plano.premio_estimado, 1e7)
+  const premioAnualCotado = q(plano.premio_anual, 1e8)
   const formaPagamento = plano.forma_pagamento === 'anual' ? 'anual' : 'mensal'
   const investimento = premioMensal > 0 || premioAnualCotado > 0 ? (() => {
     // Uma das duas formas basta: a outra se deduz (12× o mensal, sem desconto).

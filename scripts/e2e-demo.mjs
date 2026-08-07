@@ -12,7 +12,7 @@
 // (formulário público de DPS pelo link, com validação e campo condicional).
 // Capturas em e2e-shots/.
 import { chromium } from 'playwright-core'
-import { existsSync, writeFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as XLSX from 'xlsx'

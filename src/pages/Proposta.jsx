@@ -99,7 +99,7 @@ export default function Proposta({ publica = false }) {
 
   if (dados.naoEncontrada) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 text-center">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 text-center">
         <Logo tamanho={48} />
         <p className="mt-6 text-lg font-semibold text-slate-800">Proposta não encontrada</p>
         <p className="mt-2 max-w-sm text-sm text-slate-500">
@@ -192,7 +192,7 @@ export default function Proposta({ publica = false }) {
       </div>
 
       {/* 1 · CAPA */}
-      <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-brand-800 via-brand-900 to-slate-900 p-8 text-center text-white print:min-h-0 print:py-24">
+      <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-brand-800 via-brand-900 to-slate-900 p-5 sm:p-8 text-center text-white print:min-h-0 print:py-24">
         <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-laranja-500/10 blur-3xl print:hidden" />
         <div className="pointer-events-none absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-gold-400/10 blur-3xl print:hidden" />
         <div className="relative"><Logo claro tamanho={64} /></div>
@@ -220,10 +220,10 @@ export default function Proposta({ publica = false }) {
       </section>
 
       {/* 2 · DIAGNÓSTICO — onde você está hoje */}
-      <section className="flex min-h-screen flex-col items-center justify-center bg-white p-8 print:min-h-0 print:py-24">
+      <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
         <p className={rotuloSecao}>O ponto de partida</p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">A vida de {primeiroNome} hoje</h2>
-        <div className="mt-10 grid w-full max-w-4xl grid-cols-2 gap-4 md:grid-cols-3">
+        <div className="mt-10 grid w-full max-w-4xl grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
           <Dado rotulo="Renda mensal" valor={e.renda > 0 ? brl(e.renda) : '—'} />
           <Dado rotulo="Custo de vida" valor={e.custoVida > 0 ? `${brl(e.custoVida)}/mês` : '—'} />
           <Dado rotulo="Patrimônio construído" valor={temPatrimonio ? brlCompacto(e.patrimonioBruto) : '—'} />
@@ -254,7 +254,7 @@ export default function Proposta({ publica = false }) {
       </section>
 
       {/* 3 · REENQUADRAMENTO — o slide que muda a cabeça do cliente */}
-      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 print:min-h-0 print:py-24">
+      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
         <p className={rotuloSecao}>Antes de tudo, uma verdade</p>
         <h2 className="mt-3 max-w-3xl text-center text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">
           Seguro de vida não é sobre morrer.<br />
@@ -281,7 +281,7 @@ export default function Proposta({ publica = false }) {
 
       {/* 4 · QUANTO TEMPO — a pergunta que abre os olhos */}
       {e.mesesComPlano != null && e.mesesVendendoTudo != null && (
-        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-8 print:min-h-0 print:py-24">
+        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>A pergunta central</p>
           <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
             Se a renda parasse hoje, por quanto tempo a família manteria o padrão de vida?
@@ -322,7 +322,7 @@ export default function Proposta({ publica = false }) {
       )}
 
       {/* 5 · O NÚMERO */}
-      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 text-center print:min-h-0 print:py-24">
+      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 text-center print:min-h-0 print:py-24">
         <p className={rotuloSecao}>A proteção recomendada</p>
         <p className="mt-6 font-display text-6xl font-semibold tracking-tight text-slate-900 tabular md:text-8xl">{brlCompacto(e.valores.morte)}</p>
         <p className="mt-3 text-xl text-slate-400 tabular">{brl(e.valores.morte)}</p>
@@ -344,7 +344,7 @@ export default function Proposta({ publica = false }) {
 
       {/* 6 · O FUTURO DOS FILHOS — o gasto de hoje tem data para acabar */}
       {e.filhos.some((f) => f.custoMensal > 0) && (
-        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-8 print:min-h-0 print:py-24">
+        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>O futuro dos filhos</p>
           <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
             Cada filho protegido até os {IDADE_INDEPENDENCIA} anos — nem um dia a menos
@@ -380,7 +380,7 @@ export default function Proposta({ publica = false }) {
 
       {/* 7 · RAIO-X DO PATRIMÔNIO — o que a família consegue usar de verdade */}
       {temRaioX && (
-        <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 print:min-h-0 print:py-24">
+        <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>Raio-X do patrimônio</p>
           <h2 className="mt-3 max-w-3xl text-center text-3xl font-semibold tracking-tight text-slate-900">
             Você construiu {brlCompacto(e.patrimonioBruto)}.
@@ -417,7 +417,7 @@ export default function Proposta({ publica = false }) {
 
       {/* 8 · SUCESSÃO — o custo do inventário e o déficit de liquidez */}
       {e.tem014 && temPatrimonio && e.custoInventario > 0 && (
-        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-8 print:min-h-0 print:py-24">
+        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>Sucessão e blindagem patrimonial</p>
           <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
             O inventário custa caro — e só libera os bens depois de pago
@@ -483,7 +483,7 @@ export default function Proposta({ publica = false }) {
 
       {/* 9 · PLANEJAMENTO EMPRESARIAL */}
       {temEmpresa && (
-        <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 print:min-h-0 print:py-24">
+        <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>Planejamento empresarial</p>
           <h2 className="mt-3 max-w-3xl text-center text-3xl font-semibold tracking-tight text-slate-900">
             A empresa não pode parar — e a sua família não pode virar sócia de ninguém
@@ -528,7 +528,7 @@ export default function Proposta({ publica = false }) {
 
       {/* 10 · O GAP — quanto falta */}
       {temGap && (
-        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-8 print:min-h-0 print:py-24">
+        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>O que falta</p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
             {e.gap > 0 ? 'A proteção atual não cobre o plano' : 'A proteção atual está no alvo'}
@@ -554,7 +554,7 @@ export default function Proposta({ publica = false }) {
       )}
 
       {/* 11 · O PLANO COMPLETO — o quadro da apólice, logo antes do preço */}
-      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 print:min-h-0 print:py-24">
+      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
         <p className={rotuloSecao}>Seu plano completo</p>
         <h2 className="mt-3 text-center text-3xl font-semibold tracking-tight text-slate-900">
           Tudo que {primeiroNome} passa a ter
@@ -563,7 +563,9 @@ export default function Proposta({ publica = false }) {
           {/* Quadro de coberturas, agrupado. Com muitas coberturas o quadro vira
               duas colunas e some com a descrição de cada linha — num slide, a
               lista precisa caber inteira na tela sem rolagem. */}
-          <div className={denso ? 'columns-2 gap-5 [&>div]:break-inside-avoid' : 'space-y-4'}>
+          {/* as duas colunas só a partir de sm: no celular cada cartão precisa
+              da largura inteira, senão a lista empurra a página para o lado */}
+          <div className={denso ? 'gap-5 sm:columns-2 [&>div]:break-inside-avoid' : 'space-y-4'}>
             {grupos.map((g) => (
               <div key={g.id} className={denso ? 'mb-4' : ''}>
                 <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">{g.rotulo}</p>
@@ -645,7 +647,7 @@ export default function Proposta({ publica = false }) {
 
       {/* 12 · O INVESTIMENTO — mensal ou anual, a escolha é do cliente */}
       {inv && (
-        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-8 print:min-h-0 print:py-24">
+        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>O investimento</p>
           <h2 className="mt-3 text-center text-3xl font-semibold tracking-tight text-slate-900">
             Quanto custa proteger tudo isso?
@@ -718,7 +720,7 @@ export default function Proposta({ publica = false }) {
       )}
 
       {/* 13 · PRÓXIMOS PASSOS */}
-      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8 print:min-h-0 print:py-24">
+      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
         <p className={rotuloSecao}>Como ativamos o plano</p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Quatro passos simples</h2>
         <div className="mt-10 grid max-w-4xl gap-5 md:grid-cols-4">
@@ -740,7 +742,7 @@ export default function Proposta({ publica = false }) {
       </section>
 
       {/* 14 · FECHAMENTO */}
-      <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-brand-800 via-brand-900 to-slate-900 p-8 text-center text-white print:min-h-0 print:py-24">
+      <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-brand-800 via-brand-900 to-slate-900 p-5 sm:p-8 text-center text-white print:min-h-0 print:py-24">
         <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-gold-400/10 blur-3xl print:hidden" />
         <div className="relative mb-10"><Logo claro tamanho={52} /></div>
         <h2 className="relative max-w-2xl text-3xl font-semibold leading-snug tracking-tight md:text-4xl">
