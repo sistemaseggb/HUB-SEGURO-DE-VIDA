@@ -1,20 +1,24 @@
 // Testes de ponta a ponta do Hub em MODO DEMONSTRAÇÃO.
 //
 // Como rodar:
-//   1. npm run build && npm run preview   (sem .env → modo demo liga sozinho)
-//   2. npm run test:e2e                    (noutro terminal)
+//   npm run build && npm run test:e2e
 //
-// Cobre a visão da CONSULTORA (login, dashboard, pipeline, cliente 360 com
-// planejamento por pilares, apólices, DPS, proposta, relatórios, pós-venda,
-// agenda, mensagens, cadastros) e a visão do CLIENTE (formulário público de
-// DPS pelo link, com validação e campo condicional). Capturas em e2e-shots/.
+// A suíte sobe o `vite preview` sozinha se ele não estiver no ar (e reaproveita
+// um que já esteja rodando), então não precisa de dois terminais.
+//
+// Cobre a visão da CONSULTORA (login, dashboard, pipeline, cliente 360 com o
+// planejamento completo, transcrição da reunião, apólices, DPS, proposta,
+// relatórios, pós-venda, agenda, mensagens, cadastros) e a visão do CLIENTE
+// (formulário público de DPS pelo link, com validação e campo condicional).
+// Capturas em e2e-shots/.
 import { chromium } from 'playwright-core'
 import { existsSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as XLSX from 'xlsx'
 
-const BASE = process.env.E2E_BASE ?? 'http://localhost:4173'
+import { BASE, garantirServidor } from './e2e-servidor.mjs'
+await garantirServidor()
 const erros = []
 const consoleErros = []
 
@@ -98,6 +102,42 @@ await passo('Planejamento → bloco da empresa (PJ) e prêmio anual', async () =
 await passo('Planejamento → filhos com gasto até os 24', async () => {
   await page.waitForSelector('text=o gasto que tem prazo para acabar', { timeout: 5000 })
   await page.waitForSelector('text=Gasto com filhos hoje', { timeout: 3000 })
+})
+
+await passo('Cliente 360 → Transcrição: análise da reunião do Tactiq', async () => {
+  await page.click('button:has-text("Transcrição")')
+  await page.waitForSelector('text=Como usar a transcrição', { timeout: 6000 })
+  // abre a transcrição já salva no demo e confere a análise
+  await page.click('text=Abrir e reanalisar')
+  await page.waitForSelector('text=Como esta reunião foi conduzida', { timeout: 8000 })
+  await page.waitForSelector('text=O que dá para aplicar no planejamento', { timeout: 4000 })
+  for (const t of ['Renda mensal', 'Custo de vida mensal', 'Previdência', 'Filhos']) {
+    await page.waitForSelector(`text=${t}`, { timeout: 3000 })
+  }
+  await page.waitForSelector('text=Objeções e como responder', { timeout: 3000 })
+  await page.waitForSelector('text=Compromissos assumidos', { timeout: 3000 })
+  await page.waitForSelector('text=Resumo executivo', { timeout: 3000 })
+  await shot('05c-transcricao')
+})
+
+await passo('Transcrição → colar texto novo dispara a análise na hora', async () => {
+  await page.click('text=Limpar')
+  await page.fill('textarea', [
+    'Natália Maschendorf: Qual a sua renda hoje?',
+    'Cliente: Ganho R$ 18.000 por mês e gasto uns R$ 11 mil.',
+    'Natália Maschendorf: Quem depende de você?',
+    'Cliente: Meus filhos de 5 e 9 anos. Achei um pouco caro, vou pensar.',
+    'Natália Maschendorf: Vou te mandar a proposta amanhã.',
+  ].join('\n'))
+  await page.waitForSelector('text=Como esta reunião foi conduzida', { timeout: 6000 })
+  // os números falados viram campos aplicáveis ao planejamento.
+  // \s no lugar do espaço: o formato de moeda usa espaço não separável.
+  await page.waitForSelector('text=/R\\$\\s*18\\.000/', { timeout: 4000 })
+  await page.waitForSelector('text=/R\\$\\s*11\\.000/', { timeout: 3000 })
+  await page.waitForSelector('text=/filho\\(a\\) \\(5\\)/', { timeout: 3000 })
+  await page.waitForSelector('text=Preço / cabe no orçamento', { timeout: 3000 })
+  await page.click('button:has-text("Planejamento")')
+  await page.waitForTimeout(400)
 })
 
 await passo('Cliente 360 → Roteiro da reunião (script guiado)', async () => {

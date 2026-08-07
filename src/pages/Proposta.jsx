@@ -297,16 +297,18 @@ export default function Proposta({ publica = false }) {
               </Cenario>
             )}
             <Cenario tom="alerta" icone={Lock} etiqueta="Hoje, vendendo tudo"
-              numero={mesesNum(e.mesesVendendoTudo)} unidade={e.mesesVendendoTudo === 1 ? 'mês' : 'meses'}>
+              numero={mesesNum(e.mesesVendendoTudo)} unidade={e.mesesVendendoTudo === 1 ? 'mês' : 'meses'}
+              rodape={e.patrimonioBruto > 0 ? 'no fim: R$ 0 de patrimônio' : null}>
               Só que os bens <strong>ficam travados no inventário</strong> e, quando destravam, são
-              vendidos com pressa e deságio. No fim, <strong>não sobra patrimônio nenhum</strong>.
+              vendidos com pressa e deságio — este prazo custa <strong>tudo que você construiu</strong>.
             </Cenario>
             <Cenario tom="bom" icone={Heart}
               etiqueta={temTresCenarios ? 'Com o plano, sem vender nada' : 'Com o plano'}
-              numero={mesesNum(e.mesesComPlano)} unidade="meses">
-              O capital chega em dias, direto aos beneficiários — e no fim
-              {e.patrimonioBruto > 0 && <> os <strong>{brlCompacto(e.patrimonioBruto)}</strong> que você
-              construiu</>} {e.patrimonioBruto > 0 ? 'continuam' : 'o patrimônio continua'} com a família.
+              numero={mesesNum(e.mesesComPlano)} unidade="meses"
+              rodape={e.patrimonioBruto > 0
+                ? `no fim: ${brlCompacto(e.patrimonioBruto)} de patrimônio` : null}>
+              O capital chega em dias, direto aos beneficiários, e sustenta a casa sem que ninguém
+              precise vender nada — <strong>o patrimônio fica inteiro para a família</strong>.
             </Cenario>
           </div>
           <p className="mt-10 max-w-2xl text-center text-lg text-slate-600">
@@ -438,8 +440,19 @@ export default function Proposta({ publica = false }) {
               <p className="mt-1 text-sm font-semibold text-emerald-700">em dias, direto aos beneficiários</p>
               <p className="mt-2 text-sm text-emerald-900/80">
                 O capital do seguro <strong>não entra em inventário</strong> e é livre de ITCMD na maioria
-                dos estados. O valor é o mesmo da conta acima de propósito:{' '}
-                <strong>o plano cobre o custo exato</strong>, sem sobra e sem falta.
+                dos estados.{' '}
+                {Math.abs(e.valores.sucessao - e.custoInventario) < 1 ? (
+                  <>O valor é o mesmo da conta ao lado de propósito:{' '}
+                  <strong>o plano cobre o custo exato</strong>, sem sobra e sem falta.</>
+                ) : e.valores.sucessao >= e.custoInventario ? (
+                  <>Cobre a conta ao lado inteira e ainda deixa{' '}
+                  <strong>{brlCompacto(e.valores.sucessao - e.custoInventario)}</strong> de folga para
+                  a família se organizar.</>
+                ) : (
+                  <>Cobre <strong>{Math.round((e.valores.sucessao / e.custoInventario) * 100)}%</strong> da
+                  conta ao lado — o restante ({brlCompacto(e.custoInventario - e.valores.sucessao)}) sai
+                  do bolso da família.</>
+                )}
               </p>
             </div>
           </div>
@@ -790,15 +803,23 @@ const TOM_CENARIO = {
   bom: { caixa: 'border-emerald-100 bg-emerald-50/60', etiqueta: 'text-emerald-600', numero: 'text-emerald-600', texto: 'text-emerald-900/70', icone: 'text-emerald-500' },
 }
 
-function Cenario({ tom, icone: Icone, etiqueta, numero, unidade, children }) {
+function Cenario({ tom, icone: Icone, etiqueta, numero, unidade, rodape, children }) {
   const c = TOM_CENARIO[tom]
   return (
-    <div className={`rounded-2xl border p-7 text-center ${c.caixa}`}>
+    <div className={`flex flex-col rounded-2xl border p-7 text-center ${c.caixa}`}>
       <Icone size={26} className={`mx-auto ${c.icone}`} />
       <p className={`mt-3 text-xs font-semibold uppercase tracking-wide ${c.etiqueta}`}>{etiqueta}</p>
       <p className={`mt-2 font-display text-5xl font-semibold tabular ${c.numero}`}>{numero}</p>
       <p className={`text-sm ${c.texto}`}>{unidade}</p>
-      <p className={`mt-2 text-sm ${c.texto}`}>{children}</p>
+      <p className={`mt-2 flex-1 text-sm ${c.texto}`}>{children}</p>
+      {/* O tempo sozinho engana: vender tudo dura muito e termina em nada.
+          O rodapé diz o que sobra no fim, que é a comparação que importa. */}
+      {rodape && (
+        <p className={`mt-4 border-t pt-3 text-xs font-semibold uppercase tracking-wide ${c.etiqueta} ${
+          tom === 'bom' ? 'border-emerald-200' : tom === 'alerta' ? 'border-amber-200' : 'border-red-200'}`}>
+          {rodape}
+        </p>
+      )}
     </div>
   )
 }

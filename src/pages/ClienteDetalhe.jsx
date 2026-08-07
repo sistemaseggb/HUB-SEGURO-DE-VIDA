@@ -6,7 +6,7 @@ import {
   Phone, Mail, Handshake, StickyNote, Flame, ChartPie, HeartHandshake, RefreshCw, CheckCircle2,
   Users2, Wallet, Shield, Landmark, Sparkles, Plus, Baby, Archive, TrendingDown,
   ListChecks, Lightbulb, MessageSquareQuote, Clock3,
-  Building2, PiggyBank, Coins, HeartPulse, Ambulance, AlertTriangle,
+  Building2, PiggyBank, Coins, HeartPulse, Ambulance, AlertTriangle, FileAudio,
 } from 'lucide-react'
 import { ETAPAS_FORM, ROTULOS_FORM } from '../lib/formularioConfig'
 import { supabase } from '../lib/supabase'
@@ -20,13 +20,15 @@ import { BLOCOS_ROTEIRO } from '../lib/roteiro'
 import {
   Button, Card, Input, InputMoeda, Select, Textarea, Campo, Modal, Badge, Spinner, ComoFunciona,
 } from '../components/ui'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastContexto'
 import LinhaProtecao from '../components/LinhaProtecao'
 import MapaPatrimonio from '../components/MapaPatrimonio'
+import AbaTranscricao from './AbaTranscricao'
 
 const ABAS = [
   { nome: 'Planejamento', icone: ChartPie },
   { nome: 'Roteiro', icone: ListChecks },
+  { nome: 'Transcrição', icone: FileAudio },
   { nome: 'Interações', icone: MessageCircle },
   { nome: 'Reuniões', icone: CalendarPlus },
   { nome: 'Apólices', icone: FileSignature },
@@ -278,6 +280,7 @@ export default function ClienteDetalhe() {
 
       {aba === 'Planejamento' && <AbaPlanejamento idCliente={id} />}
       {aba === 'Roteiro' && <AbaRoteiro idCliente={id} cliente={cliente} />}
+      {aba === 'Transcrição' && <AbaTranscricao idCliente={id} cliente={cliente} />}
       {aba === 'Interações' && <AbaInteracoes idCliente={id} onMudanca={carregar} />}
       {aba === 'Reuniões' && <AbaReunioes idCliente={id} onMudanca={carregar} />}
       {aba === 'Apólices' && <AbaApolices idCliente={id} onMudanca={carregar} />}
@@ -888,9 +891,11 @@ function AbaPlanejamento({ idCliente }) {
                   <Metrica rotulo="Chega em dias" valor={brl(estudo.liquidezImediata)}
                     detalhe="previdência + seguro que já existe" tom="bom" />
                 </div>
-                <div className="mt-4 rounded-xl border border-slate-200/70 bg-white p-4">
-                  <MapaPatrimonio estudo={estudo} />
-                </div>
+                {estudo.detalhado && (
+                  <div className="mt-4 rounded-xl border border-slate-200/70 bg-white p-4">
+                    <MapaPatrimonio estudo={estudo} />
+                  </div>
+                )}
               </>
             )}
 
@@ -940,8 +945,10 @@ function AbaPlanejamento({ idCliente }) {
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <Metrica rotulo="Quota do cliente" valor={brl(estudo.pj.quota)}
                   detalhe={`${estudo.pj.participacao}% de ${brlCompacto(estudo.pj.valuation)}`} />
-                <Metrica rotulo="Capital de homem-chave" valor={brl(estudo.sugestoes.homem_chave)}
-                  detalhe={estudo.pj.lucro > 0 ? '2× o lucro anual' : '2× o lucro estimado (20% do faturamento)'} />
+                <Metrica rotulo="Capital de homem-chave" valor={brl(estudo.valores.homem_chave)}
+                  detalhe={estudo.valores.homem_chave !== estudo.sugestoes.homem_chave
+                    ? `definido por você · sugestão ${brlCompacto(estudo.sugestoes.homem_chave)}`
+                    : estudo.pj.lucro > 0 ? '2× o lucro anual' : '2× o lucro estimado (20% do faturamento)'} />
                 <Metrica rotulo="Exposição pelo aval" valor={brl(estudo.pj.dividaAval)}
                   detalhe="alcança o patrimônio pessoal" tom={estudo.pj.dividaAval > 0 ? 'ruim' : 'neutro'} />
               </div>

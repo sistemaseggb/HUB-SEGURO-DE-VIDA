@@ -27,7 +27,9 @@ const TINTA_CLARA = new Set(['#6aaed6', '#9ccbe6'])
 export default function MapaPatrimonio({ estudo, titulo = true, compacto = false }) {
   const [hover, setHover] = useState(null)
 
-  if (!estudo || estudo.patrimonioBruto <= 0) return null
+  // Sem a composição por classe não há o que desenhar: as fatias somariam
+  // menos que o patrimônio e todos os percentuais sairiam errados.
+  if (!estudo || !estudo.detalhado || estudo.patrimonioBruto <= 0) return null
 
   // Ordena: o que passa por inventário primeiro (do maior para o menor),
   // depois o que fica de fora. A leitura vai do travado para o livre.

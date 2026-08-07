@@ -312,15 +312,18 @@ export function calcularEstudo(plano) {
   // dinheiro. Quem só tem o total antigo preenchido continua funcionando: as
   // classes ficam vazias e o estudo cai no patrimonio_total.
   const classes = CLASSES_PATRIMONIO.map((c) => ({ ...c, valor: n(plano[c.campo]) }))
-  const somaClasses = classes.reduce((s, c) => s + c.valor, 0)
-  const detalhado = somaClasses > 0
   const totalDeclarado = n(plano.patrimonio_total)
-
   const previdencia = n(plano.previdencia_saldo)
+
+  // "Detalhado" depende só das classes de BENS. A previdência é um campo à
+  // parte (e o mais fácil de preencher primeiro): se ela sozinha ligasse o
+  // modo detalhado, o estudo passaria a ignorar o patrimonio_total e o
+  // patrimônio de quem só informou o saldo do VGBL despencaria.
+  const somaBens = classes.filter((c) => c.inventario).reduce((s, c) => s + c.valor, 0)
+  const detalhado = somaBens > 0
+
   // Bens que entram no inventário (tudo menos a previdência)
-  const bensInventariaveis = detalhado
-    ? classes.filter((c) => c.inventario).reduce((s, c) => s + c.valor, 0)
-    : totalDeclarado
+  const bensInventariaveis = detalhado ? somaBens : totalDeclarado
   const patrimonioBruto = bensInventariaveis + previdencia
   const patrimonioLiquido = patrimonioBruto - dividas
 
@@ -489,13 +492,22 @@ export function calcularEstudo(plano) {
   const premioAnualCotado = n(plano.premio_anual)
   const formaPagamento = plano.forma_pagamento === 'anual' ? 'anual' : 'mensal'
   const investimento = premioMensal > 0 || premioAnualCotado > 0 ? (() => {
-    // Uma das duas formas basta: a outra se deduz (12× o mensal, sem desconto)
+    // Uma das duas formas basta: a outra se deduz (12× o mensal, sem desconto).
+    // O desconto à vista só existe quando as DUAS foram cotadas — deduzir o
+    // mensal a partir do anual e comparar de volta produzia uma "economia" de
+    // centavos, vinda só do arredondamento, e um selo de "0% de desconto" na
+    // proposta que o cliente vê.
+    const cotouAmbos = premioMensal > 0 && premioAnualCotado > 0
     const mensal = premioMensal > 0 ? premioMensal : Math.round((premioAnualCotado / 12) * 100) / 100
-    const doze = mensal * 12
+    const doze = premioMensal > 0 ? premioMensal * 12 : premioAnualCotado
     const anual = premioAnualCotado > 0 ? premioAnualCotado : doze
-    const economiaAnual = Math.max(doze - anual, 0)
-    const descontoPct = doze > 0 && economiaAnual > 0
-      ? Math.round((economiaAnual / doze) * 1000) / 10 : null
+    // Um real de diferença não é desconto: é arredondamento de cotação.
+    const economiaBruta = cotouAmbos ? doze - anual : 0
+    const economiaAnual = economiaBruta >= 1 ? economiaBruta : 0
+    const pctBruto = doze > 0 && economiaAnual > 0
+      ? Math.round((economiaAnual / doze) * 1000) / 10 : 0
+    // abaixo de 0,1% o selo sairia como "0% de desconto"
+    const descontoPct = pctBruto >= 0.1 ? pctBruto : null
     const custoAnualEfetivo = formaPagamento === 'anual' ? anual : doze
     return {
       mensal,
@@ -552,7 +564,7 @@ export function calcularEstudo(plano) {
       texto: 'A soma do gasto com os filhos passou do custo de vida total. O custo de vida deve INCLUIR os filhos.',
     })
   }
-  if (detalhado && totalDeclarado > 0 && Math.abs(somaClasses - previdencia - totalDeclarado) > 1) {
+  if (detalhado && totalDeclarado > 0 && Math.abs(somaBens - totalDeclarado) > 1) {
     inconsistencias.push({
       grave: false, corrigir: 'patrimonio_total', valor: bensInventariaveis,
       texto: `O patrimônio total (${totalDeclarado.toLocaleString('pt-BR')}) não bate com a soma das classes (${bensInventariaveis.toLocaleString('pt-BR')}, sem previdência).`,

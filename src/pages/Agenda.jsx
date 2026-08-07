@@ -7,7 +7,7 @@ import { whatsapp, dataHoraBR, hojeLocal, diaLocal } from '../lib/format'
 import {
   PageHeader, Card, Button, Select, Input, Textarea, Campo, Modal, Spinner, EmptyState, ComoFunciona, Badge,
 } from '../components/ui'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastContexto'
 
 // Agenda: tudo que está marcado, agrupado por dia, com ação rápida de status.
 export default function Agenda() {

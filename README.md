@@ -38,8 +38,9 @@ e registrar os dados; o sistema cuida do resto.
 - **Pipeline** — Kanban com arrastar-e-soltar, dias parados com alerta
   amarelo/vermelho configurável, motivo obrigatório ao perder um cliente.
 - **Clientes** — perfil 360º com abas: Planejamento (dados da reunião),
-  Reuniões, Apólices, **Documentos** (anexos no Storage), Formulário de
-  onboarding, Tarefas e Histórico. Faixa de **Próxima Melhor Ação** e
+  Roteiro, **Transcrição** (análise da gravação do Tactiq), Reuniões, Apólices,
+  **Documentos** (anexos no Storage), Formulário de onboarding, Tarefas e
+  Histórico. Faixa de **Próxima Melhor Ação** e
   temperatura no topo. Botão **Gerar proposta** cria a apresentação.
 - **Proposta** — apresentação em tela cheia com navegação de deck (setas do
   teclado, bolinhas laterais, contador): capa, diagnóstico, "quanto tempo a
@@ -89,15 +90,18 @@ mesmo com `.env`, use `VITE_DEMO=1 npm run dev`.
 ### Testes de ponta a ponta
 
 ```bash
-npm run build && npm run preview   # terminal 1 (modo demo)
-npm run test:e2e                   # terminal 2
+npm run build && npm run test:e2e
 ```
 
-São duas suítes (31 verificações): a **principal** navega o sistema inteiro
-nas duas visões — consultora (login, dashboard, pipeline, cliente 360 com
-planejamento por pilares, apólices, DPS, proposta, relatórios com fechamento,
-pós-venda, agenda, mensagens, cadastros) e cliente (formulário público de DPS
-pelo link); a de **erros de usuário** ataca os caminhos que quebram sistemas:
+A suíte sobe o servidor de preview sozinha (e reaproveita um que já esteja
+rodando), então basta um terminal.
+
+São duas suítes (45 verificações): a **principal** navega o sistema inteiro
+nas duas visões — consultora (login, dashboard, pipeline, cliente 360 com o
+planejamento completo, transcrição da reunião, apólices, DPS, proposta,
+relatórios com fechamento, pós-venda, agenda, mensagens, cadastros) e cliente
+(formulário público de DPS pelo link); a de **erros de usuário** ataca os
+caminhos que quebram sistemas:
 link inválido, formulário já concluído, obrigatórios vazios, proposta sem
 planejamento, rota inexistente, venda com comissão automática, popups de
 dossiê/DPS, pendências de classificação, busca, exclusão com confirmação,
@@ -151,6 +155,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 17. [`supabase/migrations/017_proposta_publica.sql`](supabase/migrations/017_proposta_publica.sql)
 18. [`supabase/migrations/018_roteiro_reuniao.sql`](supabase/migrations/018_roteiro_reuniao.sql)
 19. [`supabase/migrations/019_planejamento_completo.sql`](supabase/migrations/019_planejamento_completo.sql)
+20. [`supabase/migrations/020_transcricoes_reuniao.sql`](supabase/migrations/020_transcricoes_reuniao.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -283,6 +288,15 @@ npm run dev
       além das diárias com limite de dias e franquia
 - [x] **Prêmio mensal e anual** lado a lado: o desconto à vista aparece na
       proposta com a economia calculada, e o cliente escolhe a forma
+- [x] **Transcrição da reunião** (migração 020): cole o texto do Tactiq (ou
+      solte o arquivo) e receba na hora o resumo executivo, os números que o
+      cliente falou prontos para aplicar no planejamento, as objeções com a
+      resposta sugerida, os compromissos virando tarefa e um raio-X de como a
+      reunião foi conduzida — tudo offline, sem chave de API
+- [x] Aprofundamento opcional com **Claude** (Edge Function `analisar-reuniao`):
+      perfil do cliente, dores com evidência, respostas sob medida e a
+      mensagem de follow-up pronta. Sem a chave configurada, a análise local
+      continua funcionando normalmente
 - [x] Apresentação renovada: logo do escritório (public/logo.png), slide de
       diagnóstico, raio-X patrimonial, sucessão com a conta do primeiro mês,
       planejamento empresarial, gap de cobertura e próximos passos
