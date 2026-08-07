@@ -173,6 +173,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 18. [`supabase/migrations/018_roteiro_reuniao.sql`](supabase/migrations/018_roteiro_reuniao.sql)
 19. [`supabase/migrations/019_planejamento_completo.sql`](supabase/migrations/019_planejamento_completo.sql)
 20. [`supabase/migrations/020_transcricoes_reuniao.sql`](supabase/migrations/020_transcricoes_reuniao.sql)
+21. [`supabase/migrations/021_planejamento_inteligente.sql`](supabase/migrations/021_planejamento_inteligente.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -313,6 +314,24 @@ npm run dev
 - [x] **Roteiro do preenchimento**: a espinha do estudo em uma linha — cada
       bloco com o que já está em pé ("renda R$ 48 mil", "13 na apólice") e um
       clique que leva direto até ele, na ordem da conversa com o cliente
+- [x] **A idade entra no estudo** (a data de nascimento já estava no cadastro e
+      nunca tinha sido lida): janela real de proteção — o mais longo entre o
+      filho mais novo virar adulto e o titular chegar à aposentadoria — e o
+      **preço de deixar para depois**, com a mesma apólice em 1, 3 e 5 anos
+      pela curva de agravamento por idade (estimativa, sempre rotulada)
+- [x] **Sucessão de verdade** (migração 021): herdeiro menor obriga rito
+      judicial (18 meses em vez de 6), holding corta as custas mas não o ITCMD,
+      testamento não antecipa o imposto, e a **meação** entra só quando é certa
+      — em comunhão parcial o estudo avisa quanto pode ser meação em vez de
+      descontar por conta própria
+- [x] **Previdência líquida de IR**: o extrato mostra o bruto, a família saca o
+      líquido. PGBL é tributado sobre o total resgatado, VGBL só sobre o
+      rendimento — e é o líquido que paga o inventário
+- [x] **Aposentadoria e acúmulo** deixa de ser só um foco na lista: meta de
+      capital, o que a previdência atual entrega projetada e líquida, a renda
+      que isso sustenta de verdade e quanto falta aportar por mês — com o elo
+      que ninguém faz: o aporte sai da renda, e sem invalidez coberta o plano
+      de acúmulo para junto com ela
 - [x] **Transcrição da reunião** (migração 020): cole o texto do Tactiq (ou
       solte o arquivo) e receba na hora o resumo executivo, os números que o
       cliente falou prontos para aplicar no planejamento, as objeções com a

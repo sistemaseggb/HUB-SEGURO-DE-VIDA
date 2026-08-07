@@ -147,6 +147,13 @@ function semear() {
     funeral_individual: 15_000, funeral_familiar: 15_000,
     // anual com 5% de desconto sobre as 12 parcelas de R$ 480
     premio_anual: 5_472, forma_pagamento: 'mensal',
+    // migração 021 — perfil de risco, aposentadoria e o que ele já tem
+    fumante: false, renda_desejada_aposentadoria: null, idade_aposentadoria: null,
+    seguros_existentes: [
+      { origem: 'consignado', descricao: 'Prestamista do financiamento do imóvel',
+        capital: 120_000, custeio: 'proprio' },
+    ],
+    quem_decide: null, prazo_decisao: null,
     token_proposta: 'demo-proposta-rodrigo', roteiro: {},
     created_at: iso(diasAtras(10)), updated_at: iso(diasAtras(2)),
   }, {
@@ -183,6 +190,16 @@ function semear() {
     funeral_individual: 20_000, funeral_familiar: 20_000,
     // anual com 10% de desconto sobre as 12 parcelas de R$ 1.890
     premio_anual: 20_412, forma_pagamento: 'anual',
+    // migração 021 — quer parar aos 60 com R$ 20 mil por mês; o seguro que ele
+    // tem hoje é da clínica, e acaba no dia em que ele sair de lá
+    fumante: false, renda_desejada_aposentadoria: 20_000, idade_aposentadoria: 60,
+    seguros_existentes: [
+      { origem: 'empresa', descricao: 'Vida em grupo da Cardiocare',
+        capital: 500_000, custeio: 'empresa' },
+      { origem: 'banco', descricao: 'Seguro do financiamento da sala comercial',
+        capital: 300_000, custeio: 'proprio' },
+    ],
+    quem_decide: 'Ele e a esposa, juntos', prazo_decisao: 'Quer decidir até o fim do mês',
     token_proposta: 'demo-proposta-carlos',
     roteiro: { blocos: {
       abertura: { feito: true, nota: 'Muito receptivo. Falou da clínica e dos dois filhos.' },

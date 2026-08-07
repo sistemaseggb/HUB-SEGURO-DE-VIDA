@@ -171,6 +171,53 @@ const IR_PREVIDENCIA_LONGO_PRAZO = 0.10
 // conservadora para um plano de alguns anos.
 const FRACAO_RENDIMENTO_PRESUMIDA = 1 / 3
 
+// ─── ACÚMULO E APOSENTADORIA ─────────────────────────────────────────────────
+// Taxa de juros REAL (acima da inflação) usada nas projeções de acúmulo e na
+// comparação "investir ou proteger". 4% ao ano é conservador para o Brasil no
+// longo prazo — quem quiser discutir a premissa discute UM número, aqui.
+// Ela aparece escrita na tela e no slide: projeção sem premissa à vista é
+// adivinhação.
+export const TAXA_REAL_ANUAL = 0.04
+
+// Taxa de retirada sustentável: quanto dá para sacar por ano de um capital
+// sem consumi-lo. É a mesma taxa real — retirar o rendimento mantém o
+// principal e a renda dura enquanto ele durar.
+const TAXA_RETIRADA = TAXA_REAL_ANUAL
+
+// Valor futuro de um saldo + aportes mensais, a juros reais compostos.
+function valorFuturo(saldoInicial, aporteMensal, anos, taxaAnual = TAXA_REAL_ANUAL) {
+  if (!(anos > 0)) return saldoInicial
+  const i = (1 + taxaAnual) ** (1 / 12) - 1
+  const meses = Math.round(anos * 12)
+  const doSaldo = saldoInicial * (1 + i) ** meses
+  const dosAportes = i > 0 ? aporteMensal * (((1 + i) ** meses - 1) / i) : aporteMensal * meses
+  return doSaldo + dosAportes
+}
+
+// Aporte mensal necessário para chegar a um capital em N anos.
+function aportePara(alvo, saldoInicial, anos, taxaAnual = TAXA_REAL_ANUAL) {
+  if (!(anos > 0)) return null
+  const i = (1 + taxaAnual) ** (1 / 12) - 1
+  const meses = Math.round(anos * 12)
+  const faltando = alvo - saldoInicial * (1 + i) ** meses
+  if (faltando <= 0) return 0
+  return i > 0 ? faltando / (((1 + i) ** meses - 1) / i) : faltando / meses
+}
+
+// Quantos anos de aporte mensal levam até um capital — a conta que responde
+// "prefiro investir": o seguro entrega esse valor amanhã de manhã.
+export function anosParaAcumular(alvo, aporteMensal, saldoInicial = 0, taxaAnual = TAXA_REAL_ANUAL) {
+  if (!(alvo > 0) || !(aporteMensal > 0)) return null
+  if (saldoInicial >= alvo) return 0
+  const i = (1 + taxaAnual) ** (1 / 12) - 1
+  let saldo = saldoInicial
+  for (let m = 1; m <= 12 * 100; m++) {
+    saldo = saldo * (1 + i) + aporteMensal
+    if (saldo >= alvo) return Math.round((m / 12) * 10) / 10
+  }
+  return null // mais de 100 anos: a resposta é "nunca", e a tela diz isso
+}
+
 // Teto das simulações de autonomia: acima disso o padrão de vida se sustenta
 // pelo resto da vida e o número deixa de significar alguma coisa.
 export const MESES_VITALICIO = 1200
@@ -766,6 +813,71 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
     return { idade, fumante, mensalHoje, cenarios, estimativa: true }
   })()
 
+  // ── Aposentadoria e acúmulo ───────────────────────────────────────────────
+  // O foco "aposentadoria" existia na lista e não tinha cálculo nenhum atrás.
+  // Aqui ele vira pilar: a meta, o que a previdência atual entrega já líquida
+  // de IR, e a lacuna. O elo que fecha a conversa está no fim: sem invalidez
+  // coberta, o plano de acúmulo para junto com a renda — porque o aporte sai
+  // da renda, e ela é que parou.
+  const rendaAposentadoria = q(plano.renda_desejada_aposentadoria, 1e7)
+  const aposentadoria = (() => {
+    const querAposentadoria = focos.includes('aposentadoria')
+    if (!querAposentadoria && !(rendaAposentadoria > 0)) return null
+    if (anosAteAposentar == null) return null
+
+    // Meta padrão: manter o padrão de vida atual, se ele não disse outro valor
+    const alvoMensal = rendaAposentadoria > 0 ? rendaAposentadoria : custoVida
+    if (!(alvoMensal > 0)) return null
+
+    // Capital que sustenta essa renda pela retirada do rendimento real
+    const capitalNecessario = (alvoMensal * 12) / TAXA_RETIRADA
+    // O que a previdência de hoje entrega lá na frente, já sem o IR
+    const projetadoBruto = valorFuturo(previdencia, previdenciaAporte, anosAteAposentar)
+    const projetadoLiquido = projetadoBruto * (1 - baseIRPrevidencia * IR_PREVIDENCIA_LONGO_PRAZO)
+    const lacuna = Math.max(capitalNecessario - projetadoLiquido, 0)
+    const aporteNecessario = aportePara(capitalNecessario, previdenciaLiquida, anosAteAposentar)
+
+    return {
+      alvoMensal,
+      idadeAlvo: idadeAposentar,
+      anos: anosAteAposentar,
+      taxaReal: TAXA_REAL_ANUAL,
+      capitalNecessario,
+      projetadoBruto,
+      projetadoLiquido,
+      lacuna,
+      // renda mensal que a previdência projetada sustenta de verdade
+      rendaProjetada: (projetadoLiquido * TAXA_RETIRADA) / 12,
+      aporteNecessario: aporteNecessario == null ? null : Math.round(aporteNecessario),
+      aporteAtual: previdenciaAporte,
+      faltaAportar: aporteNecessario == null ? null
+        : Math.max(Math.round(aporteNecessario - previdenciaAporte), 0),
+      // O acúmulo depende da renda continuar existindo: é aqui que o pilar de
+      // proteção e o de aposentadoria se encontram.
+      dependeDaRenda: previdenciaAporte > 0 && renda > 0,
+      cobreInvalidez: valores.invalidez > 0,
+    }
+  })()
+
+  // ── Investir ou proteger: quantos anos de aporte levariam até o capital ───
+  // Responde a "prefiro investir" sem brigar com a ideia — mostrando o prazo.
+  const acumularEmVezDeSegurar = (() => {
+    const alvo = valores.morte
+    const aporte = investimento?.mensal ?? 0
+    if (!(alvo > 0) || !(aporte > 0)) return null
+    const anosAcumulando = anosParaAcumular(alvo, aporte, recursosLiquidos)
+    return {
+      alvo,
+      aporteMensal: aporte,
+      partindoDe: recursosLiquidos,
+      taxaReal: TAXA_REAL_ANUAL,
+      // null = nem em 100 anos; a tela escreve isso em vez de um número
+      anos: anosAcumulando,
+      // o seguro entrega o valor cheio já no primeiro mês
+      mesesAteOSeguroValer: 1,
+    }
+  })()
+
   // ── Completude do estudo ──────────────────────────────────────────────────
   const camposChave = [
     ['renda_mensal', renda > 0],
@@ -884,6 +996,8 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
     coberturaAtual, gap, gapReal, mesesProtegidos, mesesLiquidos, mesesVendendoTudo,
     mesesComPlano, autonomiaAtualMeses, poupancaMensal, comprometimentoRenda,
     anosSugeridosPorFilhos, investimento, completude, inconsistencias,
+    // acúmulo
+    aposentadoria, acumularEmVezDeSegurar, taxaReal: TAXA_REAL_ANUAL,
     // compat: capital de morte + sucessão
     protecaoTotal: valores.morte + valores.sucessao,
   }

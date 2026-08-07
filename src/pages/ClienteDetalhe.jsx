@@ -4,7 +4,7 @@ import {
   ArrowLeft, MessageCircle, Presentation, Copy, Check, Printer,
   CalendarPlus, FileSignature, ClipboardList, Zap, Upload, FileText, Download, Trash2, Pencil,
   Phone, Mail, Handshake, StickyNote, Flame, ChartPie, HeartHandshake, RefreshCw, CheckCircle2,
-  Users2, Wallet, Shield, Landmark, Sparkles, Plus, Baby, Archive, TrendingDown,
+  Users2, Wallet, Shield, Landmark, Sparkles, Plus, Baby, Archive, TrendingDown, TrendingUp,
   ListChecks, Lightbulb, MessageSquareQuote, Clock3,
   Building2, PiggyBank, Coins, HeartPulse, Ambulance, AlertTriangle, FileAudio,
 } from 'lucide-react'
@@ -485,8 +485,9 @@ function AbaPlanejamento({ idCliente, cliente }) {
     Promise.all([
       supabase.from('planejamentos').select('*').eq('id_cliente', idCliente).maybeSingle(),
       probe('capital_invalidez'), probe('premio_estimado'), probe('tipo_planejamento'),
-    ]).then(([{ data }, tem014, tem015, tem019]) => {
-      setColunas({ tem014, tem015, tem019 })
+      probe('renda_desejada_aposentadoria'),
+    ]).then(([{ data }, tem014, tem015, tem019, tem021]) => {
+      setColunas({ tem014, tem015, tem019, tem021 })
       // Rascunho local vence a resposta do banco quando é mais recente que a
       // linha lida — cobre tanto a gravação ainda em voo quanto a volta rápida
       // para a aba. Se outra tela (a Transcrição, por exemplo) gravou depois,
@@ -513,6 +514,10 @@ function AbaPlanejamento({ idCliente, cliente }) {
         }),
         ...(tem015 && { premio_estimado: '' }),
         ...(tem019 && { tipo_planejamento: 'pf', focos: [] }),
+        ...(tem021 && {
+          fumante: false, renda_desejada_aposentadoria: '', idade_aposentadoria: '',
+          seguros_existentes: [], quem_decide: '', prazo_decisao: '',
+        }),
       })
     })
   }, [idCliente])
@@ -550,7 +555,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
 
   if (!plano || !colunas) return <Spinner />
 
-  const { tem014, tem015, tem019 } = colunas
+  const { tem014, tem015, tem019, tem021 } = colunas
   const estudo = calcularEstudo(plano, { dataNascimento: cliente?.data_nascimento })
   const set = (k) => (e) => setPlano({ ...plano, [k]: e.target.value })
   const setValor = (k, v) => setPlano({ ...plano, [k]: v })
@@ -591,6 +596,15 @@ function AbaPlanejamento({ idCliente, cliente }) {
         nome: String(f.nome ?? '').trim(),
         idade: f.idade === '' || f.idade == null ? null : Number(f.idade),
         custo_mensal: f.custo_mensal === '' || f.custo_mensal == null ? null : Number(f.custo_mensal),
+      }))
+    // apólices que ele já tem: linhas em branco não vão para o banco
+    const segurosLimpos = (Array.isArray(plano.seguros_existentes) ? plano.seguros_existentes : [])
+      .filter((s) => String(s?.descricao ?? '').trim() !== '' || Number(s?.capital) > 0)
+      .map((s) => ({
+        origem: s.origem || 'individual',
+        descricao: String(s.descricao ?? '').trim(),
+        capital: s.capital === '' || s.capital == null ? null : Number(s.capital),
+        custeio: s.custeio || 'proprio',
       }))
     const idades = filhosLimpos.map((f) => f.idade).filter((i) => i != null)
     // número vazio vira null (e não 0): null significa "usa a sugestão"
@@ -657,6 +671,14 @@ function AbaPlanejamento({ idCliente, cliente }) {
         funeral_familiar: num(plano.funeral_familiar),
         premio_anual: num(plano.premio_anual),
         forma_pagamento: plano.forma_pagamento || 'mensal',
+      }),
+      ...(tem021 && {
+        fumante: !!plano.fumante,
+        renda_desejada_aposentadoria: num(plano.renda_desejada_aposentadoria),
+        idade_aposentadoria: num(plano.idade_aposentadoria),
+        seguros_existentes: segurosLimpos,
+        quem_decide: plano.quem_decide || null,
+        prazo_decisao: plano.prazo_decisao || null,
       }),
     }
     return payload
@@ -753,6 +775,11 @@ function AbaPlanejamento({ idCliente, cliente }) {
       resumo: estudo.custoInventario > 0 ? `inventário ${brlCompacto(estudo.custoInventario)}` : 'depende do patrimônio' },
     { id: 'sec-coberturas', rotulo: 'Coberturas', icone: Shield, ok: estudo.ativas.length > 0,
       resumo: estudo.ativas.length > 0 ? `${estudo.ativas.length} na apólice` : 'nada montado ainda' },
+    tem021 && { id: 'sec-aposentadoria', rotulo: 'Aposentadoria', icone: TrendingUp,
+      ok: !!estudo.aposentadoria,
+      resumo: estudo.aposentadoria
+        ? `meta ${brlCompacto(estudo.aposentadoria.capitalNecessario)}`
+        : 'renda desejada e idade' },
     tem015 && { id: 'sec-investimento', rotulo: 'Investimento', icone: Coins, ok: !!estudo.investimento,
       resumo: estudo.investimento ? `${brl(estudo.investimento.mensal)}/mês` : 'prêmio cotado' },
   ].filter(Boolean)
@@ -1261,6 +1288,86 @@ function AbaPlanejamento({ idCliente, cliente }) {
                   detalhe={estudo.deficitLiquidez > 0 ? 'sai da venda de bens às pressas' : 'coberto ✓'}
                   tom={estudo.deficitLiquidez > 0 ? 'ruim' : 'bom'} />
               </div>
+            )}
+          </>
+        )}
+
+        {/* ── Aposentadoria e acúmulo ──────────────────────────────────────── */}
+        {tem021 && (
+          <>
+            <p id="sec-aposentadoria" className={SECAO}>
+              <TrendingUp size={13} /> Aposentadoria e acúmulo
+            </p>
+            <p className="mb-3 text-xs text-slate-400">
+              O aporte da previdência sai da renda. Se a renda parar, o plano de aposentadoria para
+              junto — é por isso que proteção e acúmulo são o mesmo assunto, não dois.
+            </p>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Campo label="Renda desejada na aposentadoria"
+                dica="Por mês, em valores de hoje. Em branco = manter o padrão de vida atual">
+                <InputMoeda value={plano.renda_desejada_aposentadoria ?? ''}
+                  onChange={set('renda_desejada_aposentadoria')} />
+              </Campo>
+              <Campo label="Idade para parar de trabalhar" dica="Em branco = 65 anos">
+                <Input type="number" min="40" max="90" value={plano.idade_aposentadoria ?? ''}
+                  onChange={set('idade_aposentadoria')} />
+              </Campo>
+              <div className="flex flex-col justify-center">
+                <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-600"
+                  title="Fumante paga mais caro no risco de vida — e o preço da espera sobe junto">
+                  <input type="checkbox" checked={!!plano.fumante}
+                    onChange={(ev) => setValor('fumante', ev.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-laranja-600 focus:ring-laranja-500" />
+                  <span>
+                    Fumante nos últimos 12 meses
+                    <span className="block text-xs text-slate-400">
+                      Muda o prêmio e o custo de deixar para depois
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {estudo.aposentadoria ? (
+              <>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <Metrica rotulo="Meta de capital" valor={brlCompacto(estudo.aposentadoria.capitalNecessario)}
+                    detalhe={`para ${brl(estudo.aposentadoria.alvoMensal)}/mês aos ${estudo.aposentadoria.idadeAlvo}`} />
+                  <Metrica rotulo="A previdência entrega"
+                    valor={brlCompacto(estudo.aposentadoria.projetadoLiquido)}
+                    detalhe={estudo.irPrevidencia > 0 ? 'já líquida de IR' : 'em valores de hoje'} />
+                  <Metrica rotulo="Renda que isso sustenta"
+                    valor={`${brl(estudo.aposentadoria.rendaProjetada)}/mês`}
+                    detalhe={`retirando ${(estudo.aposentadoria.taxaReal * 100).toFixed(0)}% ao ano`}
+                    tom={estudo.aposentadoria.rendaProjetada < estudo.aposentadoria.alvoMensal ? 'ruim' : 'bom'} />
+                  <Metrica rotulo="Falta aportar por mês"
+                    valor={estudo.aposentadoria.faltaAportar != null
+                      ? `${brl(estudo.aposentadoria.faltaAportar)}/mês` : '—'}
+                    detalhe={estudo.aposentadoria.aporteAtual > 0
+                      ? `além dos ${brl(estudo.aposentadoria.aporteAtual)} que já aporta`
+                      : 'nenhum aporte informado'}
+                    tom={estudo.aposentadoria.faltaAportar > 0 ? 'ruim' : 'bom'} />
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  Projeção a <strong>{(estudo.aposentadoria.taxaReal * 100).toFixed(0)}% ao ano
+                  acima da inflação</strong>, em {estudo.aposentadoria.anos} anos.
+                  {estudo.aposentadoria.dependeDaRenda && (
+                    <>
+                      {' '}O aporte de {brl(estudo.aposentadoria.aporteAtual)} sai da renda:
+                      {estudo.aposentadoria.cobreInvalidez
+                        ? ' com a invalidez coberta, o plano continua de pé mesmo se ele não puder mais trabalhar.'
+                        : ' sem cobertura de invalidez, ele para no dia em que a renda parar.'}
+                    </>
+                  )}
+                </p>
+              </>
+            ) : (
+              <p className="mt-3 rounded-lg border border-slate-200/70 bg-slate-50/60 p-3 text-xs text-slate-500">
+                Para calcular a aposentadoria o estudo precisa da{' '}
+                <strong>data de nascimento do cliente</strong> (no cadastro, ali em cima) e de pelo
+                menos o custo de vida. Com isso ele já mostra a meta, o que a previdência atual
+                entrega e o que falta.
+              </p>
             )}
           </>
         )}
