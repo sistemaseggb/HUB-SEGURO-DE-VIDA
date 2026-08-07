@@ -2,9 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   FileAudio, Upload, Sparkles, Copy, Check, Trash2, Clock3, MessageSquareQuote,
   ShieldAlert, Flame, ListChecks, CalendarPlus, Wand2, RefreshCw, ChevronDown,
+  Users2, AlertTriangle, Wallet,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { analisarTranscricao, resumoExecutivo } from '../lib/transcricao.js'
+import {
+  analisarTranscricao, resumoExecutivo, resumoParaCliente, perguntasQueFaltaram,
+} from '../lib/transcricao.js'
+import { calcularEstudo } from '../lib/estudo.js'
 import { brl, dataBR, hojeLocal } from '../lib/format'
 import { Button, Card, Input, Select, Spinner, ComoFunciona, Badge } from '../components/ui'
 import { useToast } from '../components/toastContexto'
@@ -105,6 +109,13 @@ export default function AbaTranscricao({ idCliente, cliente }) {
   const resumo = useMemo(
     () => (analise ? resumoExecutivo(analise, { nomeCliente: cliente?.nome, data }) : ''),
     [analise, cliente?.nome, data])
+  // O resumo interno tem nota de condução, objeções e estratégia. O do cliente
+  // é só o "combinamos isso" — mandar o errado seria constrangedor.
+  const resumoCliente = useMemo(
+    () => (analise ? resumoParaCliente(analise, { nomeCliente: cliente?.nome }) : ''),
+    [analise, cliente?.nome])
+  const [versaoResumo, setVersaoResumo] = useState('interno')
+  const resumoVisivel = versaoResumo === 'cliente' ? resumoCliente : resumo
 
   // Quando a análise muda, pré-marcamos só o que o planejamento ainda não tem:
   // o trabalho já feito pela consultora nunca é sobrescrito por padrão.
@@ -218,7 +229,7 @@ export default function AbaTranscricao({ idCliente, cliente }) {
   }
 
   function copiarResumo() {
-    navigator.clipboard.writeText(resumo)
+    navigator.clipboard.writeText(versaoResumo === 'cliente' ? resumoCliente : resumo)
     setCopiado(true)
     setTimeout(() => setCopiado(false), 2000)
   }
@@ -232,11 +243,27 @@ export default function AbaTranscricao({ idCliente, cliente }) {
       return toast.info('A análise avançada precisa do Supabase conectado (não funciona no modo demonstração).')
     }
     setPensando(true)
-    const contexto = plano && Number(plano.renda_mensal) > 0
-      ? `renda ${brl(Number(plano.renda_mensal))}/mês, custo de vida ${brl(Number(plano.custo_vida_mensal) || 0)}/mês`
-      : null
+    // Mandamos o estudo já calculado, não um resumo em prosa: com os números na
+    // mão o modelo critica os capitais em vez de adivinhar pelo texto.
+    const estudo = plano ? calcularEstudo(plano, { dataNascimento: cliente?.data_nascimento }) : null
+    const resumoEstudo = estudo && {
+      idade: estudo.idade,
+      renda_mensal: estudo.renda,
+      custo_vida_mensal: estudo.custoVida,
+      dividas: estudo.dividas,
+      patrimonio_bruto: estudo.patrimonioBruto,
+      custo_inventario: estudo.custoInventario,
+      deficit_liquidez: estudo.deficitLiquidez,
+      anos_protecao: estudo.anos,
+      focos: estudo.focos,
+      coberturas: estudo.ativas.map((c) => ({ nome: c.curto, valor: c.valor })),
+      importancia_segurada_total: estudo.capitalTotal,
+      premio_mensal: estudo.investimento?.mensal ?? null,
+      falta_preencher: estudo.completude.faltando,
+      conferencias_abertas: estudo.inconsistencias.map((i) => i.texto),
+    }
     const { data, error } = await supabase.functions.invoke('analisar-reuniao', {
-      body: { texto, cliente_nome: cliente?.nome, contexto },
+      body: { texto, cliente_nome: cliente?.nome, estudo: resumoEstudo },
     })
     setPensando(false)
     if (error || !data?.ok) {
@@ -375,13 +402,24 @@ export default function AbaTranscricao({ idCliente, cliente }) {
           <PainelExtracao
             a={analise} plano={plano} aceitos={aceitos} setAceitos={setAceitos}
             tem019={colunas.tem019} aoAplicar={aplicarNoPlanejamento} />
+          <PainelPerfil a={analise} />
           <PainelConversa a={analise} aoCriarTarefa={criarTarefa} />
           <Card className="p-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <Sparkles size={13} className="text-laranja-600" /> Resumo executivo
+                <Sparkles size={13} className="text-laranja-600" />
+                {versaoResumo === 'cliente' ? 'Resumo para mandar ao cliente' : 'Resumo executivo'}
               </p>
               <div className="flex flex-wrap gap-2">
+                <div className="flex overflow-hidden rounded-xl border border-slate-300">
+                  {[['interno', 'Para você'], ['cliente', 'Para o cliente']].map(([id, rot]) => (
+                    <button key={id} type="button" onClick={() => setVersaoResumo(id)}
+                      className={`px-3 py-2 text-sm font-medium transition-colors ${
+                        versaoResumo === id ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                      {rot}
+                    </button>
+                  ))}
+                </div>
                 <Button variant="secondary" onClick={copiarResumo}>
                   {copiado ? <><Check size={15} /> Copiado!</> : <><Copy size={15} /> Copiar</>}
                 </Button>
@@ -393,8 +431,14 @@ export default function AbaTranscricao({ idCliente, cliente }) {
                 </Button>
               </div>
             </div>
+            {versaoResumo === 'cliente' && (
+              <p className="mb-2 text-xs text-slate-400">
+                Sem nota de condução, sem objeções, sem estratégia — só o que combinaram.
+                Pronto para colar no WhatsApp ou no e-mail.
+              </p>
+            )}
             <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-xl border border-slate-200/70 bg-slate-50/60 p-4 text-xs leading-relaxed text-slate-700">
-              {resumo}
+              {resumoVisivel}
             </pre>
           </Card>
           {avancada && <PainelAvancado a={avancada} />}
@@ -435,6 +479,105 @@ export default function AbaTranscricao({ idCliente, cliente }) {
         </Card>
       )}
     </div>
+  )
+}
+
+// ─── O que a conversa revelou além dos números ───────────────────────────────
+// Idade e tabagismo mudam o prêmio. O seguro que ele já tem muda o argumento.
+// Quem decide e em quanto tempo muda o follow-up. Nada disso é número, e tudo
+// isso decide a venda — a consultora relia a transcrição atrás dessas frases.
+function PainelPerfil({ a }) {
+  const p = a.perfil ?? {}
+  const faltam = perguntasQueFaltaram(a)
+  const itens = [
+    p.idade && { icone: Clock3, rotulo: 'Idade', valor: `${p.idade.valor} anos`, trecho: p.idade.trecho },
+    p.fumante && {
+      icone: AlertTriangle,
+      rotulo: 'Tabagismo',
+      valor: p.fumante.valor ? 'Fumante — o prêmio sobe' : 'Não fumante',
+      trecho: p.fumante.trecho,
+      alerta: p.fumante.valor,
+    },
+    p.saude && {
+      icone: AlertTriangle, rotulo: 'Saúde', valor: p.saude.termo,
+      trecho: p.saude.trecho, alerta: true,
+      nota: 'Vai aparecer na DPS. Levante os detalhes antes de cotar.',
+    },
+    p.motivo && { icone: MessageSquareQuote, rotulo: 'Por que ele veio', valor: p.motivo.termo, trecho: p.motivo.trecho },
+    p.quemDecide && { icone: Users2, rotulo: 'Quem decide', valor: p.quemDecide.valor, trecho: p.quemDecide.trecho },
+    p.prazoDecisao && { icone: Clock3, rotulo: 'Prazo', valor: p.prazoDecisao.valor, trecho: p.prazoDecisao.trecho },
+    p.orcamento && { icone: Wallet, rotulo: 'Orçamento declarado', valor: `${brl(p.orcamento.valor)}/mês`, trecho: p.orcamento.trecho },
+    p.outrosDependentes && {
+      icone: Users2, rotulo: 'Também depende dele', valor: 'Ajuda os pais',
+      trecho: p.outrosDependentes.trecho,
+      nota: 'Entra no custo de vida e no capital de morte.',
+    },
+    p.numSocios && { icone: Users2, rotulo: 'Sócios', valor: `${p.numSocios.valor} na sociedade`, trecho: p.numSocios.trecho },
+  ].filter(Boolean)
+
+  if (itens.length === 0 && p.seguros?.length === 0 && faltam.length === 0) return null
+
+  return (
+    <Card className="p-5">
+      <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <Users2 size={13} className="text-laranja-600" /> O perfil que a conversa revelou
+      </p>
+
+      {itens.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {itens.map((it) => {
+            const Icone = it.icone
+            return (
+              <div key={it.rotulo}
+                className={`rounded-xl border p-3 ${it.alerta ? 'border-amber-200 bg-amber-50/50' : 'border-slate-200/70 bg-white'}`}>
+                <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-slate-400">
+                  <Icone size={12} className={it.alerta ? 'text-amber-600' : 'text-slate-400'} /> {it.rotulo}
+                </p>
+                <p className="mt-0.5 text-sm font-medium text-slate-800">{it.valor}</p>
+                {it.nota && <p className="mt-1 text-xs text-amber-800">{it.nota}</p>}
+                {it.trecho && (
+                  <p className="mt-1.5 border-t border-slate-100 pt-1.5 text-xs italic text-slate-400">
+                    “{it.trecho}”
+                  </p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {p.seguros?.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            O que ele já tem — e por que não basta
+          </p>
+          <ul className="space-y-2">
+            {p.seguros.map((seg) => (
+              <li key={seg.origem} className="rounded-xl border border-slate-200/70 bg-white p-3">
+                <p className="text-sm font-medium capitalize text-slate-800">{seg.origem}</p>
+                {seg.trecho && <p className="mt-0.5 text-xs italic text-slate-400">“{seg.trecho}”</p>}
+                {seg.alerta && <p className="mt-1.5 text-xs text-slate-600">{seg.alerta}</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {faltam.length > 0 && (
+        <div className="mt-4 rounded-xl border border-slate-200/70 bg-slate-50/60 p-3">
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            O que ainda falta perguntar
+          </p>
+          <ul className="space-y-1">
+            {faltam.map((q) => (
+              <li key={q} className="flex items-start gap-2 text-xs text-slate-600">
+                <span className="mt-0.5 text-laranja-500">▹</span> {q}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Card>
   )
 }
 
@@ -654,6 +797,17 @@ function PainelAvancado({ a }) {
       <div className="space-y-4">
         {a.resumo && <p className="text-sm leading-relaxed text-slate-700">{a.resumo}</p>}
 
+        {a.temperatura && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/70 bg-white p-3">
+            <Badge tom={a.temperatura === 'quente' ? 'red' : a.temperatura === 'morna' ? 'amber' : 'slate'}>
+              oportunidade {a.temperatura}
+            </Badge>
+            {a.por_que_essa_temperatura && (
+              <span className="min-w-0 flex-1 text-sm text-slate-700">{a.por_que_essa_temperatura}</span>
+            )}
+          </div>
+        )}
+
         {a.perfil_cliente && (
           <div className="rounded-xl border border-slate-200/70 bg-slate-50/60 p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Como este cliente decide</p>
@@ -674,6 +828,26 @@ function PainelAvancado({ a }) {
             {d.evidencia && <p className="mt-0.5 text-xs italic text-slate-500">“{d.evidencia}”</p>}
             <p className="mt-1 text-sm text-slate-700">{d.como_enderecar}</p>
           </li>
+        ))}
+
+        {a.leitura_do_estudo && (
+          <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+              O que a conversa diz sobre o estudo
+            </p>
+            <p className="mt-1 text-sm text-slate-700">{a.leitura_do_estudo}</p>
+          </div>
+        )}
+
+        {bloco('Coberturas para enfatizar com ele', a.coberturas_a_enfatizar, (c, i) => (
+          <li key={i} className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
+            <p className="text-sm font-semibold text-emerald-900">{c.cobertura}</p>
+            <p className="mt-1 text-sm text-slate-700">{c.por_que_para_ele}</p>
+          </li>
+        ))}
+
+        {bloco('Perguntas que ficaram para a próxima', a.perguntas_que_faltaram, (q, i) => (
+          <li key={i} className="rounded-xl border border-slate-200/70 bg-white p-3 text-sm text-slate-700">{q}</li>
         ))}
 
         {bloco('Objeções e resposta sob medida', a.objecoes, (o, i) => (

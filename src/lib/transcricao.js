@@ -33,6 +33,49 @@ import { BLOCOS_ROTEIRO } from './roteiro.js'
 const semAcento = (s) => String(s ?? '')
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
+// ─── Números falados por extenso ─────────────────────────────────────────────
+// Ninguém fala "R$ 500,00" numa reunião: fala "quinhentos reais", "uns dois
+// mil", "um milhão e meio". O extrator só enxergava dígito e perdia tudo isso.
+// A saída é normalizar ANTES: trocamos a forma escrita pelo dígito e o resto
+// do motor continua igual.
+const NUMERAIS = {
+  um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5, seis: 6,
+  'três': 3, sete: 7, oito: 8, nove: 9, dez: 10, onze: 11, doze: 12, treze: 13,
+  catorze: 14, quatorze: 14, quinze: 15, dezesseis: 16, dezessete: 17,
+  dezoito: 18, dezenove: 19, vinte: 20, trinta: 30, quarenta: 40,
+  cinquenta: 50, sessenta: 60, setenta: 70, oitenta: 80, noventa: 90,
+  cem: 100, cento: 100, duzentos: 200, trezentos: 300, quatrocentos: 400,
+  quinhentos: 500, seiscentos: 600, setecentos: 700, oitocentos: 800,
+  novecentos: 900,
+}
+const CHAVES_NUMERAIS = Object.keys(NUMERAIS).join('|')
+const RE_EXTENSO = new RegExp(
+  `\\b(${CHAVES_NUMERAIS})(?:\\s+e\\s+(${CHAVES_NUMERAIS}))?\\b`, 'g')
+
+// "dois mil e quinhentos" → "2500"; "quinhentos reais" → "500 reais";
+// "um milhão e meio" → "1,5 milhão". Aplicado antes de qualquer extração.
+export function normalizarNumeraisFalados(texto) {
+  let t = String(texto ?? '')
+  // "e meio" depois de milhão/mil vale meia unidade
+  t = t.replace(/\b(\d+(?:[.,]\d+)?|um|uma|dois|duas|tres|tr[êe]s|quatro|cinco)\s+(milh[õo]es|milh[ãa]o|mil)\s+e\s+meio\b/gi,
+    (bruto, n, unidade) => {
+      const base = NUMERAIS[semAcento(n)] ?? Number(String(n).replace(',', '.'))
+      if (!Number.isFinite(base)) return bruto
+      return `${String(base + 0.5).replace('.', ',')} ${unidade}`
+    })
+  // numerais por extenso; o "e" liga dezena+unidade ("vinte e cinco") ou
+  // centena+resto ("cento e vinte"), nunca o contrário
+  t = t.replace(RE_EXTENSO, (bruto, a, b) => {
+    const va = NUMERAIS[semAcento(a)]
+    if (va == null) return bruto
+    if (b == null) return String(va)
+    const vb = NUMERAIS[semAcento(b)]
+    if (vb == null || vb >= va) return bruto
+    return String(va + vb)
+  })
+  return t
+}
+
 // ─── 1. PARSER ───────────────────────────────────────────────────────────────
 // Formatos aceitos, do mais específico ao mais solto:
 //   00:12:34 Fulano: texto        (Tactiq)
@@ -180,7 +223,7 @@ const PISTAS_VALOR = [
   { campo: 'patrimonio_veiculos', rotulo: 'Veículos',
     termos: ['carro', 'caminhonete', 'moto', 'veiculo', 'caminhao'] },
   { campo: 'pj_faturamento_anual', rotulo: 'Faturamento da empresa',
-    termos: ['faturamento', 'a empresa fatura', 'faturamos', 'faturei no ano'] },
+    termos: ['faturamento', 'fatura por ano', 'fatura uns', 'fatura cerca', 'a empresa fatura', 'faturamos', 'faturei no ano', 'fatura'] },
   { campo: 'pj_valuation', rotulo: 'Valor da empresa',
     termos: ['vale a empresa', 'valuation', 'avaliaram a empresa', 'a empresa vale'] },
   { campo: 'patrimonio_total', rotulo: 'Patrimônio',
@@ -243,7 +286,9 @@ function extrairValores(falas) {
     const doContexto = pergunta.length > 0
       ? pergunta.reduce((a, b) => (b.inicio > a.inicio ? b : a)).pista : null
 
-    const frases = fala.texto.split(/(?<=[.!?])\s+/)
+    // Numerais falados viram dígito ANTES da extração: "uns quinhentos reais"
+    // e "um milhão e meio" passavam batido porque o regex exige dígito.
+    const frases = normalizarNumeraisFalados(fala.texto).split(/(?<=[.!?])\s+/)
     for (const frase of frases) {
       // semAcento preserva o comprimento (acento vira base + combinante, e o
       // combinante some), então os índices valem para as duas versões.
@@ -314,6 +359,14 @@ function extrairValores(falas) {
 // ─── Família ─────────────────────────────────────────────────────────────────
 const RE_FILHO_IDADE = /\b(?:meu |minha |o |a )?(filh[oa]s?|men[io]n[ao]s?|crian[çc]as?|garot[oa]s?)\b[^.!?]{0,60}?\b(\d{1,2})\s*(?:anos?)?/gi
 const RE_NOME_IDADE = /\b([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]{2,15})\s+(?:tem|com|de|fez)\s+(\d{1,2})\s*anos?/g
+// Palavras que começam frase com maiúscula e não são nome de gente
+const NAO_E_NOME = new Set([
+  'tenho', 'temos', 'tem', 'sao', 'somos', 'ele', 'ela', 'eles', 'elas',
+  'meu', 'minha', 'meus', 'minhas', 'filho', 'filha', 'filhos', 'filhas',
+  'crianca', 'criancas', 'menino', 'menina', 'esposa', 'marido', 'hoje',
+  'entao', 'agora', 'ja', 'sim', 'nao', 'bom', 'olha', 'acho', 'certo',
+  'esse', 'essa', 'este', 'esta', 'isso', 'aqui', 'la', 'com', 'sobre',
+])
 const RE_LISTA_IDADES = /\bfilh[oa]s?\b[^.!?]{0,40}?\bde\s+(\d{1,2})(?:\s*,\s*(\d{1,2}))?\s*e\s+(\d{1,2})\s*anos?/gi
 
 function extrairFamilia(falas) {
@@ -344,6 +397,22 @@ function extrairFamilia(falas) {
   RE_FILHO_IDADE.lastIndex = 0
   while ((m = RE_FILHO_IDADE.exec(texto)) !== null) guardar(null, m[2])
 
+  // "a Alice tem 6 e o Lucas 9" — ninguém repete "anos" na segunda criança, e
+  // sem essa passagem o Lucas sumia e a Alice virava um filho anônimo de 6.
+  // O gatilho é a frase falar de filhos: fora desse contexto, "Alice tem 3"
+  // pode ser qualquer coisa.
+  for (const frase of texto.split(/(?<=[.!?])\s+/)) {
+    if (!/\b(filh[oa]s?|crian[çc]as?|men[io]n[ao]s?|garot[oa]s?)\b/i.test(semAcento(frase))) continue
+    const re = /\b([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]{2,15})\s+(?:tem\s+|com\s+|de\s+|fez\s+)?(\d{1,2})\b(?!\s*(?:mil|reais|anos de (?:experi|casa|empresa)))/g
+    let x
+    while ((x = re.exec(frase)) !== null) {
+      // "Tenho 2 filhos" começa a frase com maiúscula e casaria como nome —
+      // verbo e pronome não são nome de criança
+      if (NAO_E_NOME.has(semAcento(x[1]))) continue
+      guardar(x[1], x[2])
+    }
+  }
+
   const estadoCivil = [
     ['Casado(a)', ['sou casad', 'somos casad', 'minha esposa', 'meu marido', 'minha mulher', 'meu esposo']],
     ['União estável', ['uniao estavel', 'moro junto', 'minha companheira', 'meu companheiro']],
@@ -355,8 +424,16 @@ function extrairFamilia(falas) {
   const conjuge = texto.match(
     /\b(?:minha (?:esposa|mulher|companheira)|meu (?:marido|esposo|companheiro))(?:,)?\s+(?:se chama\s+|é a\s+|é o\s+|a\s+|o\s+)?([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]{2,15})/)?.[1] ?? null
 
-  const profissao = texto.match(
-    /\b(?:sou|trabalho como|atuo como)\s+(?:um |uma )?([a-záàâãéêíóôõúç]{4,20}(?:\s+[a-záàâãéêíóôõúç]{3,20})?)/i)?.[1] ?? null
+  // "sou casado", "sou solteiro" e "sou fumante" casavam como profissão
+  const NAO_E_PROFISSAO = /^(casad|solteir|divorciad|viuv|separad|fumante|pai|mae|filho|socio|cliente|amigo|meio|bem|muito|uma|obrigad)/i
+  const profissao = (() => {
+    const re = /\b(?:sou|trabalho como|atuo como)\s+(?:um |uma )?([a-záàâãéêíóôõúç]{4,20}(?:\s+[a-záàâãéêíóôõúç]{3,20})?)/gi
+    let m
+    while ((m = re.exec(texto)) !== null) {
+      if (!NAO_E_PROFISSAO.test(semAcento(m[1]))) return m[1]
+    }
+    return null
+  })()
 
   // "tenho 40% do capital social" / "sou dono de 30% da empresa"
   const participacao = texto.match(
@@ -379,6 +456,131 @@ function extrairFamilia(falas) {
     profissao: profissao ? profissao.trim() : null,
     participacaoPJ: participacao != null && Number(participacao) > 0 && Number(participacao) <= 100
       ? Number(participacao) : null,
+  }
+}
+
+// ─── Perfil: o que decide a venda e não é número ─────────────────────────────
+// Uma reunião de seguro de vida carrega muito mais do que renda e patrimônio.
+// Idade e tabagismo mudam o prêmio; o seguro que ele já tem muda o argumento;
+// quem decide e em quanto tempo muda o follow-up. Nada disso estava sendo
+// pescado — a consultora relia a transcrição atrás dessas frases.
+//
+// Cada achado vem com o trecho que serve de prova: a tela mostra a frase, e a
+// consultora confirma antes de qualquer coisa ir para o planejamento.
+const ORIGENS_SEGURO = [
+  { origem: 'empresa', termos: ['pela empresa', 'da empresa', 'seguro da firma', 'vida em grupo', 'plano da empresa', 'o trabalho paga'],
+    alerta: 'Seguro de empresa acaba junto com o emprego — e não acompanha quem sai, se aposenta ou é demitido.' },
+  { origem: 'banco', termos: ['pelo banco', 'do banco', 'o gerente vendeu', 'junto com a conta', 'seguro do banco'],
+    alerta: 'Seguro de banco costuma ter capital baixo e ser desenhado para o banco, não para a família.' },
+  { origem: 'consignado', termos: ['prestamista', 'do financiamento', 'do consignado', 'junto com o emprestimo', 'seguro do imovel'],
+    alerta: 'Prestamista cobre o saldo devedor e paga ao CREDOR, não à família — quita a dívida e acaba ali.' },
+  { origem: 'individual', termos: ['seguro individual', 'contratei um seguro', 'tenho uma apolice', 'ja tenho um seguro'],
+    alerta: null },
+]
+
+function extrairPerfil(falas) {
+  const doCliente = falas.filter((f) => f.papel === 'cliente')
+  const alvo = doCliente.length > 0 ? doCliente : falas
+  const bruto = alvo.map((f) => f.texto).join(' ')
+  const texto = normalizarNumeraisFalados(bruto)
+  const chave = semAcento(texto)
+
+  // devolve a frase em que o termo apareceu, para servir de prova na tela
+  const provaDe = (termo) => {
+    for (const f of alvo) {
+      for (const frase of f.texto.split(/(?<=[.!?])\s+/)) {
+        if (semAcento(normalizarNumeraisFalados(frase)).includes(termo)) return frase.trim().slice(0, 220)
+      }
+    }
+    return null
+  }
+  const achar = (lista) => {
+    for (const termo of lista) if (chave.includes(termo)) return { termo, trecho: provaDe(termo) }
+    return null
+  }
+
+  // ── idade: "tenho 41 anos", "vou fazer 42" ──
+  let idade = null
+  const mIdade = chave.match(/\b(?:tenho|fiz|faco|completei|estou com)\s+(\d{2})\s*anos?\b/)
+    ?? chave.match(/\b(\d{2})\s*anos\s+de\s+idade\b/)
+  if (mIdade) {
+    const n = Number(mIdade[1])
+    if (n >= 18 && n <= 90) idade = { valor: n, trecho: provaDe(mIdade[0]) }
+  }
+
+  // ── tabagismo: muda o prêmio de forma relevante ──
+  const naoFuma = achar(['nao fumo', 'nunca fumei', 'parei de fumar', 'sou nao fumante'])
+  const fuma = naoFuma ? null : achar(['eu fumo', 'sou fumante', 'fumo desde', 'fumo um maco', 'fumo cigarro'])
+  const fumante = fuma ? { valor: true, trecho: fuma.trecho }
+    : naoFuma ? { valor: false, trecho: naoFuma.trecho } : null
+
+  // ── saúde: o que a seguradora vai perguntar na DPS ──
+  const saude = achar([
+    'tenho diabetes', 'sou diabetico', 'pressao alta', 'hipertens', 'colesterol alto',
+    'ja tive cancer', 'fiz cirurgia', 'tenho depressao', 'faco tratamento', 'tomo remedio',
+    'tive um infarto', 'problema no coracao', 'tenho asma', 'ja fui internado',
+  ])
+
+  // ── seguros que ele já tem, com a origem ──
+  const seguros = []
+  for (const o of ORIGENS_SEGURO) {
+    const achou = achar(o.termos)
+    if (achou) seguros.push({ origem: o.origem, alerta: o.alerta, trecho: achou.trecho })
+  }
+
+  // ── quem decide ──
+  const decideCasal = achar(['com minha esposa', 'com meu marido', 'a gente decide junto',
+    'decidir junto', 'decidimos junto', 'decidimos juntos', 'resolvemos junto', 'falar com minha esposa', 'falar com meu marido', 'nos dois decidimos'])
+  const decideSocios = achar(['com meus socios', 'com meu socio', 'levar para a sociedade', 'o conselho decide'])
+  const decideSozinho = achar(['quem decide sou eu', 'eu que decido', 'a decisao e minha'])
+  const quemDecide = decideSocios ? { valor: 'Ele e os sócios', trecho: decideSocios.trecho }
+    : decideCasal ? { valor: 'Ele e o cônjuge, juntos', trecho: decideCasal.trecho }
+      : decideSozinho ? { valor: 'Ele sozinho', trecho: decideSozinho.trecho } : null
+
+  // ── prazo de decisão ──
+  const prazos = [
+    ['Ainda esta semana', ['essa semana', 'ate sexta', 'nos proximos dias', 'ate o fim da semana']],
+    ['Até o fim do mês', ['ate o fim do mes', 'esse mes', 'ate o dia 30', 'ainda esse mes']],
+    ['Sem prazo definido', ['nao tenho pressa', 'mais pra frente', 'ano que vem', 'depois eu vejo', 'daqui uns meses']],
+  ]
+  let prazoDecisao = null
+  for (const [rotulo, termos] of prazos) {
+    const achou = achar(termos)
+    if (achou) { prazoDecisao = { valor: rotulo, trecho: achou.trecho }; break }
+  }
+
+  // ── orçamento que ele mesmo declarou ──
+  let orcamento = null
+  const mOrc = texto.match(/\b(?:posso|consigo|daria para|cabe|caberia|penso em|pretendo)\s+(?:pagar|investir|gastar|destinar|separar)\s+(?:uns?\s+|cerca de\s+|ate\s+)?(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(mil)?/i)
+  if (mOrc) {
+    let v = Number(String(mOrc[1]).replace(/\./g, '').replace(',', '.'))
+    if (mOrc[2]) v *= 1000
+    if (Number.isFinite(v) && v >= 30 && v <= 200_000) orcamento = { valor: v, trecho: provaDe(semAcento(mOrc[0])) }
+  }
+
+  // ── por que ele aceitou a conversa ──
+  const motivo = achar([
+    'meu pai morreu', 'minha mae morreu', 'perdi meu pai', 'perdi minha mae', 'perdi um amigo',
+    'um colega faleceu', 'passei por um susto', 'fiquei doente', 'nasceu meu filho',
+    'vou ser pai', 'vou ser mae', 'comprei um imovel', 'abri a empresa', 'me separei',
+    'inventario do meu pai', 'inventario da minha mae',
+  ])
+
+  // ── pais ou irmãos que dependem dele ──
+  const outrosDependentes = achar(['ajudo meus pais', 'sustento minha mae', 'sustento meu pai',
+    'meus pais dependem', 'cuido da minha mae', 'cuido do meu pai', 'ajudo meu irmao'])
+
+  // ── nº de sócios ──
+  let numSocios = null
+  const mSocios = chave.match(/\bsomos\s+(\d{1,2})\s+socios?\b/) ?? chave.match(/\b(\d{1,2})\s+socios?\b/)
+  if (mSocios) {
+    const n = Number(mSocios[1])
+    if (n >= 1 && n <= 50) numSocios = { valor: n, trecho: provaDe(mSocios[0]) }
+  }
+
+  return {
+    idade, fumante, saude, seguros, quemDecide, prazoDecisao,
+    orcamento, motivo, outrosDependentes, numSocios,
   }
 }
 
@@ -593,6 +795,7 @@ export function analisarTranscricao(texto, opcoes = {}) {
   // ── o que a conversa revelou ──
   const valores = extrairValores(falas)
   const familia = extrairFamilia(falas)
+  const perfil = extrairPerfil(falas)
   const objecoes = acharTermos(falas, OBJECOES, 'cliente')
   const sinais = acharTermos(falas, SINAIS_COMPRA, 'cliente')
   const compromissos = extrairCompromissos(falas)
@@ -608,7 +811,17 @@ export function analisarTranscricao(texto, opcoes = {}) {
   const notaEscuta = pctCliente >= 50 ? 25
     : pctCliente >= 40 ? 20 : pctCliente >= 30 ? 14 : pctCliente >= 20 ? 8 : 3
   const notaDescoberta = Math.min(valores.length * 5 + (familia.filhos.length > 0 ? 5 : 0), 25)
-  const notaAvanco = Math.min(sinais.length * 6 + (compromissos.length > 0 ? 7 : 0), 25)
+  // Avanço não é só o cliente perguntando sobre carência. Uma reunião que sai
+  // com próximo passo assumido — e melhor ainda, com data — avançou, mesmo que
+  // ele não tenha feito nenhuma pergunta de compra. Antes esse caso tirava 7
+  // de 25 e punha uma reunião bem conduzida em nota baixa sem motivo.
+  const temPrazoMarcado = compromissos.some((c) => c.prazo)
+  const fechamentoCoberto = roteiro.some((r) => r.id === 'fechamento' && r.cobriu)
+  const notaAvanco = Math.min(
+    (compromissos.length > 0 ? 10 : 0)
+    + (temPrazoMarcado ? 5 : 0)
+    + (fechamentoCoberto ? 4 : 0)
+    + sinais.length * 4, 25)
   const nota = notaRoteiro + notaEscuta + notaDescoberta + notaAvanco
 
   const pesoObjecoes = objecoes.reduce((s, o) => s + o.peso, 0)
@@ -647,6 +860,7 @@ export function analisarTranscricao(texto, opcoes = {}) {
     perguntasConsultora,
     valores,
     familia,
+    perfil,
     objecoes,
     sinais,
     compromissos,
@@ -662,6 +876,73 @@ export function analisarTranscricao(texto, opcoes = {}) {
 // ─── RESUMO EXECUTIVO ────────────────────────────────────────────────────────
 // O texto que a consultora cola nas notas da reunião ou manda para o assessor.
 const brl = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
+
+// O que o estudo precisa e a reunião não trouxe. É a ponte que faltava entre a
+// transcrição e o planejamento: em vez de a consultora reler tudo procurando
+// buracos, a lista de perguntas da próxima conversa já sai pronta.
+export function perguntasQueFaltaram(a) {
+  if (!a) return []
+  const tem = (campo) => a.valores.some((v) => v.campo === campo)
+  const p = a.perfil ?? {}
+  const q = []
+
+  if (!tem('renda_mensal')) q.push('Quanto entra por mês, no total? (renda é a base de quase todo o estudo)')
+  if (!tem('custo_vida_mensal')) q.push('Quanto a família gasta por mês para manter o padrão de vida?')
+  if (!tem('patrimonio_imoveis') && !tem('patrimonio_total')) {
+    q.push('O que você já construiu de patrimônio — imóveis, aplicações, participação em empresa?')
+  }
+  if (!tem('dividas_total')) q.push('Existe financiamento, consignado ou dívida que a família herdaria?')
+  if (!tem('previdencia_saldo')) q.push('Tem previdência privada? Se sim, VGBL ou PGBL — muda o imposto na entrega.')
+  if (a.familia.filhos.length === 0) q.push('Quem depende dessa renda hoje? Filhos, e com que idades?')
+  if (!a.familia.estadoCivil) q.push('Você é casado? Em que regime de bens? (a meação muda a base do ITCMD)')
+  if (!p.idade) q.push('Quantos anos você tem? (o prêmio e o prazo do produto dependem disso)')
+  if (!p.fumante) q.push('Você fuma, ou fumou nos últimos 12 meses? (muda o prêmio de forma relevante)')
+  if (!p.seguros || p.seguros.length === 0) {
+    q.push('Você já tem algum seguro? De quem é — empresa, banco, individual? (o da empresa acaba com o emprego)')
+  }
+  if (!p.quemDecide) q.push('Quem decide uma contratação dessas junto com você?')
+  if (!p.prazoDecisao && a.compromissos.length === 0) q.push('Em quanto tempo você pretende decidir?')
+  if (!p.motivo) q.push('O que fez você aceitar essa conversa agora? (a resposta vira o argumento da proposta)')
+
+  return q.slice(0, 8)
+}
+
+// Versão curta e humana para MANDAR AO CLIENTE. O resumo executivo é interno —
+// tem nota de condução, objeções e estratégia, e nada disso pode chegar nele.
+// Este aqui é o "combinamos isso" que fecha a reunião por escrito.
+export function resumoParaCliente(a, { nomeCliente = '', primeiroNome } = {}) {
+  if (!a) return ''
+  const nome = primeiroNome ?? String(nomeCliente).split(' ')[0] ?? ''
+  const L = []
+  L.push(`${nome ? `${nome}, ` : ''}obrigada pela conversa de hoje. Resumindo o que combinamos:`)
+  L.push('')
+
+  if (a.valores.length > 0) {
+    L.push('O retrato que você me passou:')
+    for (const v of a.valores.slice(0, 6)) L.push(`• ${v.rotulo}: ${brl(v.valor)}`)
+    L.push('')
+  }
+  const f = a.familia
+  if (f.filhos.length > 0) {
+    L.push(`Família: ${f.filhos.map((x) => `${x.nome || 'filho(a)'} (${x.idade} anos)`).join(', ')}`
+      + (f.conjuge ? ` · cônjuge ${f.conjuge}` : ''))
+    L.push('')
+  }
+  const meus = a.compromissos.filter((c) => c.papel !== 'cliente')
+  const dele = a.compromissos.filter((c) => c.papel === 'cliente')
+  if (meus.length > 0) {
+    L.push('Fico de:')
+    for (const c of meus.slice(0, 4)) L.push(`• ${c.texto}${c.prazo ? ` (${c.prazo})` : ''}`)
+    L.push('')
+  }
+  if (dele.length > 0) {
+    L.push('Você ficou de:')
+    for (const c of dele.slice(0, 4)) L.push(`• ${c.texto}${c.prazo ? ` (${c.prazo})` : ''}`)
+    L.push('')
+  }
+  L.push('Qualquer dúvida antes disso, é só me chamar.')
+  return L.join('\n')
+}
 
 export function resumoExecutivo(a, { nomeCliente = 'o cliente', data } = {}) {
   if (!a) return ''
@@ -692,6 +973,33 @@ export function resumoExecutivo(a, { nomeCliente = 'o cliente', data } = {}) {
   ].filter(Boolean)
   if (pedacosFamilia.length) L.push('', `FAMÍLIA: ${pedacosFamilia.join(' · ')}`)
 
+  const p = a.perfil ?? {}
+  const pedacosPerfil = [
+    p.idade ? `${p.idade.valor} anos` : null,
+    p.fumante ? (p.fumante.valor ? 'FUMANTE' : 'não fumante') : null,
+    p.saude ? `saúde: ${p.saude.termo} (confirmar na DPS)` : null,
+    p.outrosDependentes ? 'ajuda os pais financeiramente' : null,
+    p.numSocios ? `${p.numSocios.valor} sócios` : null,
+  ].filter(Boolean)
+  if (pedacosPerfil.length) L.push('', `PERFIL: ${pedacosPerfil.join(' · ')}`)
+
+  if (p.motivo) L.push('', `POR QUE ELE ACEITOU A CONVERSA: "${p.motivo.trecho ?? p.motivo.termo}"`)
+
+  if (p.seguros?.length) {
+    L.push('', 'O QUE ELE JÁ TEM (e por que não basta)')
+    for (const seg of p.seguros) {
+      L.push(`  • ${seg.origem}: "${seg.trecho ?? ''}"`)
+      if (seg.alerta) L.push(`    → ${seg.alerta}`)
+    }
+  }
+
+  const decisao = [
+    p.quemDecide ? `decide: ${p.quemDecide.valor}` : null,
+    p.prazoDecisao ? `prazo: ${p.prazoDecisao.valor}` : null,
+    p.orcamento ? `orçamento declarado: ${brl(p.orcamento.valor)}/mês` : null,
+  ].filter(Boolean)
+  if (decisao.length) L.push('', `DECISÃO: ${decisao.join(' · ')}`)
+
   if (a.objecoes.length > 0) {
     L.push('', 'OBJEÇÕES E COMO RESPONDER')
     for (const o of a.objecoes) {
@@ -712,6 +1020,14 @@ export function resumoExecutivo(a, { nomeCliente = 'o cliente', data } = {}) {
   const faltando = a.roteiro.filter((r) => !r.cobriu)
   if (faltando.length > 0) {
     L.push('', `NÃO FOI COBERTO: ${faltando.map((r) => r.titulo).join(' · ')}`)
+  }
+
+  // A ponte com o estudo: o que o planejamento ainda precisa e a reunião não
+  // trouxe. É a lista de perguntas da próxima conversa, pronta.
+  const perguntas = perguntasQueFaltaram(a)
+  if (perguntas.length > 0) {
+    L.push('', 'O QUE AINDA FALTA PERGUNTAR')
+    for (const q of perguntas) L.push(`  • ${q}`)
   }
 
   if (a.recomendacoes.length > 0) {

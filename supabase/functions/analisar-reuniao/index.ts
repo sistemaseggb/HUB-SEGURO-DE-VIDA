@@ -24,6 +24,10 @@ import Anthropic from 'npm:@anthropic-ai/sdk@0.70.0'
 // mais; o limite aqui é de custo, não de capacidade).
 const LIMITE_CARACTERES = 400_000
 
+// Versão do formato devolvido. Sobe quando o schema muda de forma que a tela
+// precise saber — análises gravadas antes continuam legíveis.
+const VERSAO_ANALISE = 2
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -44,6 +48,8 @@ const ESQUEMA = {
   required: [
     'resumo', 'perfil_cliente', 'momentos_decisivos', 'dores', 'objecoes',
     'riscos', 'proximos_passos', 'argumentos_para_proposta', 'mensagem_whatsapp',
+    'perguntas_que_faltaram', 'coberturas_a_enfatizar', 'leitura_do_estudo',
+    'temperatura', 'por_que_essa_temperatura',
   ],
   properties: {
     resumo: {
@@ -121,6 +127,43 @@ const ESQUEMA = {
       type: 'string',
       description: 'Mensagem de follow-up pronta para enviar hoje: curta, pessoal, com um próximo passo claro.',
     },
+    perguntas_que_faltaram: {
+      type: 'array',
+      items: { type: 'string' },
+      description:
+        'O que o estudo precisa e esta reunião não levantou. Perguntas prontas para a próxima conversa, '
+        + 'na linguagem que funciona com ESTE cliente.',
+    },
+    coberturas_a_enfatizar: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['cobertura', 'por_que_para_ele'],
+        properties: {
+          cobertura: { type: 'string', description: 'Nome da cobertura do estudo.' },
+          por_que_para_ele: {
+            type: 'string',
+            description: 'Por que ESTA cobertura importa para ESTE cliente, ancorado no que ele disse.',
+          },
+        },
+      },
+    },
+    leitura_do_estudo: {
+      type: 'string',
+      description:
+        'Crítica honesta do estudo à luz da conversa: algum capital parece alto ou baixo demais para o '
+        + 'que ele contou? Falta alguma cobertura óbvia? Diga "o estudo está coerente" se estiver.',
+    },
+    temperatura: {
+      type: 'string',
+      enum: ['quente', 'morna', 'fria'],
+      description: 'Quão perto de fechar esta oportunidade está, hoje.',
+    },
+    por_que_essa_temperatura: {
+      type: 'string',
+      description: 'Uma frase justificando a temperatura, citando o que na conversa sustenta a leitura.',
+    },
   },
 }
 
@@ -136,7 +179,13 @@ Como trabalhar:
 - Nas respostas às objeções, use o contexto específico deste cliente (nome dos filhos,
   a empresa, o inventário do pai) — resposta genérica não serve para nada.
 - Na mensagem de WhatsApp: no máximo 4 linhas, tom de pessoa e não de robô, com um
-  próximo passo concreto. Sem emoji em excesso.`
+  próximo passo concreto. Sem emoji em excesso.
+- Quando receber o estudo já montado, CRITIQUE-O de verdade: um capital que não bate
+  com o que ele contou, uma cobertura que faltou para o perfil dele, um prêmio que
+  pesa demais no orçamento que ele declarou. Se estiver coerente, diga que está —
+  concordar quando é o caso vale mais que inventar reparo.
+- Nas perguntas que faltaram, escreva a pergunta como ela deve ser FEITA, na linguagem
+  que funciona com este cliente — não o nome do campo que ficou vazio.`
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -151,7 +200,14 @@ Deno.serve(async (req) => {
     }, 501)
   }
 
-  let corpo: { texto?: string; cliente_nome?: string; contexto?: string }
+  let corpo: {
+    texto?: string
+    cliente_nome?: string
+    contexto?: string
+    // o estudo já calculado, em JSON — o modelo critica os capitais com os
+    // números na mão em vez de adivinhar pelo texto
+    estudo?: unknown
+  }
   try {
     corpo = await req.json()
   } catch {
@@ -173,7 +229,9 @@ Deno.serve(async (req) => {
       // recomendado resolve sozinho em vez de devolver erro para a consultora.
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
-      system: SISTEMA,
+      // O bloco de sistema é idêntico em toda chamada: com cache, a partir da
+      // segunda análise ele não é recobrado nem reprocessado.
+      system: [{ type: 'text', text: SISTEMA, cache_control: { type: 'ephemeral' } }],
       output_config: {
         effort: 'high',
         format: { type: 'json_schema', schema: ESQUEMA },
@@ -185,6 +243,9 @@ Deno.serve(async (req) => {
           text: [
             corpo.cliente_nome ? `Cliente: ${corpo.cliente_nome}` : '',
             corpo.contexto ? `Contexto do planejamento já levantado: ${corpo.contexto}` : '',
+            corpo.estudo
+              ? `Estudo montado até agora (JSON):\n${JSON.stringify(corpo.estudo).slice(0, 20_000)}`
+              : 'Ainda não há estudo montado para este cliente.',
             '',
             'Transcrição da reunião:',
             '---',
@@ -211,7 +272,14 @@ Deno.serve(async (req) => {
       return json({ erro: 'resposta_vazia' }, 502)
     }
 
-    return json({ ok: true, analise: JSON.parse(bloco.text), modelo: resposta.model })
+    // `versao` deixa a tela ler análises antigas sem quebrar quando o schema
+    // ganhar campos: ela mostra o que conhece e ignora o resto.
+    return json({
+      ok: true,
+      versao: VERSAO_ANALISE,
+      analise: JSON.parse(bloco.text),
+      modelo: resposta.model,
+    })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('analisar-reuniao:', msg)

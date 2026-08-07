@@ -107,6 +107,13 @@ o que trava, maior evento indenizável nunca maior que a soma das importâncias,
 porcentagens dentro de 0–100. Reproduzível: `CASOS=20000 SEMENTE=7 npm run
 test:motor`.
 
+**`test:transcricao`** — o fuzz prova que a análise não explode; isso não prova
+que ela extrai CERTO (um parser que devolve lista vazia passa em qualquer teste
+de robustez). Aqui cada caso é um pedaço de reunião escrito do jeito que as
+pessoas falam — "a Alice tem 6 e o Lucas 9", "ganho uns quarenta e oito mil",
+"a clínica fatura 4,2 milhões" — com o resultado esperado declarado ao lado.
+Quando o parser regride, o teste diz qual frase parou de ser entendida.
+
 **`test:e2e`** — quatro suítes. A **principal** navega o sistema inteiro
 nas duas visões — consultora (login, dashboard, pipeline, cliente 360 com o
 planejamento completo, transcrição da reunião, apólices, DPS, proposta,
@@ -337,6 +344,20 @@ npm run dev
       cliente falou prontos para aplicar no planejamento, as objeções com a
       resposta sugerida, os compromissos virando tarefa e um raio-X de como a
       reunião foi conduzida — tudo offline, sem chave de API
+- [x] **O perfil que a conversa revela** (e não é número): idade, tabagismo,
+      condição de saúde para a DPS, o motivo de ele ter aceitado a conversa,
+      quem decide, em quanto tempo, o orçamento que ele declarou, os seguros
+      que já tem — com o alerta de por que cada um não basta (o da empresa
+      acaba com o emprego, o prestamista paga ao banco) — cada achado com o
+      trecho da conversa que serve de prova
+- [x] **Números falados por extenso**: "quinhentos reais", "vinte e cinco mil",
+      "um milhão e meio" viram valor — ninguém fala "R$ 500,00" numa reunião
+- [x] **O que ainda falta perguntar**: a ponte entre a transcrição e o estudo —
+      a lista de perguntas da próxima conversa sai pronta, escrita como
+      pergunta e não como nome de campo
+- [x] **Dois resumos**: o interno (com nota de condução, objeções e estratégia)
+      e o **para mandar ao cliente** — só o "combinamos isso", pronto para o
+      WhatsApp
 - [x] Aprofundamento opcional com **Claude** (Edge Function `analisar-reuniao`):
       perfil do cliente, dores com evidência, respostas sob medida e a
       mensagem de follow-up pronta. Sem a chave configurada, a análise local
