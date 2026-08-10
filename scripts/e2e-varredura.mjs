@@ -100,7 +100,7 @@ const ROTAS = [
   ['/importar', 'Importar'], ['/guia', 'Guia'],
 ]
 
-const ABAS = ['Dossiê', 'Planejamento', 'Roteiro', 'Transcrição', 'Interações', 'Reuniões',
+const ABAS = ['Dossiê', 'Planejamento', 'Comparador', 'Roteiro', 'Transcrição', 'Interações', 'Reuniões',
   'Apólices', 'Comissões', 'Documentos', 'Formulário', 'Tarefas', 'Histórico']
 
 // Os quatro estados em que um cliente realmente aparece na carteira.

@@ -200,6 +200,14 @@ function semear() {
         capital: 300_000, custeio: 'proprio' },
     ],
     quem_decide: 'Ele e a esposa, juntos', prazo_decisao: 'Quer decidir até o fim do mês',
+    // migração 022 — a tabela de resgate colada da cotação do resgatável
+    seguro_resgatavel: [
+      { ano: 5, resgate: 42_000 }, { ano: 10, resgate: 138_000 },
+      { ano: 15, resgate: 268_000 }, { ano: 20, resgate: 432_000 },
+      { ano: 30, resgate: 840_000 },
+    ],
+    comparador_alternativa: 'pgbl', comparador_taxa_real: 4, aliquota_ir_cliente: 27.5,
+    premio_temporario_mensal: 640,
     token_proposta: 'demo-proposta-carlos',
     roteiro: { blocos: {
       abertura: { feito: true, nota: 'Muito receptivo. Falou da clínica e dos dois filhos.' },

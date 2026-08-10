@@ -12,6 +12,8 @@ import { brl, brlCompacto, whatsapp } from '../lib/format'
 import {
   calcularEstudo, IDADE_INDEPENDENCIA, MESES_VITALICIO, GRUPOS_COBERTURA, focoRotulo,
 } from '../lib/estudo'
+import { compararSeguroComInvestimento, DIMENSOES_COMPARACAO } from '../lib/comparador.js'
+import ComparadorCurvas from '../components/ComparadorCurvas'
 import { Spinner, Button } from '../components/ui'
 import LinhaProtecao from '../components/LinhaProtecao'
 import MapaPatrimonio from '../components/MapaPatrimonio'
@@ -145,6 +147,22 @@ export default function Proposta({ publica = false }) {
   const temEmpresa = e.temPJ && e.capitalPJ > 0
   const temRaioX = e.tem019 && e.detalhado && temPatrimonio
   const inv = e.investimento
+
+  // O comparador só entra quando há capital e prêmio; a tabela de resgate é
+  // opcional (sem ela a curva verde some, o resto continua valendo).
+  const comp = compararSeguroComInvestimento({
+    capital: e.valores.morte,
+    premioMensal: inv?.mensal ?? 0,
+    resgates: plano.seguro_resgatavel,
+    alternativa: plano.comparador_alternativa ?? 'vgbl',
+    taxaReal: plano.comparador_taxa_real != null
+      ? Number(plano.comparador_taxa_real) / 100 : e.taxaReal,
+    aliquotaIR: plano.aliquota_ir_cliente != null ? Number(plano.aliquota_ir_cliente) / 100 : 0,
+    rendaMensal: e.renda,
+    anos: Math.max(e.anos, 30),
+    premioTemporarioMensal: plano.premio_temporario_mensal,
+  })
+  const anoUm = comp?.serie?.[0] ?? null
 
   // Coberturas agrupadas — o quadro da apólice, na ordem do catálogo
   const grupos = GRUPOS_COBERTURA
@@ -870,6 +888,42 @@ export default function Proposta({ publica = false }) {
         </section>
       )}
 
+      {/* 12a · SE ACONTECER AMANHÃ — a comparação que decide */}
+      {comp && anoUm && (
+        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>A pergunta que ninguém faz</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            E se acontecesse no ano que vem?
+          </h2>
+          <p className="mt-4 max-w-2xl text-center text-slate-500">
+            O mesmo dinheiro, os dois caminhos, no primeiro ano. É aqui que a diferença aparece —
+            e ela não é de percentual, é de ordem de grandeza.
+          </p>
+          <div className="mt-10 grid w-full max-w-4xl gap-5 md:grid-cols-2">
+            <Cenario tom="ruim" icone={Hourglass} etiqueta="Investindo o mesmo valor"
+              numero={brlCompacto(anoUm.investidoLiquido)} unidade=""
+              rodape={`${brl(inv.mensal)}/mês × 12, já descontado o imposto`}>
+              É o que estaria na conta depois de um ano de aportes. Correto, disciplinado — e
+              longe do que a sua família precisaria para manter tudo de pé.
+            </Cenario>
+            <Cenario tom="bom" icone={ShieldCheck} etiqueta="Com o plano"
+              numero={brlCompacto(anoUm.seguroMorte)} unidade=""
+              rodape="disponível desde a primeira parcela paga">
+              O capital não espera acumular. Ele existe inteiro no dia seguinte ao da assinatura —
+              e é isso que um plano de proteção faz que um plano de acúmulo não faz.
+            </Cenario>
+          </div>
+          <p className="mt-10 max-w-2xl text-center text-lg text-slate-600">
+            A diferença no primeiro ano é de{' '}
+            <strong className="text-slate-900">{brlCompacto(anoUm.descoberto)}</strong>.
+            {comp.anoDoCruzamento
+              ? <> Investindo, esse buraco só fecha no <strong className="text-slate-900">ano {comp.anoDoCruzamento}</strong> —
+                e o risco não combinou de esperar até lá.</>
+              : <> Investindo, esse buraco não fecha nem em {comp.premissas.anos} anos.</>}
+          </p>
+        </section>
+      )}
+
       {/* 12b · INVESTIR OU PROTEGER — a objeção mais comum, respondida com conta */}
       {e.acumularEmVezDeSegurar && (
         <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
@@ -919,6 +973,76 @@ export default function Proposta({ publica = false }) {
           <p className="mt-10 max-w-2xl text-center text-lg text-slate-600">
             Investimento e seguro <strong className="text-slate-900">não competem</strong> — o seguro é
             justamente o que impede o seu investimento de ser consumido no pior momento.
+          </p>
+        </section>
+      )}
+
+      {/* 12b2 · O GRÁFICO DO CRUZAMENTO — a prova, ano a ano */}
+      {comp && (
+        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>A conta, ano a ano</p>
+          <h2 className="mt-3 max-w-3xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            {comp.anoDoCruzamento
+              ? `O investimento só alcança o seguro no ano ${comp.anoDoCruzamento}`
+              : `Em ${comp.premissas.anos} anos, o investimento não alcança o seguro`}
+          </h2>
+          <div className="mt-8 w-full max-w-5xl">
+            <ComparadorCurvas comp={comp} altura={300} anotar={false} />
+          </div>
+          <p className="mt-8 max-w-3xl text-center text-lg text-slate-600">
+            A área riscada é <strong className="text-slate-900">o que faltaria à sua família</strong>{' '}
+            se acontecesse naquele ano. Ela é maior justamente no começo — quando a reserva ainda não
+            existe, os filhos são menores e o financiamento está no início.
+          </p>
+          <p className="mt-4 max-w-3xl text-center text-sm text-slate-400">
+            Projeção a {(comp.premissas.taxaReal * 100).toFixed(1).replace('.', ',')}% ao ano acima da
+            inflação, comparando com {comp.premissas.alternativa === 'pgbl' ? 'PGBL' : 'VGBL'}, com a
+            tabela regressiva de imposto de renda
+            {comp.premissas.deducaoAnual > 0 && ` e creditando ${brl(comp.premissas.deducaoAnual)} por ano de dedução no IR`}.
+            Em valores de hoje.
+          </p>
+        </section>
+      )}
+
+      {/* 12b3 · CADA COISA SERVE PARA UMA COISA — inclusive onde o outro ganha */}
+      {comp && (
+        <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>Lado a lado, sem torcida</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            Cada coisa serve para uma coisa
+          </h2>
+          <div className="mt-9 grid w-full max-w-5xl gap-3 md:grid-cols-2">
+            {DIMENSOES_COMPARACAO.map((d) => {
+              const ganhaSeguro = d.vencedor === 'seguro'
+              const ganhaOutro = d.vencedor === 'investimento' || d.vencedor === 'pgbl'
+              return (
+                <div key={d.id}
+                  className={`rounded-2xl border p-5 ${ganhaSeguro ? 'border-emerald-200 bg-emerald-50/40'
+                    : ganhaOutro ? 'border-blue-200 bg-blue-50/40' : 'border-slate-200/70 bg-white'}`}>
+                  <p className="text-sm font-semibold text-slate-900">{d.pergunta}</p>
+                  <div className="mt-3 space-y-1 text-sm">
+                    <p className={ganhaSeguro ? 'font-semibold text-emerald-800' : 'text-slate-600'}>
+                      <span className="text-xs uppercase tracking-wide text-slate-400">Seguro · </span>
+                      {d.seguro}
+                    </p>
+                    <p className={ganhaOutro ? 'font-semibold text-blue-800' : 'text-slate-600'}>
+                      <span className="text-xs uppercase tracking-wide text-slate-400">
+                        {comp.premissas.alternativa === 'pgbl' ? 'PGBL · ' : 'VGBL · '}
+                      </span>
+                      {comp.premissas.alternativa === 'pgbl' ? d.pgbl : d.vgbl}
+                    </p>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-400">{d.nota}</p>
+                </div>
+              )
+            })}
+          </div>
+          <p className="mt-9 max-w-3xl text-center text-lg text-slate-600">
+            Repare que <strong className="text-slate-900">o investimento ganha duas linhas dessa
+            tabela</strong> — e é para ganhar mesmo. Ele acumula mais no longo prazo e você tira o
+            dinheiro quando quiser. O seguro não está aqui para render mais que ele:
+            {' '}<strong className="text-slate-900">está para o dinheiro existir no dia em que não
+            houve tempo de acumular</strong>. Os dois continuam no seu plano.
           </p>
         </section>
       )}

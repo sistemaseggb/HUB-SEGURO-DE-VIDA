@@ -132,6 +132,21 @@ const daTela = await page.evaluate(() => {
   return { capital: achar('importância segurada total') }
 })
 
+// ── 5d. O comparador: a aba e o slide contam a mesma história ──
+// O ano do cruzamento é o número central do capítulo novo da proposta. Se a
+// aba e o slide discordarem, a consultora confere um e apresenta outro.
+await page.click('button:has-text("Comparador")')
+await page.waitForTimeout(1500)
+const daAbaComparador = await page.evaluate(() => {
+  const t = document.body.innerText
+  const m = t.match(/(?:no ano (\d+)|nunca, no horizonte)/)
+  return { achou: !!m, ano: m?.[1] ?? null, temGrafico: /cruzamento/i.test(t) }
+})
+ok(daAbaComparador.temGrafico, 'comparador: a aba monta o gráfico do cruzamento')
+
+await page.click('button:has-text("Planejamento")')
+await page.waitForTimeout(600)
+
 // ── 6. Proposta com o estudo preenchido ──
 // Pelo botão, não por page.goto: no modo demonstração o banco vive na memória
 // da aba, e um carregamento cheio apagaria o estudo que acabamos de preencher
@@ -151,6 +166,19 @@ const daProposta = await page.evaluate(() => {
   }
   return null
 })
+const daPropostaComparador = await page.evaluate(() => {
+  const t = document.body.innerText
+  return {
+    temCapitulo: /Cada coisa serve para uma coisa/.test(t),
+    naoAlcanca: /não alcança o seguro/.test(t),
+    anoCruzamento: t.match(/investimento só alcança o seguro no ano (\d+)/)?.[1] ?? null,
+  }
+})
+ok(daPropostaComparador.temCapitulo, 'comparador: o capítulo entra na proposta')
+ok(daAbaComparador.ano === daPropostaComparador.anoCruzamento
+  || (daAbaComparador.ano === null && daPropostaComparador.naoAlcanca),
+  `ponte: o ano do cruzamento é o mesmo na aba e no slide (aba ${daAbaComparador.ano ?? 'nunca'} · slide ${daPropostaComparador.anoCruzamento ?? 'nunca'})`)
+
 const normaliza = (v) => (v ?? '').replace(/\s+/g, ' ').trim()
 ok(daTela.capital != null && daProposta != null && normaliza(daTela.capital) === normaliza(daProposta),
   `ponte: importância segurada igual na tela e no slide (tela ${normaliza(daTela.capital) || '—'} · slide ${normaliza(daProposta) || '—'})`)

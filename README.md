@@ -38,6 +38,7 @@ e registrar os dados; o sistema cuida do resto.
 - **Pipeline** — Kanban com arrastar-e-soltar, dias parados com alerta
   amarelo/vermelho configurável, motivo obrigatório ao perder um cliente.
 - **Clientes** — perfil 360º com abas: Planejamento (dados da reunião),
+  **Comparador** (seguro resgatável × previdência, com o gráfico do cruzamento),
   Roteiro, **Transcrição** (análise da gravação do Tactiq), Reuniões, Apólices,
   **Documentos** (anexos no Storage), Formulário de onboarding, Tarefas e
   Histórico. Faixa de **Próxima Melhor Ação** e
@@ -114,6 +115,15 @@ pessoas falam — "a Alice tem 6 e o Lucas 9", "ganho uns quarenta e oito mil",
 "a clínica fatura 4,2 milhões" — com o resultado esperado declarado ao lado.
 Quando o parser regride, o teste diz qual frase parou de ser entendida.
 
+**`test:comparador`** — o teste mais importante do arquivo mais delicado: os
+números do comparador vão para um gráfico apresentado contra o assessor de
+investimentos do cliente, e um erro de tributação não aparece como tela
+quebrada — aparece como afirmação falsa numa reunião. Cada caso tem o
+**resultado calculado à mão** (taxa zero, aportes exatos), não uma expectativa
+colhida da própria implementação: a alíquota certa em cada faixa da regressiva,
+VGBL tributando só o ganho e PGBL o total, a dedução do PGBL limitada aos 12%
+da renda, e o ano do cruzamento numa conta redonda.
+
 **`test:e2e`** — quatro suítes. A **principal** navega o sistema inteiro
 nas duas visões — consultora (login, dashboard, pipeline, cliente 360 com o
 planejamento completo, transcrição da reunião, apólices, DPS, proposta,
@@ -184,6 +194,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 19. [`supabase/migrations/019_planejamento_completo.sql`](supabase/migrations/019_planejamento_completo.sql)
 20. [`supabase/migrations/020_transcricoes_reuniao.sql`](supabase/migrations/020_transcricoes_reuniao.sql)
 21. [`supabase/migrations/021_planejamento_inteligente.sql`](supabase/migrations/021_planejamento_inteligente.sql)
+22. [`supabase/migrations/022_comparador.sql`](supabase/migrations/022_comparador.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -337,6 +348,17 @@ npm run dev
 - [x] **Previdência líquida de IR**: o extrato mostra o bruto, a família saca o
       líquido. PGBL é tributado sobre o total resgatado, VGBL só sobre o
       rendimento — e é o líquido que paga o inventário
+- [x] **Comparador: seguro resgatável × VGBL/PGBL** (migração 022) — a prova
+      numérica e gráfica. A consultora cola a tabela de resgate da cotação (o
+      sistema interpola o meio, não inventa valor) e recebe a série ano a ano
+      com a tributação certa dos dois lados: o **gráfico do cruzamento**, com a
+      área hachurada do que faltaria à família, o **custo real da proteção** por
+      mil de capital ao ano, e o quadro das dimensões que não são dinheiro
+      (isenção de IR, inventário, impenhorabilidade, dedução do PGBL).
+      A comparação é **de propósito justa**: credita a dedução de até 12% da
+      renda no PGBL, usa a tabela regressiva de verdade e admite em voz alta
+      que num horizonte longo sem sinistro o investimento acumula mais — é isso
+      que a torna difícil de derrubar
 - [x] **Aposentadoria e acúmulo** deixa de ser só um foco na lista: meta de
       capital, o que a previdência atual entrega projetada e líquida, a renda
       que isso sustenta de verdade e quanto falta aportar por mês — com o elo
