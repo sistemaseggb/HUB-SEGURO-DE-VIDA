@@ -256,7 +256,7 @@ function CampoWizard({ campo, respostas, onChange, erro }) {
                 <Trash2 size={16} />
               </button>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <input className={inputWizard(false)} placeholder="Nome completo" value={b.nome ?? ''}
                 onChange={(e) => atualizar(i, 'nome', e.target.value)} />
               <input className={inputWizard(false)} placeholder="Parentesco (ex.: filho)" value={b.relacao ?? ''}

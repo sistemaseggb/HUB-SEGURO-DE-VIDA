@@ -4,9 +4,9 @@ import {
   ArrowLeft, MessageCircle, Presentation, Copy, Check, Printer,
   CalendarPlus, FileSignature, ClipboardList, Zap, Upload, FileText, Download, Trash2, Pencil,
   Phone, Mail, Handshake, StickyNote, Flame, ChartPie, HeartHandshake, RefreshCw, CheckCircle2,
-  Users2, Wallet, Shield, Landmark, Sparkles, Plus, Baby, Archive, TrendingDown,
+  Users2, Wallet, Shield, Landmark, Sparkles, Plus, Baby, Archive, TrendingDown, TrendingUp,
   ListChecks, Lightbulb, MessageSquareQuote, Clock3,
-  Building2, PiggyBank, Coins, HeartPulse, Ambulance, AlertTriangle, FileAudio,
+  Building2, PiggyBank, Coins, HeartPulse, Ambulance, AlertTriangle, FileAudio, Scale,
 } from 'lucide-react'
 import { ETAPAS_FORM, ROTULOS_FORM } from '../lib/formularioConfig'
 import { supabase } from '../lib/supabase'
@@ -15,6 +15,7 @@ import { brl, brlCompacto, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib
 import {
   calcularEstudo, normalizarFilhos, IDADE_INDEPENDENCIA, MESES_VITALICIO,
   COBERTURAS, GRUPOS_COBERTURA, TIPOS_PLANEJAMENTO, FOCOS, CLASSES_PATRIMONIO,
+  porqueCobertura,
 } from '../lib/estudo'
 import { BLOCOS_ROTEIRO } from '../lib/roteiro'
 import {
@@ -24,9 +25,11 @@ import { useToast } from '../components/toastContexto'
 import LinhaProtecao from '../components/LinhaProtecao'
 import MapaPatrimonio from '../components/MapaPatrimonio'
 import AbaTranscricao from './AbaTranscricao'
+import AbaComparador from './AbaComparador'
 
 const ABAS = [
   { nome: 'Planejamento', icone: ChartPie },
+  { nome: 'Comparador', icone: Scale },
   { nome: 'Roteiro', icone: ListChecks },
   { nome: 'Transcrição', icone: FileAudio },
   { nome: 'Interações', icone: MessageCircle },
@@ -62,7 +65,9 @@ export default function ClienteDetalhe() {
       supabase.from('vw_clientes_contato').select('dias_sem_contato, ultimo_contato').eq('id', id).maybeSingle(),
       supabase.from('apolices').select('valor_premio_mensal, capital_segurado, comissao_gerada, status').eq('id_cliente', id),
     ])
-    setCliente(c.data)
+    // Cliente que não existe (link antigo, cliente excluído noutra aba) não
+    // pode virar carregando eterno: marcamos explicitamente para a tela avisar.
+    setCliente(c.data ?? (c.error ? 'nao-encontrado' : null))
     setPrioridade(pr.data)
     setContato(ct.data)
     // resumo de valor do cliente para o cabeçalho (só apólices ativas)
@@ -114,6 +119,25 @@ export default function ClienteDetalhe() {
     navigate('/clientes')
   }
 
+  if (cliente === 'nao-encontrado') {
+    return (
+      <div>
+        <Link to="/clientes" className="mb-4 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
+          <ArrowLeft size={15} /> Clientes
+        </Link>
+        <Card className="p-8 text-center">
+          <p className="font-semibold text-slate-800">Cliente não encontrado</p>
+          <p className="mx-auto mt-2 max-w-sm text-sm text-slate-500">
+            Este cliente não existe mais ou o link está desatualizado. Volte para a lista e
+            procure pelo nome.
+          </p>
+          <Link to="/clientes" className="mt-4 inline-block">
+            <Button variant="secondary">Ver todos os clientes</Button>
+          </Link>
+        </Card>
+      </div>
+    )
+  }
   if (!cliente) return <Spinner />
 
   return (
@@ -280,7 +304,8 @@ export default function ClienteDetalhe() {
         ))}
       </div>
 
-      {aba === 'Planejamento' && <AbaPlanejamento idCliente={id} />}
+      {aba === 'Planejamento' && <AbaPlanejamento idCliente={id} cliente={cliente} />}
+      {aba === 'Comparador' && <AbaComparador idCliente={id} cliente={cliente} />}
       {aba === 'Roteiro' && <AbaRoteiro idCliente={id} cliente={cliente} />}
       {aba === 'Transcrição' && <AbaTranscricao idCliente={id} cliente={cliente} />}
       {aba === 'Interações' && <AbaInteracoes idCliente={id} onMudanca={carregar} />}
@@ -372,6 +397,7 @@ function CampoCobertura({ cob, estudo, plano, setPlano }) {
   const valorForm = plano[cob.campo]
   const sugestaoArredondada = Math.round(sugestao * 100) / 100
   const diaria = cob.tipo === 'diaria' ? estudo.diariaPorId[cob.id] : null
+  const porque = porqueCobertura(cob.id, estudo)
   const mudar = (campo, valor) => setPlano({ ...plano, [campo]: valor })
 
   return (
@@ -416,11 +442,10 @@ function CampoCobertura({ cob, estudo, plano, setPlano }) {
           </button>
         )}
       </div>
-      {diaria && diaria.total > 0 && (
-        <p className="mt-1.5 border-t border-slate-100 pt-1.5 text-xs text-slate-500">
-          Até <strong className="tabular text-slate-700">{brlCompacto(diaria.total)}</strong> em {diaria.dias} diárias
-          {diaria.franquia ? ` · a partir do ${diaria.franquia + 1}º dia` : ''}
-        </p>
+      {/* De onde saiu esse número, com os valores DESTE cliente. É o que a
+          consultora responde quando ele pergunta "por que tanto?". */}
+      {porque && (
+        <p className="mt-1.5 border-t border-slate-100 pt-1.5 text-xs text-slate-500">{porque}</p>
       )}
     </div>
   )
@@ -433,7 +458,7 @@ function CampoCobertura({ cob, estudo, plano, setPlano }) {
 const rascunhosPlano = new Map()
 const ESPERA_AUTOSALVAR = 1800
 
-function AbaPlanejamento({ idCliente }) {
+function AbaPlanejamento({ idCliente, cliente }) {
   const toast = useToast()
   const [plano, setPlano] = useState(null)
   const [colunas, setColunas] = useState(null)
@@ -464,8 +489,9 @@ function AbaPlanejamento({ idCliente }) {
     Promise.all([
       supabase.from('planejamentos').select('*').eq('id_cliente', idCliente).maybeSingle(),
       probe('capital_invalidez'), probe('premio_estimado'), probe('tipo_planejamento'),
-    ]).then(([{ data }, tem014, tem015, tem019]) => {
-      setColunas({ tem014, tem015, tem019 })
+      probe('renda_desejada_aposentadoria'),
+    ]).then(([{ data }, tem014, tem015, tem019, tem021]) => {
+      setColunas({ tem014, tem015, tem019, tem021 })
       // Rascunho local vence a resposta do banco quando é mais recente que a
       // linha lida — cobre tanto a gravação ainda em voo quanto a volta rápida
       // para a aba. Se outra tela (a Transcrição, por exemplo) gravou depois,
@@ -492,6 +518,10 @@ function AbaPlanejamento({ idCliente }) {
         }),
         ...(tem015 && { premio_estimado: '' }),
         ...(tem019 && { tipo_planejamento: 'pf', focos: [] }),
+        ...(tem021 && {
+          fumante: false, renda_desejada_aposentadoria: '', idade_aposentadoria: '',
+          seguros_existentes: [], quem_decide: '', prazo_decisao: '',
+        }),
       })
     })
   }, [idCliente])
@@ -529,8 +559,8 @@ function AbaPlanejamento({ idCliente }) {
 
   if (!plano || !colunas) return <Spinner />
 
-  const { tem014, tem015, tem019 } = colunas
-  const estudo = calcularEstudo(plano)
+  const { tem014, tem015, tem019, tem021 } = colunas
+  const estudo = calcularEstudo(plano, { dataNascimento: cliente?.data_nascimento })
   const set = (k) => (e) => setPlano({ ...plano, [k]: e.target.value })
   const setValor = (k, v) => setPlano({ ...plano, [k]: v })
   const focos = Array.isArray(plano.focos) ? plano.focos : []
@@ -570,6 +600,15 @@ function AbaPlanejamento({ idCliente }) {
         nome: String(f.nome ?? '').trim(),
         idade: f.idade === '' || f.idade == null ? null : Number(f.idade),
         custo_mensal: f.custo_mensal === '' || f.custo_mensal == null ? null : Number(f.custo_mensal),
+      }))
+    // apólices que ele já tem: linhas em branco não vão para o banco
+    const segurosLimpos = (Array.isArray(plano.seguros_existentes) ? plano.seguros_existentes : [])
+      .filter((s) => String(s?.descricao ?? '').trim() !== '' || Number(s?.capital) > 0)
+      .map((s) => ({
+        origem: s.origem || 'individual',
+        descricao: String(s.descricao ?? '').trim(),
+        capital: s.capital === '' || s.capital == null ? null : Number(s.capital),
+        custeio: s.custeio || 'proprio',
       }))
     const idades = filhosLimpos.map((f) => f.idade).filter((i) => i != null)
     // número vazio vira null (e não 0): null significa "usa a sugestão"
@@ -636,6 +675,14 @@ function AbaPlanejamento({ idCliente }) {
         funeral_familiar: num(plano.funeral_familiar),
         premio_anual: num(plano.premio_anual),
         forma_pagamento: plano.forma_pagamento || 'mensal',
+      }),
+      ...(tem021 && {
+        fumante: !!plano.fumante,
+        renda_desejada_aposentadoria: num(plano.renda_desejada_aposentadoria),
+        idade_aposentadoria: num(plano.idade_aposentadoria),
+        seguros_existentes: segurosLimpos,
+        quem_decide: plano.quem_decide || null,
+        prazo_decisao: plano.prazo_decisao || null,
       }),
     }
     return payload
@@ -732,6 +779,11 @@ function AbaPlanejamento({ idCliente }) {
       resumo: estudo.custoInventario > 0 ? `inventário ${brlCompacto(estudo.custoInventario)}` : 'depende do patrimônio' },
     { id: 'sec-coberturas', rotulo: 'Coberturas', icone: Shield, ok: estudo.ativas.length > 0,
       resumo: estudo.ativas.length > 0 ? `${estudo.ativas.length} na apólice` : 'nada montado ainda' },
+    tem021 && { id: 'sec-aposentadoria', rotulo: 'Aposentadoria', icone: TrendingUp,
+      ok: !!estudo.aposentadoria,
+      resumo: estudo.aposentadoria
+        ? `meta ${brlCompacto(estudo.aposentadoria.capitalNecessario)}`
+        : 'renda desejada e idade' },
     tem015 && { id: 'sec-investimento', rotulo: 'Investimento', icone: Coins, ok: !!estudo.investimento,
       resumo: estudo.investimento ? `${brl(estudo.investimento.mensal)}/mês` : 'prêmio cotado' },
   ].filter(Boolean)
@@ -837,7 +889,7 @@ function AbaPlanejamento({ idCliente }) {
         {tem019 && (
           <>
             <p id="sec-tipo" className={SECAO}><ChartPie size={13} /> Que planejamento estamos construindo</p>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {TIPOS_PLANEJAMENTO.map((t) => {
                 const ativo = (plano.tipo_planejamento || 'pf') === t.id
                 return (
@@ -876,7 +928,7 @@ function AbaPlanejamento({ idCliente }) {
 
         {/* ── Família e perfil ─────────────────────────────────────────────── */}
         <p id="sec-familia" className={SECAO}><Users2 size={13} /> Família e perfil</p>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Campo label="Profissão"><Input value={plano.profissao ?? ''} onChange={set('profissao')} /></Campo>
           <Campo label="Estado civil">
             <Select value={plano.estado_civil ?? ''} onChange={set('estado_civil')}>
@@ -987,7 +1039,7 @@ function AbaPlanejamento({ idCliente }) {
 
         {/* ── Vida financeira ──────────────────────────────────────────────── */}
         <p id="sec-financeira" className={SECAO}><Wallet size={13} /> Vida financeira</p>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Campo label="Renda mensal"><InputMoeda value={plano.renda_mensal ?? ''} onChange={set('renda_mensal')} /></Campo>
           <Campo label="Custo de vida mensal" dica={estudo.custoFilhosMensal > 0 ? `Inclui os ${brl(estudo.custoFilhosMensal)} dos filhos` : 'Quanto a família gasta por mês, no total'}>
             <InputMoeda value={plano.custo_vida_mensal ?? ''} onChange={set('custo_vida_mensal')} />
@@ -995,8 +1047,17 @@ function AbaPlanejamento({ idCliente }) {
           <Campo label="Dívidas totais" dica="Financiamentos, consignados, cartão — o que a família herdaria">
             <InputMoeda value={plano.dividas_total ?? ''} onChange={set('dividas_total')} />
           </Campo>
-          <Campo label="Anos de proteção" dica="Horizonte do estudo">
+          <Campo label="Anos de proteção"
+            dica={estudo.janelaProtecao
+              ? `Sugestão: ${estudo.janelaProtecao.anos} anos — ${estudo.janelaProtecao.motivo}`
+              : 'Horizonte do estudo'}>
             <Input type="number" min="1" value={plano.anos_protecao ?? 10} onChange={set('anos_protecao')} />
+            {estudo.janelaProtecao && Number(plano.anos_protecao) !== estudo.janelaProtecao.anos && (
+              <button type="button" className="mt-1 text-xs font-semibold text-blue-600 hover:underline"
+                onClick={() => setValor('anos_protecao', estudo.janelaProtecao.anos)}>
+                usar {estudo.janelaProtecao.anos} anos
+              </button>
+            )}
           </Campo>
           {tem014 && (
             <Campo label="Cobertura que já possui" dica="Seguros atuais — o estudo mostra o gap">
@@ -1020,7 +1081,7 @@ function AbaPlanejamento({ idCliente }) {
               em dinheiro, não em imóvel. Previdência e seguro <strong>não passam por inventário</strong>:
               vão direto ao beneficiário indicado, em dias.
             </p>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {CLASSES_PATRIMONIO.filter((c) => c.id !== 'previdencia').map((c) => (
                 <Campo key={c.id} label={c.rotulo} dica={c.nota}>
                   <InputMoeda value={plano[c.campo] ?? ''} onChange={set(c.campo)} />
@@ -1040,6 +1101,22 @@ function AbaPlanejamento({ idCliente }) {
               </Campo>
             </div>
 
+            {/* O extrato mostra o bruto. A família saca o líquido. */}
+            {estudo.irPrevidencia > 0 && (
+              <p className="mt-2 rounded-lg border border-slate-200/70 bg-slate-50/60 p-3 text-xs text-slate-600">
+                <strong>{estudo.previdenciaTipo}:</strong>{' '}
+                {estudo.previdenciaTipo === 'PGBL'
+                  ? 'o IR incide sobre o valor TOTAL resgatado, porque o aporte foi deduzido na declaração.'
+                  : estudo.previdenciaTipo === 'VGBL'
+                    ? 'o IR incide só sobre o rendimento — o aporte já foi tributado na origem.'
+                    : 'parte do saldo é VGBL (IR só no rendimento) e parte é PGBL (IR sobre o total).'}
+                {' '}Dos <strong>{brlCompacto(estudo.previdencia)}</strong> do extrato, a família recebe
+                {' '}<strong className="text-slate-900">{brlCompacto(estudo.previdenciaLiquida)}</strong>
+                {' '}— saem <strong>{brlCompacto(estudo.irPrevidencia)}</strong> de imposto de renda
+                {' '}(alíquota de longo prazo, 10%). É esse número que paga o inventário, não o do extrato.
+              </p>
+            )}
+
             {estudo.patrimonioBruto > 0 && (
               <>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1052,7 +1129,9 @@ function AbaPlanejamento({ idCliente }) {
                     detalhe={estudo.pctIliquido != null ? `${estudo.pctIliquido}% do total é ilíquido` : 'passa por ITCMD'}
                     tom="ruim" />
                   <Metrica rotulo="Chega em dias" valor={brl(estudo.liquidezImediata)}
-                    detalhe="previdência + seguro que já existe" tom="bom" />
+                    detalhe={estudo.irPrevidencia > 0
+                      ? 'previdência líquida de IR + seguro atual'
+                      : 'previdência + seguro que já existe'} tom="bom" />
                 </div>
                 {estudo.detalhado && (
                   <div className="mt-4 rounded-xl border border-slate-200/70 bg-white p-4">
@@ -1080,7 +1159,7 @@ function AbaPlanejamento({ idCliente }) {
               mundo segue a vida. O <strong>aval do sócio também não morre com ele</strong>: vira dívida
               do espólio e alcança o patrimônio pessoal.
             </p>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <Campo label="Razão social">
                 <Input value={plano.pj_razao_social ?? ''} onChange={set('pj_razao_social')} />
               </Campo>
@@ -1123,7 +1202,7 @@ function AbaPlanejamento({ idCliente }) {
         {tem014 && (
           <>
             <p id="sec-sucessao" className={SECAO}><Landmark size={13} /> Sucessão — o custo do inventário</p>
-            <div className="grid items-end gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-4">
               <Campo label="ITCMD do estado (%)" dica="RS 6 · PR 4 · SC até 8">
                 <Input type="number" step="0.5" min="0" max="20" value={plano.itcmd_pct ?? 4} onChange={set('itcmd_pct')} />
               </Campo>
@@ -1135,7 +1214,7 @@ function AbaPlanejamento({ idCliente }) {
                 <p className="font-display text-xl font-semibold text-slate-900 tabular-nums">
                   {brl(estudo.custoInventario)}
                   <span className="ml-2 text-sm font-normal text-slate-400">
-                    ({(estudo.itcmd + estudo.custas).toFixed(1).replace('.', ',')}% de {brlCompacto(estudo.bensInventariaveis)})
+                    ({(estudo.itcmd + estudo.sucessao.custasEfetivas).toFixed(1).replace('.', ',')}% de {brlCompacto(estudo.sucessao.baseInventario)})
                   </span>
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
@@ -1145,16 +1224,154 @@ function AbaPlanejamento({ idCliente }) {
                 </p>
               </div>
             </div>
+
+            {/* O que o perfil dele muda no inventário — os campos que a tela já
+                coletava e a conta ignorava até agora */}
+            {tem019 && estudo.bensInventariaveis > 0 && (
+              <div className="mt-3 space-y-1.5 rounded-xl border border-slate-200/70 bg-white p-3 text-xs text-slate-600">
+                <p className="flex items-start gap-2">
+                  <Clock3 size={13} className="mt-0.5 shrink-0 text-slate-400" />
+                  <span>
+                    Rito <strong>{estudo.sucessao.inventarioJudicial ? 'judicial' : 'extrajudicial'}</strong> —
+                    {' '}cerca de <strong>{estudo.sucessao.prazoInventarioMeses} meses</strong>
+                    {estudo.sucessao.inventarioJudicial
+                      ? ' porque há herdeiro menor de idade: cartório não resolve, tem que correr na Justiça.'
+                      : ' se todos os herdeiros forem maiores e estiverem de acordo.'}
+                  </span>
+                </p>
+                {estudo.sucessao.temHolding && (
+                  <p className="flex items-start gap-2">
+                    <Building2 size={13} className="mt-0.5 shrink-0 text-slate-400" />
+                    <span>
+                      Holding familiar: custas e honorários caem de {estudo.custas}% para
+                      {' '}<strong>{estudo.sucessao.custasEfetivas}%</strong> — mas o <strong>ITCMD continua igual</strong>,
+                      porque o imposto incide na transmissão das quotas do mesmo jeito.
+                    </span>
+                  </p>
+                )}
+                {estudo.sucessao.temTestamento && (
+                  <p className="flex items-start gap-2">
+                    <FileSignature size={13} className="mt-0.5 shrink-0 text-slate-400" />
+                    <span>
+                      Testamento organiza a partilha, mas <strong>não antecipa o dinheiro do imposto</strong> —
+                      a necessidade de liquidez continua a mesma.
+                    </span>
+                  </p>
+                )}
+                {estudo.sucessao.pctMeacao > 0 && (
+                  <p className="flex items-start gap-2">
+                    <Users2 size={13} className="mt-0.5 shrink-0 text-slate-400" />
+                    <span>
+                      Comunhão universal: <strong>{brlCompacto(estudo.sucessao.meacao)}</strong> já são do
+                      cônjuge por meação e ficam fora da herança e do ITCMD.
+                    </span>
+                  </p>
+                )}
+                {estudo.sucessao.meacaoPotencial > 0 && (
+                  <p className="flex items-start gap-2">
+                    <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-500" />
+                    <span>
+                      Até <strong>{brlCompacto(estudo.sucessao.meacaoPotencial)}</strong> podem ser meação —
+                      mas só o que foi adquirido durante o casamento. O estudo está calculando o imposto
+                      sobre o patrimônio inteiro: confirme com ele antes de apresentar.
+                    </span>
+                  </p>
+                )}
+              </div>
+            )}
+
             {tem019 && estudo.custoInventario > 0 && (
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <Metrica rotulo="A família tem hoje, em dias" valor={brl(estudo.liquidezImediata)}
-                  detalhe="previdência + seguro atual" tom="bom" />
+                  detalhe={estudo.irPrevidencia > 0
+                    ? `previdência líquida de IR + seguro atual`
+                    : 'previdência + seguro atual'} tom="bom" />
                 <Metrica rotulo="Precisa pagar" valor={brl(estudo.custoInventario)}
                   detalhe="à vista, antes de acessar os bens" />
                 <Metrica rotulo="Déficit de liquidez" valor={brl(estudo.deficitLiquidez)}
                   detalhe={estudo.deficitLiquidez > 0 ? 'sai da venda de bens às pressas' : 'coberto ✓'}
                   tom={estudo.deficitLiquidez > 0 ? 'ruim' : 'bom'} />
               </div>
+            )}
+          </>
+        )}
+
+        {/* ── Aposentadoria e acúmulo ──────────────────────────────────────── */}
+        {tem021 && (
+          <>
+            <p id="sec-aposentadoria" className={SECAO}>
+              <TrendingUp size={13} /> Aposentadoria e acúmulo
+            </p>
+            <p className="mb-3 text-xs text-slate-400">
+              O aporte da previdência sai da renda. Se a renda parar, o plano de aposentadoria para
+              junto — é por isso que proteção e acúmulo são o mesmo assunto, não dois.
+            </p>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <Campo label="Renda desejada na aposentadoria"
+                dica="Por mês, em valores de hoje. Em branco = manter o padrão de vida atual">
+                <InputMoeda value={plano.renda_desejada_aposentadoria ?? ''}
+                  onChange={set('renda_desejada_aposentadoria')} />
+              </Campo>
+              <Campo label="Idade para parar de trabalhar" dica="Em branco = 65 anos">
+                <Input type="number" min="40" max="90" value={plano.idade_aposentadoria ?? ''}
+                  onChange={set('idade_aposentadoria')} />
+              </Campo>
+              <div className="flex flex-col justify-center">
+                <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-600"
+                  title="Fumante paga mais caro no risco de vida — e o preço da espera sobe junto">
+                  <input type="checkbox" checked={!!plano.fumante}
+                    onChange={(ev) => setValor('fumante', ev.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-laranja-600 focus:ring-laranja-500" />
+                  <span>
+                    Fumante nos últimos 12 meses
+                    <span className="block text-xs text-slate-400">
+                      Muda o prêmio e o custo de deixar para depois
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {estudo.aposentadoria ? (
+              <>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <Metrica rotulo="Meta de capital" valor={brlCompacto(estudo.aposentadoria.capitalNecessario)}
+                    detalhe={`para ${brl(estudo.aposentadoria.alvoMensal)}/mês aos ${estudo.aposentadoria.idadeAlvo}`} />
+                  <Metrica rotulo="A previdência entrega"
+                    valor={brlCompacto(estudo.aposentadoria.projetadoLiquido)}
+                    detalhe={estudo.irPrevidencia > 0 ? 'já líquida de IR' : 'em valores de hoje'} />
+                  <Metrica rotulo="Renda que isso sustenta"
+                    valor={`${brl(estudo.aposentadoria.rendaProjetada)}/mês`}
+                    detalhe={`retirando ${(estudo.aposentadoria.taxaReal * 100).toFixed(0)}% ao ano`}
+                    tom={estudo.aposentadoria.rendaProjetada < estudo.aposentadoria.alvoMensal ? 'ruim' : 'bom'} />
+                  <Metrica rotulo="Falta aportar por mês"
+                    valor={estudo.aposentadoria.faltaAportar != null
+                      ? `${brl(estudo.aposentadoria.faltaAportar)}/mês` : '—'}
+                    detalhe={estudo.aposentadoria.aporteAtual > 0
+                      ? `além dos ${brl(estudo.aposentadoria.aporteAtual)} que já aporta`
+                      : 'nenhum aporte informado'}
+                    tom={estudo.aposentadoria.faltaAportar > 0 ? 'ruim' : 'bom'} />
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  Projeção a <strong>{(estudo.aposentadoria.taxaReal * 100).toFixed(0)}% ao ano
+                  acima da inflação</strong>, em {estudo.aposentadoria.anos} anos.
+                  {estudo.aposentadoria.dependeDaRenda && (
+                    <>
+                      {' '}O aporte de {brl(estudo.aposentadoria.aporteAtual)} sai da renda:
+                      {estudo.aposentadoria.cobreInvalidez
+                        ? ' com a invalidez coberta, o plano continua de pé mesmo se ele não puder mais trabalhar.'
+                        : ' sem cobertura de invalidez, ele para no dia em que a renda parar.'}
+                    </>
+                  )}
+                </p>
+              </>
+            ) : (
+              <p className="mt-3 rounded-lg border border-slate-200/70 bg-slate-50/60 p-3 text-xs text-slate-500">
+                Para calcular a aposentadoria o estudo precisa da{' '}
+                <strong>data de nascimento do cliente</strong> (no cadastro, ali em cima) e de pelo
+                menos o custo de vida. Com isso ele já mostra a meta, o que a previdência atual
+                entrega e o que falta.
+              </p>
             )}
           </>
         )}
@@ -1177,7 +1394,7 @@ function AbaPlanejamento({ idCliente }) {
                 </p>
                 <p className="text-xs text-slate-400">{g.descricao}</p>
               </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {g.itens.map((c) => (
                   <CampoCobertura key={c.id} cob={c} estudo={estudo} plano={plano} setPlano={setPlano} />
                 ))}
@@ -1194,7 +1411,7 @@ function AbaPlanejamento({ idCliente }) {
               Cote as duas formas. O pagamento anual quase sempre sai com desconto, e essa escolha é do
               cliente — a proposta mostra as duas lado a lado, com a economia em destaque.
             </p>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <Campo label="Prêmio mensal cotado" dica="12 parcelas — a forma mais comum">
                 <InputMoeda value={plano.premio_estimado ?? ''} onChange={set('premio_estimado')} />
               </Campo>
@@ -1246,6 +1463,55 @@ function AbaPlanejamento({ idCliente }) {
                   tom={estudo.investimento.pctRenda != null && estudo.investimento.pctRenda > 15 ? 'ruim' : 'neutro'} />
               </div>
             )}
+
+            {/* Âncora de comparação: ele já destina dinheiro ao longo prazo */}
+            {estudo.investimento && estudo.previdenciaAporte > 0 && (
+              <p className="mt-2 text-xs text-slate-500">
+                Ele já destina <strong>{brl(estudo.previdenciaAporte)}/mês</strong> à previdência.
+                O plano custa{' '}
+                <strong className="text-slate-700">
+                  {Math.round((estudo.investimento.mensal / estudo.previdenciaAporte) * 100)}%
+                </strong>{' '}
+                disso — e é o único aporte que já vale o valor cheio no primeiro mês.
+              </p>
+            )}
+
+            {/* O preço de deixar para depois — estimativa, nunca cotação */}
+            {estudo.custoDaEspera && (
+              <div className="mt-4 rounded-xl border border-amber-200/70 bg-amber-50/50 p-4">
+                <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-800">
+                  <Clock3 size={15} className="text-amber-600" />
+                  O preço de deixar para depois
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                    estimativa
+                  </span>
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Aos {estudo.custoDaEspera.idade} anos{estudo.custoDaEspera.fumante && ', fumante'}, o mesmo
+                  plano custaria — pela curva de agravamento por idade. A cotação real vem da seguradora.
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  {estudo.custoDaEspera.cenarios.map((c) => (
+                    <div key={c.daquiAAnos} className="rounded-lg bg-white p-3">
+                      <p className="text-[11px] uppercase tracking-wide text-slate-400">
+                        daqui a {c.daquiAAnos} ano{c.daquiAAnos > 1 ? 's' : ''} · {c.idadeNaEpoca} anos
+                      </p>
+                      <p className="font-display text-lg font-semibold tabular-nums text-slate-900">
+                        {brl(c.mensal)}<span className="text-sm font-normal text-slate-400">/mês</span>
+                      </p>
+                      <p className="mt-0.5 text-xs text-amber-700">
+                        +{brl(c.aMaisPorMes)}/mês · {String(c.aMaisPct).replace('.', ',')}% a mais,
+                        {' '}{brl(c.aMaisPorAno)} por ano
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  E o preço é a parte menor: a saúde de hoje é o melhor ativo dele na análise da
+                  seguradora — e ela não volta.
+                </p>
+              </div>
+            )}
           </>
         )}
 
@@ -1263,7 +1529,7 @@ function AbaPlanejamento({ idCliente }) {
               <span className="text-xs text-slate-400">estudo {estudo.completude.feitos}/{estudo.completude.total}</span>
             </div>
           </div>
-          <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg bg-slate-50 p-3">
               <p className="text-[11px] uppercase tracking-wide text-slate-400">Autonomia com o que é líquido</p>
               <p className={`font-display text-lg font-semibold tabular-nums ${
@@ -1300,26 +1566,32 @@ function AbaPlanejamento({ idCliente }) {
                 renda − custo de vida{estudo.comprometimentoRenda != null ? ` · ${estudo.comprometimentoRenda}% comprometida` : ''}
               </p>
             </div>
+            {/* Janela de proteção: dois relógios correm juntos — o filho mais
+                novo virando adulto e o titular chegando à aposentadoria. A
+                proteção precisa cobrir o mais longo dos dois. */}
             <div className="rounded-lg bg-slate-50 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-slate-400">Horizonte pelos filhos</p>
-              {estudo.anosSugeridosPorFilhos ? (
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">Janela de proteção</p>
+              {estudo.janelaProtecao ? (
                 <>
-                  <p className="font-display text-lg font-semibold tabular-nums text-slate-900">{estudo.anosSugeridosPorFilhos} anos</p>
+                  <p className="font-display text-lg font-semibold tabular-nums text-slate-900">
+                    {estudo.janelaProtecao.anos} anos
+                  </p>
                   <p className="text-xs text-slate-400">
-                    até o mais novo fazer {IDADE_INDEPENDENCIA} —{' '}
-                    {Number(plano.anos_protecao) !== estudo.anosSugeridosPorFilhos && (
+                    {estudo.janelaProtecao.motivo} —{' '}
+                    {Number(plano.anos_protecao) === estudo.janelaProtecao.anos ? 'aplicado ✓' : (
                       <button type="button" className="font-semibold text-laranja-700 hover:underline"
-                        onClick={() => setValor('anos_protecao', estudo.anosSugeridosPorFilhos)}>
+                        onClick={() => setValor('anos_protecao', estudo.janelaProtecao.anos)}>
                         usar no estudo
                       </button>
                     )}
-                    {Number(plano.anos_protecao) === estudo.anosSugeridosPorFilhos && 'aplicado ✓'}
                   </p>
                 </>
               ) : (
                 <>
                   <p className="font-display text-lg font-semibold text-slate-300">—</p>
-                  <p className="text-xs text-slate-400">cadastre os filhos com as idades acima</p>
+                  <p className="text-xs text-slate-400">
+                    cadastre os filhos com as idades, ou a data de nascimento do cliente
+                  </p>
                 </>
               )}
             </div>
@@ -1381,7 +1653,7 @@ function AbaPlanejamento({ idCliente }) {
         {/* Resumo vivo do estudo */}
         <div className="mt-6 rounded-xl border border-brand-100 bg-brand-50/50 p-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-700">Resumo do estudo (ao vivo)</p>
-          <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <p className="text-xs text-slate-400">Proteção da família</p>
               <p className="font-semibold tabular-nums text-slate-900">{brlCompacto(estudo.valores.morte)}</p>
@@ -2251,7 +2523,7 @@ async function imprimirDossie(cliente, contato) {
     supabase.from('formularios_onboarding').select('status').eq('id_cliente', cliente.id).order('enviado_em', { ascending: false }).limit(1),
   ])
   const plano = pl.data
-  const estudo = plano ? calcularEstudo(plano) : null
+  const estudo = plano ? calcularEstudo(plano, { dataNascimento: cliente.data_nascimento }) : null
   const apolices = ap.data ?? []
   const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const statusForm = forms.data?.[0]?.status

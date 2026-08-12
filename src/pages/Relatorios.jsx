@@ -59,7 +59,7 @@ function FragmentoAssessor({ a }) {
   )
 }
 import { supabase } from '../lib/supabase'
-import { brl, mesBR, dataBR } from '../lib/format'
+import { brl, mesBR, dataBR, mesLocal } from '../lib/format'
 import { etapaLabel, CHART } from '../lib/constants'
 import { baixarCSV } from '../lib/csv'
 import { configSplit, splitComissao } from '../lib/fechamento'
@@ -83,7 +83,7 @@ async function buscarComissoesPaginado(colunas, filtro = (q) => q) {
 // Relatórios gerenciais: fechamento de comissões (quanto pagar a cada assessor),
 // análise de perdas e velocidade do funil. Tudo exportável em CSV.
 export default function Relatorios() {
-  const [mes, setMes] = useState(new Date().toISOString().slice(0, 7))
+  const [mes, setMes] = useState(mesLocal)
   const [comissoes, setComissoes] = useState(null)
   const [splitMensal, setSplitMensal] = useState([])
   const [motivos, setMotivos] = useState([])
@@ -650,7 +650,7 @@ export default function Relatorios() {
         dos dados de tempos em tempos.
       </ComoFunciona>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         {/* Backup / exportação de dados */}
         <Card className="p-5 xl:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -660,7 +660,7 @@ export default function Relatorios() {
               </h2>
               <p className="text-xs text-slate-400">Baixe uma cópia completa em CSV (abre no Excel) — faça isso de tempos em tempos.</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="secondary" onClick={exportarClientes}><Download size={15} /> Exportar clientes</Button>
               <Button variant="secondary" onClick={exportarApolices}><Download size={15} /> Exportar apólices</Button>
             </div>
@@ -736,7 +736,7 @@ export default function Relatorios() {
                 Extrato real importado das planilhas (Azos, Icatu, MAG, Omint...) em Importar → Comissões
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="secondary" disabled={importadas.length === 0}
                 onClick={() => baixarCSV(
                   `comissoes-seguradoras-${mes}.csv`,
@@ -778,7 +778,7 @@ export default function Relatorios() {
                 {imp.campanha !== 0 && <Badge tom="gold">Campanhas: {brl(imp.campanha)}</Badge>}
               </div>
 
-              <div className="grid gap-5 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                 <div className="overflow-x-auto">
                   <p className="mb-2 text-xs font-medium uppercase text-slate-400">Por seguradora</p>
                   <table className="w-full min-w-[380px] text-left text-sm">
@@ -855,14 +855,14 @@ export default function Relatorios() {
               </p>
             )}
 
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <div>
                 <p className="mb-2 text-xs font-medium uppercase text-slate-400">Seguradoras — variação vs mês anterior</p>
                 <div className="space-y-1.5">
                   {inteligencia.seguradoras.map((s) => (
                     <div key={s.seguradora} className="flex items-center gap-3 text-sm">
-                      <span className="w-24 shrink-0 font-medium text-slate-800">{s.seguradora}</span>
-                      <span className="w-24 text-right font-semibold tabular-nums">{brl(s.atual)}</span>
+                      <span className="min-w-0 flex-1 truncate font-medium text-slate-800">{s.seguradora}</span>
+                      <span className="shrink-0 text-right font-semibold tabular-nums">{brl(s.atual)}</span>
                       <VariacaoBadge atual={s.atual} anterior={s.anterior} />
                     </div>
                   ))}
@@ -873,8 +873,8 @@ export default function Relatorios() {
                   {[['recorrente', 'Recorrente (carteira)'], ['venda_nova', 'Venda nova'], ['campanha', 'Campanhas']].map(([k, rotulo]) => (
                     (inteligencia.recAtual[k] !== 0 || inteligencia.recAnt[k] !== 0) && (
                       <div key={k} className="flex items-center gap-3 text-sm">
-                        <span className="w-40 shrink-0 text-slate-600">{rotulo}</span>
-                        <span className="w-24 text-right font-semibold tabular-nums">{brl(inteligencia.recAtual[k] ?? 0)}</span>
+                        <span className="min-w-0 flex-1 truncate text-slate-600">{rotulo}</span>
+                        <span className="shrink-0 text-right font-semibold tabular-nums">{brl(inteligencia.recAtual[k] ?? 0)}</span>
                         <VariacaoBadge atual={inteligencia.recAtual[k] ?? 0} anterior={inteligencia.recAnt[k] ?? 0} />
                       </div>
                     )
@@ -1207,10 +1207,10 @@ export default function Relatorios() {
               <div className="space-y-2">
                 {motivos.map((m) => (
                   <div key={m.motivo} className="flex items-center gap-3">
-                    <span className="w-44 shrink-0 truncate text-right text-xs text-slate-500" title={m.motivo}>
+                    <span className="w-24 shrink-0 truncate text-right text-xs text-slate-500 sm:w-44" title={m.motivo}>
                       {m.motivo}
                     </span>
-                    <div className="h-6 flex-1 rounded-r-md bg-slate-50">
+                    <div className="h-6 min-w-0 flex-1 rounded-r-md bg-slate-50">
                       <div className="flex h-6 items-center rounded-r-md pl-2"
                         style={{ width: `${Math.max((m.total / maxMotivo) * 100, 8)}%`, background: CHART.serie1 }}>
                         <span className="text-xs font-semibold text-white">{m.total}</span>

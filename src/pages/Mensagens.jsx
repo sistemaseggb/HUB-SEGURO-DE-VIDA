@@ -79,7 +79,7 @@ export default function Mensagens() {
 
       {aviso && <p className="mb-4 text-sm text-slate-500">{aviso}</p>}
 
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <div className="border-b border-slate-100 px-5 py-4">
             <h2 className="font-semibold text-slate-900">Para enviar ({pendentes.length})</h2>
@@ -104,7 +104,7 @@ export default function Mensagens() {
                         <span className="text-xs text-slate-400">{dataBR(m.data_alvo)}</span>
                       </div>
                       <p className="mb-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{m.mensagem}</p>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         {whatsapp(m.telefone)
                           ? <Button variant="success" onClick={() => enviar(m)}>
                               <MessageCircle size={15} /> Enviar no WhatsApp

@@ -1,7 +1,7 @@
 -- ============================================================================
 -- HUB SEGURO DE VIDA — SETUP COMPLETO (arquivo único)
 --
--- Este arquivo junta TODAS as 20 migrações na ordem certa. Rode UMA vez, num
+-- Este arquivo junta TODAS as 23 migrações na ordem certa. Rode UMA vez, num
 -- projeto Supabase NOVO (vazio), colando tudo no SQL Editor e clicando em Run.
 -- Cria todas as tabelas, o cálculo de comissão, o bucket de documentos e tudo
 -- mais que o Hub precisa para funcionar.
@@ -2513,4 +2513,347 @@ alter table public.transcricoes enable row level security;
 drop policy if exists "acesso_total_autenticado" on public.transcricoes;
 create policy "acesso_total_autenticado" on public.transcricoes
   for all to authenticated using (true) with check (true);
+
+
+-- ############################################################################
+-- ### 021_planejamento_inteligente.sql
+-- ####################################################################################
+
+-- ============================================================================
+-- HUB SEGURO DE VIDA — Migração 021: Planejamento inteligente
+--
+-- O estudo passou a usar a IDADE do cliente (que já estava em clientes.
+-- data_nascimento e nunca tinha sido lida) para calcular a janela real de
+-- proteção e o preço de deixar a decisão para depois. Esta migração completa
+-- o que faltava no banco para as três frentes novas:
+--
+--   1. FUMANTE
+--      Muda o prêmio de risco de forma relevante (o mercado trabalha entre
+--      +50% e +100%) e entra na estimativa do custo da espera. É a diferença
+--      entre "esperar te custa 34% a mais" e um número que não bate com a
+--      cotação que vai chegar.
+--
+--   2. APOSENTADORIA E ACÚMULO
+--      O foco "aposentadoria e acúmulo" já existia na lista do planejamento
+--      e não tinha UMA LINHA de cálculo por trás. Com a renda desejada e a
+--      idade-alvo, o estudo passa a mostrar a meta de acúmulo, o que a
+--      previdência atual entrega LÍQUIDA DE IR e a lacuna mensal — e o elo
+--      que ninguém faz: sem invalidez coberta, o plano de aposentadoria para
+--      junto com a renda.
+--
+--   3. OS SEGUROS QUE ELE JÁ TEM, UM A UM
+--      "Já tenho seguro" é a objeção que mais derruba proposta, e o estudo só
+--      tinha um número solto (cobertura_atual). Guardando origem e custeio de
+--      cada apólice, a consultora mostra o que realmente sobra: seguro de
+--      empresa acaba junto com o emprego e o do banco costuma cobrir só o
+--      saldo devedor do financiamento — nenhum dos dois protege a família.
+--
+--   4. QUEM DECIDE E QUANDO
+--      Preenchidos automaticamente pela análise da transcrição da reunião.
+--      Proposta sem data de retorno esfria em 72 horas.
+--
+-- A RPC da proposta pública passa a devolver a IDADE do cliente (não a data
+-- de nascimento — o cliente não precisa ver menos nem mais do que o cálculo
+-- exige). Sem isso, a apresentação aberta pelo link do cliente perderia os
+-- capítulos que dependem da idade e ficaria diferente da que foi apresentada
+-- na reunião.
+--
+-- Nenhum trigger recalcula valor nesta migração: foi exatamente o que causou
+-- os erros de número corrigidos na 019.
+--
+-- Como usar: rode APÓS a 020, colando o arquivo inteiro no SQL Editor.
+-- ============================================================================
+
+alter table public.planejamentos
+  -- ── 1. Perfil de risco ─────────────────────────────────────────────────────
+  add column if not exists fumante boolean not null default false,
+
+  -- ── 2. Aposentadoria e acúmulo ─────────────────────────────────────────────
+  -- Quanto ele quer receber por mês quando parar, em valores de hoje.
+  add column if not exists renda_desejada_aposentadoria numeric(14,2),
+  -- Idade-alvo. 65 é o padrão do estudo quando fica em branco.
+  add column if not exists idade_aposentadoria integer,
+
+  -- ── 3. Seguros que já existem ──────────────────────────────────────────────
+  -- [{ origem: 'empresa'|'banco'|'individual'|'consignado'|'outro',
+  --    descricao: text, capital: number, custeio: 'empresa'|'proprio' }]
+  -- O total continua em cobertura_atual: esta coluna é o detalhe que sustenta
+  -- a conversa, não uma segunda fonte de verdade.
+  add column if not exists seguros_existentes jsonb not null default '[]'::jsonb,
+
+  -- ── 4. Decisão ─────────────────────────────────────────────────────────────
+  add column if not exists quem_decide   text,
+  add column if not exists prazo_decisao text;
+
+comment on column public.planejamentos.fumante is
+  'Fumante nos últimos 12 meses. Agrava o prêmio de risco e entra na estimativa do custo da espera.';
+comment on column public.planejamentos.renda_desejada_aposentadoria is
+  'Renda mensal desejada na aposentadoria, em valores de hoje.';
+comment on column public.planejamentos.idade_aposentadoria is
+  'Idade-alvo para parar de trabalhar. Padrão do estudo: 65.';
+comment on column public.planejamentos.seguros_existentes is
+  'Detalhe das apólices atuais: [{origem, descricao, capital, custeio}]. O total fica em cobertura_atual.';
+comment on column public.planejamentos.quem_decide is
+  'Quem decide a contratação (ele, o casal, os sócios). Preenchido pela análise da transcrição.';
+comment on column public.planejamentos.prazo_decisao is
+  'Prazo que o cliente sinalizou para decidir. Preenchido pela análise da transcrição.';
+
+-- Faixa plausível para a idade-alvo: fora disso é digitação errada, e um
+-- estudo com aposentadoria aos 3 anos não ajuda ninguém.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'planejamentos_idade_aposentadoria_faixa'
+  ) then
+    alter table public.planejamentos
+      add constraint planejamentos_idade_aposentadoria_faixa
+      check (idade_aposentadoria is null or idade_aposentadoria between 40 and 90);
+  end if;
+end $$;
+
+-- ── A proposta pública precisa saber a idade ────────────────────────────────
+-- Devolvemos a idade calculada, não a data de nascimento: é o suficiente para
+-- o cálculo e expõe o mínimo no link aberto.
+create or replace function public.fn_proposta_carregar(p_token uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r record;
+begin
+  select p.*,
+         c.nome as cliente_nome,
+         case
+           when c.data_nascimento is null then null
+           else extract(year from age(current_date, c.data_nascimento))::int
+         end as cliente_idade
+    into r
+    from public.planejamentos p
+    join public.clientes c on c.id = p.id_cliente
+   where p.token_proposta = p_token;
+
+  if not found then
+    return jsonb_build_object('erro', 'proposta_nao_encontrada');
+  end if;
+
+  return jsonb_build_object(
+    'cliente_nome', r.cliente_nome,
+    'cliente_idade', r.cliente_idade,
+    -- o plano inteiro, menos os identificadores internos
+    'plano', to_jsonb(r) - 'cliente_nome' - 'cliente_idade'
+             - 'id' - 'id_cliente' - 'token_proposta'
+  );
+end;
+$$;
+
+revoke all on function public.fn_proposta_carregar(uuid) from public;
+grant execute on function public.fn_proposta_carregar(uuid) to anon, authenticated;
+
+
+-- ############################################################################
+-- ### 022_comparador.sql
+-- ####################################################################################
+
+-- ============================================================================
+-- HUB SEGURO DE VIDA — Migração 022: O comparador
+--
+-- "Não seria melhor investir esse dinheiro?" é a objeção que mais derruba
+-- proposta de seguro resgatável, e até aqui o sistema respondia com UM número:
+-- quantos anos de aporte levariam até o capital do estudo. É um bom argumento
+-- e é insuficiente — não mostra a curva, não trata o valor de resgate, e não
+-- sobrevive a um cliente que chega com o assessor de investimentos do lado.
+--
+-- O comparador monta a série ano a ano dos dois lados, com a tributação certa
+-- de cada um, e mostra o ponto exato em que uma curva cruza a outra.
+--
+-- O PRINCÍPIO: a comparação precisa ser JUSTA, ou volta contra quem apresenta.
+-- Seguro e investimento não respondem à mesma pergunta. Um comparador que
+-- esconde onde o investimento ganha é um comparador que o cliente desmonta em
+-- trinta segundos. Por isso o sistema credita a dedução do PGBL, usa a tabela
+-- regressiva de IR de verdade e diz, em voz alta, que num horizonte longo e
+-- sem sinistro o investimento acumula mais. É justamente por mostrar isso que
+-- o resto do argumento fica de pé.
+--
+-- O que entra no banco:
+--
+--   1. A TABELA DE RESGATE DA COTAÇÃO
+--      Valor de resgate varia por produto e seguradora (Prudential, MetLife,
+--      Icatu) e o sistema não tem como saber sozinho. A consultora cola os
+--      pares ano/valor da cotação e o motor interpola o meio. Número exato,
+--      defensável na frente do cliente — não é estimativa.
+--
+--   2. CONTRA O QUE COMPARAR
+--      VGBL (IR só sobre o rendimento) ou PGBL (IR sobre o total resgatado,
+--      mas com dedução de até 12% da renda tributável todo ano).
+--
+--   3. AS PREMISSAS, POR CLIENTE
+--      A taxa real de juros e a alíquota de IR dele. Projeção sem premissa à
+--      vista é adivinhação, e premissa que não dá para ajustar é dogma.
+--
+--   4. O SEGURO TEMPORÁRIO, SE ELA COTOU
+--      Isolar o custo da proteção e comparar com um temporário do mesmo
+--      capital é a comparação mais justa que existe neste assunto.
+--
+-- Nenhum trigger recalcula valor nesta migração: foi exatamente o que causou
+-- os erros de número corrigidos na 019.
+--
+-- Como usar: rode APÓS a 021, colando o arquivo inteiro no SQL Editor.
+-- ============================================================================
+
+alter table public.planejamentos
+  -- ── 1. A tabela de resgate, colada da cotação ──────────────────────────────
+  -- [{ ano: int, resgate: numeric }] — os pontos que a seguradora informou.
+  -- O motor interpola entre eles e mantém estável depois do último.
+  add column if not exists seguro_resgatavel jsonb not null default '[]'::jsonb,
+
+  -- ── 2. Contra o que comparar ───────────────────────────────────────────────
+  add column if not exists comparador_alternativa text,
+
+  -- ── 3. Premissas do cliente ────────────────────────────────────────────────
+  -- Taxa real (acima da inflação) ao ano, em %. Em branco = o padrão do
+  -- estudo (4%). Fica editável porque é a premissa que um assessor questiona.
+  add column if not exists comparador_taxa_real numeric(6,3),
+  -- Alíquota de IR dele, em %. Sem ela a dedução do PGBL não pode ser
+  -- creditada — e sem creditar, a comparação é um espantalho.
+  add column if not exists aliquota_ir_cliente numeric(5,2),
+
+  -- ── 4. O temporário do mesmo capital, se houver cotação ────────────────────
+  add column if not exists premio_temporario_mensal numeric(14,2);
+
+comment on column public.planejamentos.seguro_resgatavel is
+  'Tabela de resgate da cotação: [{ano, resgate}]. O motor interpola entre os pontos informados.';
+comment on column public.planejamentos.comparador_alternativa is
+  'Contra o que comparar o seguro resgatável: vgbl ou pgbl.';
+comment on column public.planejamentos.comparador_taxa_real is
+  'Taxa de juros real ao ano (%) usada na projeção. Em branco usa o padrão do estudo (4%).';
+comment on column public.planejamentos.aliquota_ir_cliente is
+  'Alíquota de IR do cliente (%), para creditar a dedução do PGBL na comparação.';
+comment on column public.planejamentos.premio_temporario_mensal is
+  'Prêmio mensal de um seguro TEMPORÁRIO do mesmo capital, se cotado. Isola o custo da proteção.';
+
+-- A alternativa só aceita o que o comparador sabe calcular: um valor digitado
+-- errado viraria uma coluna vazia no gráfico, sem ninguém perceber.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'planejamentos_comparador_alternativa_valida'
+  ) then
+    alter table public.planejamentos
+      add constraint planejamentos_comparador_alternativa_valida
+      check (comparador_alternativa is null or comparador_alternativa in ('vgbl', 'pgbl'));
+  end if;
+end $$;
+
+-- Faixas plausíveis. Uma taxa real de 40% ao ano ou uma alíquota de 300%
+-- produzem um gráfico bonito e uma conversa impossível de sustentar.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'planejamentos_comparador_taxa_real_faixa'
+  ) then
+    alter table public.planejamentos
+      add constraint planejamentos_comparador_taxa_real_faixa
+      check (comparador_taxa_real is null or comparador_taxa_real between -5 and 20);
+  end if;
+  if not exists (
+    select 1 from pg_constraint where conname = 'planejamentos_aliquota_ir_faixa'
+  ) then
+    alter table public.planejamentos
+      add constraint planejamentos_aliquota_ir_faixa
+      check (aliquota_ir_cliente is null or aliquota_ir_cliente between 0 and 50);
+  end if;
+end $$;
+
+
+-- ############################################################################
+-- ### 023_apresentacao.sql
+-- ####################################################################################
+
+-- ============================================================================
+-- HUB SEGURO DE VIDA — Migração 023: A apresentação que interage
+--
+-- A consultora apresenta pelo iPad, compartilhando a tela na reunião. Até aqui
+-- a proposta era um deck: bonito, correto e MUDO. Ela passava slide, o cliente
+-- assistia, e a conversa acontecia apesar da tela, não por causa dela.
+--
+-- Uma reunião de seguro de vida não é uma palestra. É um cliente perguntando
+-- "e se fosse mil e duzentos?", é a consultora circulando um número com a
+-- canetinha e dizendo "é ESTE aqui que muda tudo", é riscar o que não importa
+-- para sobrar o que importa. Nada disso cabe num deck.
+--
+-- O que esta migração guarda:
+--
+--   ANOTAÇÕES POR SLIDE
+--   O que ela desenha por cima de cada capítulo, guardado por cliente. Ela
+--   reabre a proposta uma semana depois e o círculo que fez em volta do
+--   déficit de liquidez ainda está lá — junto com a conversa que ele sustentou.
+--
+--   Os traços são gravados em coordenadas RELATIVAS (0 a 1) ao slide, não em
+--   pixels: o mesmo desenho feito no iPad em pé aparece certo no iPad deitado,
+--   no computador da consultora e no celular do cliente. Guardar pixel seria
+--   guardar o desenho de um aparelho só.
+--
+--   A chave é o NOME do slide ('sucessao', 'cruzamento'), não a posição. Um
+--   cliente que ganha o capítulo da empresa empurraria todos os índices para
+--   frente, e as anotações apareceriam no capítulo errado — que é pior do que
+--   não ter anotação nenhuma.
+--
+-- O que NÃO entra no banco: as simulações que ela faz durante a conversa
+-- ("e se fosse R$ 1.200?"). Elas são de propósito temporárias — o planejamento
+-- continua sendo a fonte da verdade, e um número mexido no calor da reunião
+-- não pode virar o estudo sem ela decidir isso na aba Planejamento.
+--
+-- Como usar: rode APÓS a 022, colando o arquivo inteiro no SQL Editor.
+-- ============================================================================
+
+alter table public.planejamentos
+  -- { "sucessao": [ {t, c, l, p:[x,y,x,y,…]}, … ], "cruzamento": [ … ] }
+  --   t = tipo do traço (caneta | marcador)
+  --   c = cor · l = largura · p = pontos em coordenadas relativas 0..1
+  add column if not exists anotacoes_proposta jsonb not null default '{}'::jsonb;
+
+comment on column public.planejamentos.anotacoes_proposta is
+  'Desenhos da consultora sobre os slides, por nome de slide. Pontos em coordenadas relativas 0..1 para funcionar em qualquer tela.';
+
+-- A proposta pública precisa mostrar as anotações: se o cliente abre o link
+-- depois da reunião e vê um slide limpo, ele perde exatamente a parte que foi
+-- explicada para ele.
+create or replace function public.fn_proposta_carregar(p_token uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r record;
+begin
+  select p.*,
+         c.nome as cliente_nome,
+         case
+           when c.data_nascimento is null then null
+           else extract(year from age(current_date, c.data_nascimento))::int
+         end as cliente_idade
+    into r
+    from public.planejamentos p
+    join public.clientes c on c.id = p.id_cliente
+   where p.token_proposta = p_token;
+
+  if not found then
+    return jsonb_build_object('erro', 'proposta_nao_encontrada');
+  end if;
+
+  return jsonb_build_object(
+    'cliente_nome', r.cliente_nome,
+    'cliente_idade', r.cliente_idade,
+    -- o plano inteiro, menos os identificadores internos
+    'plano', to_jsonb(r) - 'cliente_nome' - 'cliente_idade'
+             - 'id' - 'id_cliente' - 'token_proposta'
+  );
+end;
+$$;
+
+revoke all on function public.fn_proposta_carregar(uuid) from public;
+grant execute on function public.fn_proposta_carregar(uuid) to anon, authenticated;
 

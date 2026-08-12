@@ -1,22 +1,110 @@
-import { useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Printer, Heart, GraduationCap, Activity,
   Stethoscope, CalendarClock, Scale, ClipboardCheck, Search, FileSignature, Handshake,
   Hourglass, Coffee, Link2, Check, MessageCircle, ShieldCheck,
   BedDouble, Bone, Ambulance, Flower2, Building2, Briefcase, Landmark,
-  PiggyBank, Lock, Wallet, Users,
+  PiggyBank, Lock, Wallet, Users, Presentation, SlidersHorizontal,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, whatsapp } from '../lib/format'
 import {
   calcularEstudo, IDADE_INDEPENDENCIA, MESES_VITALICIO, GRUPOS_COBERTURA, focoRotulo,
 } from '../lib/estudo'
+import { compararSeguroComInvestimento, DIMENSOES_COMPARACAO } from '../lib/comparador.js'
+import {
+  TINTAS, agora, anotacoesIguais, aplicarSimulacao, comTracos, contarTracos,
+  descreverSimulacao, desfazerHist, novoHistorico, podeDesfazer, podeRefazer,
+  proximoCapitulo, refazerHist, registrar, sanitizarAnotacoes, simulacaoAtiva,
+  slidesAnotados,
+} from '../lib/apresentacao'
+import { entrarTelaCheia, manterAcordado, sairTelaCheia } from '../lib/telaDeApresentacao'
+import ComparadorCurvas from '../components/ComparadorCurvas'
+import QuadroDesenho from '../components/QuadroDesenho'
+import BarraApresentacao, { PainelSimulacao, PerguntaDesenhos } from '../components/BarraApresentacao'
 import { Spinner, Button } from '../components/ui'
 import LinhaProtecao from '../components/LinhaProtecao'
 import MapaPatrimonio from '../components/MapaPatrimonio'
 
 import Logo from '../components/Logo'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// O QUADRO DE CADA SLIDE
+//
+// Todo capítulo da proposta é um <Slide>: uma <section> com o nome estável no
+// `data-slide` e uma camada de desenho por cima. O contexto existe para não
+// arrastar oito props pelos vinte e um capítulos — o que o <Slide> precisa
+// saber (se está apresentando, qual ferramenta, quais traços são dele) chega
+// por aqui, e cada capítulo continua sendo só o seu conteúdo.
+//
+// O nome do slide é a CHAVE das anotações — nunca o índice. Um cliente que
+// ganha o capítulo da empresa empurraria todos os índices para frente e o
+// círculo do déficit de liquidez apareceria no capítulo errado.
+// ─────────────────────────────────────────────────────────────────────────────
+const ContextoQuadro = createContext(null)
+
+// Atalhos de ferramenta, para quem apresenta pelo computador ligado na TV:
+// no iPad ela usa a barra, mas na sala de reunião com teclado isto vale ouro.
+const ATALHO_FERRAMENTA = {
+  a: 'apontar', A: 'apontar',
+  l: 'laser', L: 'laser',
+  c: 'caneta', C: 'caneta',
+  m: 'marcador', M: 'marcador',
+  s: 'seta', S: 'seta',
+  e: 'borracha', E: 'borracha',
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REVELAÇÃO POR ETAPAS
+//
+// Um slide que abre com tudo escrito já entregou o final. O cliente lê antes
+// de ela falar, e a conversa vira legenda do slide. Marcando o bloco com
+// <Revelar>, os cartões aparecem um a um conforme ela avança — o primeiro
+// junto com o título, os outros no ritmo dela.
+//
+// O truque é o `data-etapa`: o CSS esconde os filhos além da etapa atual (ver
+// `index.css`). Nada de embrulhar cada filho num <div>, que quebraria os
+// `grid` de todos os capítulos, e nada de mexer no DOM por fora do React.
+// Fora da apresentação o atributo nem existe, então a proposta impressa e o
+// link do cliente mostram tudo, sempre.
+// ─────────────────────────────────────────────────────────────────────────────
+const ContextoSlide = createContext('')
+
+// `como` preserva o elemento original do bloco: a linha do tempo do inventário
+// é uma <ol> de <li>, e trocá-la por <div> deixaria itens de lista soltos fora
+// de uma lista — HTML inválido e leitor de tela perdido.
+function Revelar({ como: Elemento = 'div', className = '', children, ...resto }) {
+  const q = useContext(ContextoQuadro)
+  const meuSlide = useContext(ContextoSlide)
+  // só o capítulo em que ela está revela por etapas; os outros ficam inteiros,
+  // senão o slide seguinte aparece pela metade durante a rolagem
+  const ligado = !!q?.apresentando && q.revelando && q.slideAtivo === meuSlide
+  return (
+    <Elemento className={className} data-revelar=""
+      data-etapa={ligado ? Math.min(q.etapa, 8) : undefined} {...resto}>
+      {children}
+    </Elemento>
+  )
+}
+
+function Slide({ nome, className = '', children }) {
+  const q = useContext(ContextoQuadro)
+  const tracos = q?.anotacoes?.[nome]
+  // Fora da apresentação a camada continua desenhada, só que sem receber
+  // ponteiro: é assim que o cliente vê, no link, o que foi rabiscado para ele.
+  const ativo = !!q?.apresentando && q.slideAtivo === nome && q.ferramenta.tipo !== 'apontar'
+  return (
+    <section data-slide={nome} className={`relative ${className}`}>
+      <ContextoSlide.Provider value={nome}>{children}</ContextoSlide.Provider>
+      {(ativo || (tracos && tracos.length > 0)) && (
+        <QuadroDesenho
+          slide={nome} tracos={tracos} ativo={ativo} ferramenta={q.ferramenta}
+          aoMudarTracos={(novos, opcoes) => q.definirTracos(nome, novos, opcoes)} />
+      )}
+    </section>
+  )
+}
 
 // Gerador de proposta: transforma o estudo numa apresentação de tela cheia
 // para a reunião (ou PDF pela impressão — cada slide vira uma página A4
@@ -25,8 +113,16 @@ import Logo from '../components/Logo'
 // então vê o preço.
 //
 //   capa → diagnóstico → reenquadramento → autonomia → o número →
-//   futuro dos filhos → raio-X do patrimônio → sucessão → empresa (PJ) →
-//   gap de cobertura → o plano completo → investimento → passos → fechamento
+//   futuro dos filhos → raio-X do patrimônio → sucessão → linha do tempo do
+//   inventário → empresa (PJ) → aposentadoria → gap de cobertura → o plano
+//   completo → investimento → investir ou proteger → o custo da espera →
+//   passos → fechamento
+//
+// Capítulos entram e saem conforme o perfil: o de empresa só com PJ, o de
+// aposentadoria só para quem marcou esse foco, o do custo da espera só com a
+// data de nascimento no cadastro. E os três cartões do reenquadramento são
+// escolhidos pelos FOCOS do cliente — quem veio por sucessão não ouve primeiro
+// sobre a educação dos filhos.
 //
 // Todo número vem de calcularEstudo(): a tela do planejamento e o slide
 // mostram exatamente a mesma conta, sempre.
@@ -36,6 +132,21 @@ const ICONE_COBERTURA = {
   morte_acidental: Ambulance, fraturas: Bone,
   funeral_individual: Flower2, funeral_familiar: Flower2,
   sucessao: Scale, socios: Handshake, homem_chave: Briefcase, aval: Landmark,
+}
+
+// Nome curto de cada capítulo, para o índice da apresentação. O h2 do slide
+// serve de reserva, mas ele é uma FRASE ("A proteção atual não cobre o plano")
+// e num índice de 21 linhas isso vira parede de texto.
+const TITULO_SLIDE = {
+  capa: 'Capa', diagnostico: 'Onde você está', reenquadramento: 'O que o plano resolve',
+  autonomia: 'Autonomia da família', numero: 'O número', filhos: 'Futuro dos filhos',
+  patrimonio: 'Raio-X do patrimônio', sucessao: 'Sucessão',
+  'linha-inventario': 'Linha do inventário', empresa: 'A empresa',
+  aposentadoria: 'Aposentadoria', gap: 'O que falta', plano: 'O plano completo',
+  investimento: 'O investimento', 'se-acontecer': 'Se acontecer amanhã',
+  'investir-ou-proteger': 'Investir ou proteger', cruzamento: 'O cruzamento',
+  dimensoes: 'Cada coisa serve para uma coisa', 'custo-espera': 'O custo da espera',
+  passos: 'Próximos passos', fechamento: 'Fechamento',
 }
 
 // "36 meses" / "vitalícia" — o mesmo texto em todos os slides
@@ -51,32 +162,183 @@ export default function Proposta({ publica = false }) {
   const { id, token } = useParams()
   const [dados, setDados] = useState(null)
   const [slideAtual, setSlideAtual] = useState(0)
-  const [totalSlides, setTotalSlides] = useState(0)
+  const [capitulos, setCapitulos] = useState([])
   const [copiado, setCopiado] = useState(false)
 
-  // Navegação de apresentação: setas/PageUp-Down/espaço avançam os slides;
-  // as bolinhas laterais mostram onde está e pulam direto ao clicar.
+  // ── Estado da apresentação ────────────────────────────────────────────────
+  const [apresentando, setApresentando] = useState(false)
+  const [ferramenta, setFerramenta] = useState({
+    tipo: 'apontar', cor: TINTAS[1].cor, espessura: 'medio',
+  })
+  // Histórico de estados em vez de "tira o último traço": só assim a BORRACHA
+  // e o "limpar capítulo" têm volta. Ela encostar sem querer num traço que
+  // sustentava o argumento e perdê-lo para sempre era o pior defeito possível
+  // aqui — acontece no meio da reunião e não tem conserto.
+  const [historico, setHistorico] = useState(() => novoHistorico({}))
+  const [anotacoesSalvas, setAnotacoesSalvas] = useState({})
+  const [simulacao, setSimulacao] = useState({})
+  const [painelSimulacao, setPainelSimulacao] = useState(false)
+  const [escuro, setEscuro] = useState(false)
+  const [perguntando, setPerguntando] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const [erroSalvar, setErroSalvar] = useState(null)
+  const [pulados, setPulados] = useState(() => new Set())
+  const [revelando, setRevelando] = useState(true)
+  // A etapa é ANCORADA ao nome do capítulo, nunca guardada solta. A rolagem
+  // suave atravessa todos os slides do caminho, então qualquer regra baseada
+  // em "de qual slide eu vim" se confunde: pular do capítulo 16 para o 2 pelo
+  // índice passa por 15, 14, 13… e o último passo parece um "voltar um".
+  // Com a âncora, qualquer capítulo que não seja o marcado começa do zero, e
+  // só a navegação que quer o contrário diz isso explicitamente.
+  const [etapaPor, setEtapaPor] = useState({ slide: '', n: 0 })
+  const [inicioReuniao, setInicioReuniao] = useState(null)
+
+  const anotacoes = agora(historico)
+  const totalSlides = capitulos.length
+  const etapasDoSlide = capitulos[slideAtual]?.etapas ?? 0
+  const slideDoIndice = capitulos[slideAtual]?.slide ?? ''
+  const etapa = etapaPor.slide === slideDoIndice ? Math.min(etapaPor.n, etapasDoSlide) : 0
+
+  const irPara = useCallback((i) => {
+    const slides = [...document.querySelectorAll('.proposta section')]
+    if (slides.length === 0) return
+    slides[Math.max(0, Math.min(i, slides.length - 1))]
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
+  // Tudo o que a navegação precisa saber vive numa referência: o ouvinte de
+  // teclado é montado uma vez e leria valores congelados se dependesse do
+  // fechamento — a seta pararia de andar depois do primeiro slide.
+  const navRef = useRef({})
+  navRef.current = {
+    irPara, slideAtual, etapa, etapasDoSlide, revelando, pulados, totalSlides,
+    apresentando, capitulos, slideDoIndice,
+  }
+
+  // Um passo para frente na apresentação: primeiro revela o que falta DESTE
+  // capítulo, só depois vira o slide. É como todo apresentador espera que a
+  // barra de espaço se comporte — e é o que faz um slide virar conversa em vez
+  // de parede de texto.
+  const avancar = useCallback((direcao) => {
+    const n = navRef.current
+    if (n.revelando && direcao > 0 && n.etapa < n.etapasDoSlide) {
+      setEtapaPor({ slide: n.slideDoIndice, n: n.etapa + 1 }); return
+    }
+    if (n.revelando && direcao < 0 && n.etapa > 0) {
+      setEtapaPor({ slide: n.slideDoIndice, n: n.etapa - 1 }); return
+    }
+    const destino = proximoCapitulo(n.slideAtual, direcao, n.totalSlides, n.pulados)
+    if (destino === n.slideAtual) return
+    // Voltando um capítulo, ele aparece INTEIRO: é um capítulo que ela já
+    // explicou, e vê-lo recomeçar do primeiro cartão a obrigaria a reconstruir
+    // o argumento só para chegar de novo onde já estava.
+    if (direcao < 0) {
+      setEtapaPor({ slide: n.capitulos[destino]?.slide ?? '', n: n.capitulos[destino]?.etapas ?? 0 })
+    }
+    n.irPara(destino)
+  }, [])
+
+  // Navegação: setas/PageUp-Down/espaço avançam; as bolinhas laterais mostram
+  // onde está e pulam direto ao clicar. O índice de capítulos da barra sai
+  // daqui também — a lista é lida do DOM porque é o DOM que sabe quais
+  // capítulos este cliente ganhou, e quantas etapas cada um tem.
   useEffect(() => {
     const slides = () => [...document.querySelectorAll('.proposta section')]
-    setTotalSlides(slides().length)
+    setCapitulos(slides().map((s) => ({
+      slide: s.dataset.slide ?? '',
+      titulo: TITULO_SLIDE[s.dataset.slide] ?? s.querySelector('h2')?.textContent?.trim() ?? 'Capítulo',
+      // um bloco marcado para revelar tem uma etapa por filho, menos a
+      // primeira, que já entra visível junto com o título
+      etapas: Math.max(0, (s.querySelector('[data-revelar]')?.children.length ?? 1) - 1),
+    })))
     function atual() {
       const y = window.scrollY + window.innerHeight / 2
       return Math.max(slides().findLastIndex((s) => s.offsetTop <= y), 0)
     }
-    function irPara(i) {
-      const alvo = slides()[Math.max(0, Math.min(i, slides().length - 1))]
-      alvo?.scrollIntoView({ behavior: 'smooth' })
-    }
-    function onKey(e) {
-      if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); irPara(atual() + 1) }
-      else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); irPara(atual() - 1) }
-    }
     function onScroll() { setSlideAtual(atual()) }
-    window.addEventListener('keydown', onKey)
     window.addEventListener('scroll', onScroll, { passive: true })
     onScroll()
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('scroll', onScroll) }
+    return () => window.removeEventListener('scroll', onScroll)
   }, [dados])
+
+
+  // Atalhos. Montados uma vez só e lendo tudo por referência.
+  useEffect(() => {
+    function onKey(e) {
+      // digitando num campo (o painel de simulação tem controles), as setas
+      // são do campo, não da apresentação
+      const alvo = e.target
+      if (alvo?.tagName === 'INPUT' || alvo?.tagName === 'TEXTAREA' || alvo?.isContentEditable) return
+      if (e.metaKey || e.ctrlKey) {
+        if (e.key === 'z' || e.key === 'Z') {
+          e.preventDefault()
+          setHistorico((h) => (e.shiftKey ? refazerHist(h) : desfazerHist(h)))
+        }
+        return
+      }
+      if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); avancar(1) }
+      else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); avancar(-1) }
+      else if (e.key === 'Home') { e.preventDefault(); navRef.current.irPara(0) }
+      else if (e.key === 'End') { e.preventDefault(); navRef.current.irPara(navRef.current.totalSlides - 1) }
+      else if (!navRef.current.apresentando) return
+      // daqui para baixo, só durante a apresentação: quem folheia a proposta
+      // sem apresentar não deve ver a tela apagar ao digitar "b"
+      else if (e.key === 'b' || e.key === 'B') setEscuro((v) => !v)
+      else if (ATALHO_FERRAMENTA[e.key]) setFerramenta((f) => ({ ...f, tipo: ATALHO_FERRAMENTA[e.key] }))
+      else if (/^[1-5]$/.test(e.key)) setFerramenta((f) => ({ ...f, cor: TINTAS[Number(e.key) - 1].cor }))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [avancar])
+
+  // Fechar a aba com desenho não guardado apagaria a reunião inteira sem
+  // pergunta nenhuma. O navegador só deixa avisar a partir de um `preventDefault`
+  // no beforeunload, e só quando há de fato o que perder.
+  const pendenteRef = useRef(false)
+  useEffect(() => {
+    const aoFechar = (e) => {
+      if (!pendenteRef.current) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', aoFechar)
+    return () => window.removeEventListener('beforeunload', aoFechar)
+  }, [])
+
+  // As anotações que já estavam guardadas para este cliente. A coluna só existe
+  // depois da migração 023: sem ela, a proposta continua inteira, apenas sem
+  // memória dos desenhos (detecção por coluna, como no resto do sistema).
+  useEffect(() => {
+    const plano = dados?.plano
+    const guardadas = sanitizarAnotacoes(plano?.anotacoes_proposta)
+    setHistorico(novoHistorico(guardadas))
+    setAnotacoesSalvas(guardadas)
+  }, [dados])
+
+  // Modo apresentação: a classe no <html> prende a rolagem em um slide por vez
+  // (scroll-snap) e esconde o que não é conteúdo. A tela acordada evita o iPad
+  // apagar no meio do argumento e derrubar o compartilhamento de tela.
+  useEffect(() => {
+    if (!apresentando) return undefined
+    document.documentElement.classList.add('apresentando')
+    const soltar = manterAcordado()
+    // o Safari do iPad sai da tela cheia sozinho ao girar o aparelho; o estado
+    // precisa acompanhar o navegador, não o contrário
+    const aoSair = () => {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        // sair da tela cheia não encerra a apresentação: ela continua com a
+        // rolagem presa e a barra na mão dela
+      }
+    }
+    document.addEventListener('fullscreenchange', aoSair)
+    document.addEventListener('webkitfullscreenchange', aoSair)
+    return () => {
+      document.documentElement.classList.remove('apresentando')
+      document.removeEventListener('fullscreenchange', aoSair)
+      document.removeEventListener('webkitfullscreenchange', aoSair)
+      soltar()
+    }
+  }, [apresentando])
 
   useEffect(() => {
     if (publica) {
@@ -84,13 +346,17 @@ export default function Proposta({ publica = false }) {
       // security definer (migração 017) devolve só o plano e o nome dele
       supabase.rpc('fn_proposta_carregar', { p_token: token }).then(({ data, error }) => {
         if (error || !data || data.erro) setDados({ naoEncontrada: true })
-        else setDados({ cliente: { nome: data.cliente_nome }, plano: data.plano })
+        else setDados({ cliente: { nome: data.cliente_nome, idade: data.cliente_idade }, plano: data.plano })
       })
     } else {
       Promise.all([
         supabase.from('clientes').select('*').eq('id', id).single(),
         supabase.from('planejamentos').select('*').eq('id_cliente', id).maybeSingle(),
-      ]).then(([c, p]) => setDados({ cliente: c.data, plano: p.data }))
+      ]).then(([c, p]) => setDados(c.data
+        ? { cliente: c.data, plano: p.data }
+        // cliente inexistente cairia em cliente.nome.split() na primeira linha
+        // do slide de capa — melhor cair no estado de "não encontrada"
+        : { naoEncontrada: true }))
     }
   }, [id, token, publica])
 
@@ -120,19 +386,116 @@ export default function Proposta({ publica = false }) {
 
   const linkPublico = plano.token_proposta ? `${window.location.origin}/p/${plano.token_proposta}` : null
 
+  // ── A apresentação ────────────────────────────────────────────────────────
+  const slideAtivo = capitulos[slideAtual]?.slide ?? ''
+  const tracosDoSlide = anotacoes[slideAtivo] ?? []
+  const desenhosPendentes = !anotacoesIguais(anotacoes, anotacoesSalvas)
+  // A coluna só existe depois da migração 023. Sem ela a consultora ainda
+  // desenha na reunião inteira — só não tem onde guardar, e o sistema diz isso
+  // em vez de oferecer um botão que falharia.
+  const podeGuardar = !publica && 'anotacoes_proposta' in plano
+  pendenteRef.current = desenhosPendentes && podeGuardar
+
+  const definirTracos = (nome, novos, { continuando = false } = {}) =>
+    setHistorico((h) => registrar(h, comTracos(agora(h), nome, novos), { substituir: continuando }))
+  const desfazer = () => setHistorico(desfazerHist)
+  const refazer = () => setHistorico(refazerHist)
+  const limparSlide = () => setHistorico((h) => registrar(h, comTracos(agora(h), slideAtivo, [])))
+
+  function abrirApresentacao() {
+    // O pedido de tela cheia tem que sair DIRETO do clique: depois de um await
+    // ou dentro de um setTimeout o navegador recusa em silêncio.
+    entrarTelaCheia(document.documentElement)
+    setApresentando(true)
+    setFerramenta((f) => ({ ...f, tipo: 'apontar' }))
+    // a tecla B funciona em qualquer momento; sem zerar aqui, quem digitou um
+    // "b" folheando a proposta entraria na apresentação com a tela preta
+    setEscuro(false)
+    setEtapaPor({ slide: '', n: 0 })
+    setInicioReuniao(Date.now())
+  }
+
+  function tentarSair() {
+    if (desenhosPendentes && podeGuardar) { setPerguntando(true); return }
+    encerrar()
+  }
+
+  function encerrar() {
+    sairTelaCheia()
+    setApresentando(false)
+    setPerguntando(false)
+    setEscuro(false)
+    setPainelSimulacao(false)
+    // a simulação é temporária por definição: sair da apresentação devolve os
+    // números do planejamento, que é a fonte da verdade
+    setSimulacao({})
+  }
+
+  async function guardarDesenhos({ saindo = false } = {}) {
+    setSalvando(true)
+    setErroSalvar(null)
+    const { error } = await supabase.from('planejamentos')
+      .update({ anotacoes_proposta: anotacoes }).eq('id_cliente', id)
+    setSalvando(false)
+    if (error) { setErroSalvar('Não foi possível guardar os desenhos. Tente de novo.'); return }
+    setAnotacoesSalvas(anotacoes)
+    setPerguntando(false)
+    if (saindo) encerrar()
+  }
+
+  function descartarDesenhos() {
+    // volta ao que está no banco, mas o histórico guarda o passo: se ela
+    // clicar em descartar sem querer, um Ctrl+Z devolve o desenho
+    setHistorico((h) => registrar(h, anotacoesSalvas))
+    encerrar()
+  }
+
+  function alternarPulado(i) {
+    setPulados((p) => {
+      const novo = new Set(p)
+      if (novo.has(i)) novo.delete(i)
+      else novo.add(i)
+      return novo
+    })
+  }
+
   function copiarLink() {
     navigator.clipboard.writeText(linkPublico)
     setCopiado(true)
     setTimeout(() => setCopiado(false), 2000)
   }
 
-  const e = calcularEstudo(plano)
+  // O plano que a tela mostra é o do banco, com as alavancas da simulação por
+  // cima quando ela está mexendo nos números na frente do cliente. Nada disso
+  // é gravado: `simulacao` morre com a apresentação, e o planejamento continua
+  // sendo a fonte da verdade.
+  const planoEfetivo = aplicarSimulacao(plano, simulacao)
+  const simulando = simulacaoAtiva(simulacao)
+  const mudancasSimuladas = descreverSimulacao(simulacao, plano)
+
+  const e = calcularEstudo(planoEfetivo, { dataNascimento: cliente.data_nascimento, idade: cliente.idade })
   const primeiroNome = cliente.nome.split(' ')[0]
   const temPatrimonio = e.patrimonioBruto > 0
   const temGap = e.tem014 && e.coberturaAtual > 0
   const temEmpresa = e.temPJ && e.capitalPJ > 0
   const temRaioX = e.tem019 && e.detalhado && temPatrimonio
   const inv = e.investimento
+
+  // O comparador só entra quando há capital e prêmio; a tabela de resgate é
+  // opcional (sem ela a curva verde some, o resto continua valendo).
+  const comp = compararSeguroComInvestimento({
+    capital: e.valores.morte,
+    premioMensal: inv?.mensal ?? 0,
+    resgates: plano.seguro_resgatavel,
+    alternativa: plano.comparador_alternativa ?? 'vgbl',
+    taxaReal: plano.comparador_taxa_real != null
+      ? Number(plano.comparador_taxa_real) / 100 : e.taxaReal,
+    aliquotaIR: plano.aliquota_ir_cliente != null ? Number(plano.aliquota_ir_cliente) / 100 : 0,
+    rendaMensal: e.renda,
+    anos: Math.max(e.anos, 30),
+    premioTemporarioMensal: plano.premio_temporario_mensal,
+  })
+  const anoUm = comp?.serie?.[0] ?? null
 
   // Coberturas agrupadas — o quadro da apólice, na ordem do catálogo
   const grupos = GRUPOS_COBERTURA
@@ -144,10 +507,44 @@ export default function Proposta({ publica = false }) {
 
   const rotuloSecao = 'text-sm font-medium uppercase tracking-[0.3em] text-gold-500'
 
+  // O slide de reenquadramento fala do que ELE veio resolver. Os três cartões
+  // são escolhidos pelos focos marcados no planejamento — quem veio por
+  // sucessão não ouve primeiro sobre educação dos filhos. Sem foco marcado,
+  // ficam os três de sempre, na ordem que funciona para a maioria.
+  const CARTOES = {
+    vida: { id: 'vida', icone: Activity, titulo: 'A maior parte paga em vida',
+      texto: <>Invalidez, doenças graves, internação e afastamento pagam <strong className="text-slate-700">enquanto você está aqui</strong> — justamente quando os custos explodem e a renda para.</> },
+    renda: { id: 'renda', icone: Heart, titulo: 'Substitui a sua renda',
+      texto: <>O plano transforma anos de trabalho em um capital que <strong className="text-slate-700">sustenta a família</strong> e realiza os sonhos que você prometeu — com ou sem você.</> },
+    educacao: { id: 'educacao', icone: GraduationCap, titulo: 'Garante a formação dos filhos',
+      texto: <>A faculdade não espera o inventário nem a recuperação de ninguém. O capital <strong className="text-slate-700">chega em dias</strong> e o estudo dos filhos segue como estava planejado.</> },
+    dividas: { id: 'dividas', icone: Wallet, titulo: 'A dívida não passa para eles',
+      texto: <>Financiamento e consignado <strong className="text-slate-700">não morrem com o titular</strong>: viram dívida do espólio. O plano quita e a família herda o bem, não a parcela.</> },
+    sucessao: { id: 'sucessao', icone: ShieldCheck, titulo: 'Protege o que você construiu',
+      texto: <>Dá <strong className="text-slate-700">liquidez imediata</strong> para o inventário — o patrimônio não trava, a família não vende bens às pressas para pagar imposto.</> },
+    blindagem: { id: 'blindagem', icone: Lock, titulo: 'O patrimônio fica inteiro',
+      texto: <>Sem liquidez, o que sustenta a família é a venda do que você construiu. Com o plano, <strong className="text-slate-700">o patrimônio não é consumido</strong> — ele continua rendendo para eles.</> },
+    empresarial: { id: 'empresarial', icone: Briefcase, titulo: 'A empresa continua de pé',
+      texto: <>Os sócios compram a quota da família à vista e <strong className="text-slate-700">ninguém vira sócio de herdeiro</strong>. A empresa segue, e a família recebe em dinheiro.</> },
+    aposentadoria: { id: 'aposentadoria', icone: PiggyBank, titulo: 'O plano de longo prazo sobrevive',
+      texto: <>O aporte da aposentadoria sai da renda. Protegendo a renda, <strong className="text-slate-700">o plano de acúmulo continua</strong> mesmo se você não puder mais trabalhar.</> },
+  }
+  const cartoesReenquadramento = (() => {
+    const escolhidos = e.focos.map((f) => CARTOES[f]).filter(Boolean)
+    // "paga em vida" abre bem qualquer conversa; entra sempre que sobra espaço
+    const complemento = [CARTOES.vida, CARTOES.renda, CARTOES.sucessao]
+    const vistos = new Set()
+    return [...escolhidos, ...complemento]
+      .filter((c) => (vistos.has(c.id) ? false : vistos.add(c.id)))
+      .slice(0, 3)
+  })()
+
   return (
+    <ContextoQuadro.Provider
+      value={{ apresentando, ferramenta, anotacoes, definirTracos, slideAtivo, revelando, etapa }}>
     <div className="proposta">
-      {/* barra de ações — some na impressão */}
-      <div className="fixed left-0 right-0 top-0 z-20 flex flex-wrap items-center justify-between gap-2 bg-slate-900/95 px-4 py-2.5 backdrop-blur print:hidden">
+      {/* barra de ações — some na impressão e durante a apresentação */}
+      <div className={`fixed left-0 right-0 top-0 z-20 flex flex-wrap items-center justify-between gap-2 bg-slate-900/95 px-4 py-2.5 backdrop-blur print:hidden ${apresentando ? 'hidden' : ''}`}>
         {publica ? (
           <span className="text-sm text-slate-300">
             Estudo preparado por <strong className="text-white">Natália Maschendorf</strong>
@@ -161,6 +558,14 @@ export default function Proposta({ publica = false }) {
           <span className="hidden text-xs text-slate-400 lg:block">
             slide {slideAtual + 1} de {totalSlides} · use as setas ← →
           </span>
+          {!publica && (
+            // O botão que muda a reunião: tela cheia, controles ao alcance do
+            // polegar e a Apple Pencil escrevendo por cima do slide.
+            <Button variant="primary" onClick={abrirApresentacao}
+              title="Tela cheia, caneta e simulação ao vivo — para apresentar pelo iPad">
+              <Presentation size={15} /> Apresentar
+            </Button>
+          )}
           {!publica && linkPublico && (
             <>
               <Button variant="secondary" onClick={copiarLink}
@@ -181,18 +586,86 @@ export default function Proposta({ publica = false }) {
         </div>
       </div>
 
-      {/* bolinhas de navegação (somem na impressão) */}
-      <div className="fixed right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2 print:hidden">
-        {[...Array(totalSlides)].map((_, i) => (
-          <button key={i} aria-label={`Ir ao slide ${i + 1}`}
-            onClick={() => document.querySelectorAll('.proposta section')[i]?.scrollIntoView({ behavior: 'smooth' })}
+      {/* bolinhas de navegação (somem na impressão e na apresentação, onde a
+          barra de baixo já mostra a posição e o índice) */}
+      <div className={`fixed right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2 print:hidden ${apresentando ? 'hidden' : ''}`}>
+        {capitulos.map((c, i) => (
+          <button key={c.slide + i} aria-label={`Ir ao slide ${i + 1}: ${c.titulo}`} title={c.titulo}
+            onClick={() => irPara(i)}
             className={`h-2.5 w-2.5 rounded-full transition-all ${
               i === slideAtual ? 'scale-125 bg-laranja-500' : 'bg-slate-400/40 hover:bg-slate-400/70'}`} />
         ))}
       </div>
 
+      {apresentando && (
+        <>
+          {/* Tela preta: no meio da reunião a tela às vezes atrapalha. Um toque
+              e a atenção volta para a conversa, sem perder o lugar no roteiro. */}
+          {escuro && (
+            <button type="button" onClick={() => setEscuro(false)}
+              aria-label="Voltar do modo tela preta"
+              className="fixed inset-0 z-30 flex items-end justify-center bg-slate-950 pb-28 text-xs text-slate-600 print:hidden">
+              toque para voltar ao slide
+            </button>
+          )}
+
+          {/* Enquanto a simulação está ligada, a tela diz isso o tempo todo: um
+              número de hipótese não pode passar por definitivo na frente do
+              cliente. */}
+          {simulando && !escuro && (
+            <div className="pointer-events-none fixed left-1/2 top-3 z-30 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-full bg-gold-400/95 px-4 py-1.5 text-xs font-medium text-slate-900 shadow-lg print:hidden">
+              <span className="inline-flex items-center gap-1.5"><SlidersHorizontal size={13} /> Simulação — não salva</span>
+              {mudancasSimuladas.map((m) => (
+                <span key={m.campo} className="tabular opacity-80">
+                  {m.rotulo}: {m.sufixo ? `${m.de} → ${m.para} ${m.sufixo}` : `${brl(m.de)} → ${brl(m.para)}`}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <BarraApresentacao
+            slideAtual={slideAtual} totalSlides={totalSlides} irPara={irPara} avancar={avancar}
+            nomes={capitulos.map((c, i) => ({
+              ...c, anotado: (anotacoes[c.slide] ?? []).length > 0, pulado: pulados.has(i),
+            }))}
+            alternarPulado={alternarPulado}
+            etapa={etapa} etapasDoSlide={etapasDoSlide}
+            revelando={revelando} alternarRevelacao={() => setRevelando((v) => !v)}
+            inicioReuniao={inicioReuniao}
+            ferramenta={ferramenta} mudarFerramenta={setFerramenta}
+            desfazer={desfazer} podeDesfazer={podeDesfazer(historico)}
+            refazer={refazer} podeRefazer={podeRefazer(historico)}
+            limparSlide={limparSlide} temTracosNoSlide={tracosDoSlide.length > 0}
+            desenhosPendentes={desenhosPendentes && podeGuardar}
+            guardarDesenhos={() => guardarDesenhos()}
+            simulando={painelSimulacao || simulando}
+            alternarSimulacao={() => setPainelSimulacao((v) => !v)}
+            escuro={escuro} alternarEscuro={() => setEscuro((v) => !v)}
+            sair={tentarSair}>
+            {erroSalvar && (
+              <p className="mb-2 rounded-lg bg-red-600 px-4 py-2 text-sm text-white shadow-lg">{erroSalvar}</p>
+            )}
+            {painelSimulacao && !escuro && (
+              <PainelSimulacao plano={plano} simulacao={simulacao}
+                mudar={(campo, valor) => setSimulacao((s) => ({ ...s, [campo]: valor }))}
+                limpar={() => setSimulacao({})}
+                fechar={() => setPainelSimulacao(false)} />
+            )}
+          </BarraApresentacao>
+
+          {perguntando && (
+            <PerguntaDesenhos
+              quantos={contarTracos(anotacoes)} slides={slidesAnotados(anotacoes).length}
+              salvando={salvando}
+              guardar={() => guardarDesenhos({ saindo: true })}
+              descartar={descartarDesenhos}
+              cancelar={() => setPerguntando(false)} />
+          )}
+        </>
+      )}
+
       {/* 1 · CAPA */}
-      <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-brand-800 via-brand-900 to-slate-900 p-5 sm:p-8 text-center text-white print:min-h-0 print:py-24">
+      <Slide nome="capa" className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-brand-800 via-brand-900 to-slate-900 p-5 sm:p-8 text-center text-white print:min-h-0 print:py-24">
         <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-laranja-500/10 blur-3xl print:hidden" />
         <div className="pointer-events-none absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-gold-400/10 blur-3xl print:hidden" />
         <div className="relative"><Logo claro tamanho={64} /></div>
@@ -217,10 +690,10 @@ export default function Proposta({ publica = false }) {
         <p className="relative mt-12 text-sm text-white/50">
           Natália Maschendorf · Consultoria de Seguro de Vida e Blindagem Patrimonial · {new Date().toLocaleDateString('pt-BR')}
         </p>
-      </section>
+      </Slide>
 
       {/* 2 · DIAGNÓSTICO — onde você está hoje */}
-      <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+      <Slide nome="diagnostico" className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
         <p className={rotuloSecao}>O ponto de partida</p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">A vida de {primeiroNome} hoje</h2>
         <div className="mt-10 grid w-full max-w-4xl grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
@@ -251,44 +724,35 @@ export default function Proposta({ publica = false }) {
         <p className="mt-10 max-w-xl text-center text-lg text-slate-600">
           Tudo isso depende de uma única coisa continuar existindo: <strong className="text-slate-900">a sua capacidade de gerar renda</strong>.
         </p>
-      </section>
+      </Slide>
 
       {/* 3 · REENQUADRAMENTO — o slide que muda a cabeça do cliente */}
-      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
+      <Slide nome="reenquadramento" className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
         <p className={rotuloSecao}>Antes de tudo, uma verdade</p>
         <h2 className="mt-3 max-w-3xl text-center text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">
           Seguro de vida não é sobre morrer.<br />
           <span className="text-laranja-600">É sobre continuar cuidando.</span>
         </h2>
-        <div className="mt-12 grid w-full max-w-4xl gap-5 md:grid-cols-3">
-          <Cartao icone={Activity} titulo="A maior parte paga em vida">
-            Invalidez, doenças graves, internação e afastamento pagam <strong className="text-slate-700">enquanto você está aqui</strong> —
-            justamente quando os custos explodem e a renda para.
-          </Cartao>
-          <Cartao icone={Heart} titulo="Substitui a sua renda">
-            O plano transforma anos de trabalho em um capital que <strong className="text-slate-700">sustenta a família</strong>
-            {' '}e realiza os sonhos que você prometeu — com ou sem você.
-          </Cartao>
-          <Cartao icone={ShieldCheck} titulo="Protege o que você construiu">
-            Dá <strong className="text-slate-700">liquidez imediata</strong> para o inventário — o patrimônio não trava,
-            a família não vende bens às pressas para pagar imposto.
-          </Cartao>
-        </div>
+        <Revelar className="mt-12 grid w-full max-w-4xl gap-5 md:grid-cols-3">
+          {cartoesReenquadramento.map((c) => (
+            <Cartao key={c.id} icone={c.icone} titulo={c.titulo}>{c.texto}</Cartao>
+          ))}
+        </Revelar>
         <p className="mt-10 max-w-xl text-center text-lg text-slate-600">
           É o único ativo que <strong className="text-slate-900">se multiplica exatamente na hora que você mais precisa</strong>.
         </p>
-      </section>
+      </Slide>
 
       {/* 4 · QUANTO TEMPO — a pergunta que abre os olhos */}
       {e.mesesComPlano != null && e.mesesVendendoTudo != null && (
-        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+        <Slide nome="autonomia" className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>A pergunta central</p>
           <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
             Se a renda parasse hoje, por quanto tempo a família manteria o padrão de vida?
           </h2>
           {/* Três cenários quando o patrimônio está detalhado por classe; sem
               isso não dá para separar o líquido do ilíquido e mostramos dois. */}
-          <div className={`mt-12 grid w-full gap-5 ${temTresCenarios ? 'max-w-5xl md:grid-cols-3' : 'max-w-3xl md:grid-cols-2'}`}>
+          <Revelar className={`mt-12 grid w-full gap-5 ${temTresCenarios ? 'max-w-5xl md:grid-cols-3' : 'max-w-3xl md:grid-cols-2'}`}>
             {temTresCenarios && (
               <Cenario tom="ruim" icone={Hourglass} etiqueta="Hoje, sem vender nada"
                 numero={mesesNum(e.mesesLiquidos)} unidade={e.mesesLiquidos === 1 ? 'mês' : 'meses'}>
@@ -310,7 +774,7 @@ export default function Proposta({ publica = false }) {
               O capital chega em dias, direto aos beneficiários, e sustenta a casa sem que ninguém
               precise vender nada — <strong>o patrimônio fica inteiro para a família</strong>.
             </Cenario>
-          </div>
+          </Revelar>
           <p className="mt-10 max-w-2xl text-center text-lg text-slate-600">
             {temTresCenarios && (
               <>A comparação justa é a primeira coluna com a última: <strong className="text-slate-900">sem
@@ -318,11 +782,11 @@ export default function Proposta({ publica = false }) {
             )}
             O plano não substitui o que você construiu — <strong className="text-slate-900">ele impede que seja consumido</strong>.
           </p>
-        </section>
+        </Slide>
       )}
 
       {/* 5 · O NÚMERO */}
-      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 text-center print:min-h-0 print:py-24">
+      <Slide nome="numero" className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 text-center print:min-h-0 print:py-24">
         <p className={rotuloSecao}>A proteção recomendada</p>
         <p className="mt-6 font-display text-6xl font-semibold tracking-tight text-slate-900 tabular md:text-8xl">{brlCompacto(e.valores.morte)}</p>
         <p className="mt-3 text-xl text-slate-400 tabular">{brl(e.valores.morte)}</p>
@@ -340,11 +804,11 @@ export default function Proposta({ publica = false }) {
             até cada um completar {IDADE_INDEPENDENCIA} anos, e nem um dia a mais.
           </p>
         )}
-      </section>
+      </Slide>
 
       {/* 6 · O FUTURO DOS FILHOS — o gasto de hoje tem data para acabar */}
       {e.filhos.some((f) => f.custoMensal > 0) && (
-        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+        <Slide nome="filhos" className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>O futuro dos filhos</p>
           <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
             Cada filho protegido até os {IDADE_INDEPENDENCIA} anos — nem um dia a menos
@@ -375,12 +839,12 @@ export default function Proposta({ publica = false }) {
             O plano reserva <strong className="text-slate-900">{brlCompacto(e.capitalFilhos)}</strong> — exatamente
             o necessário, <strong className="text-slate-900">nem um real a mais</strong>.
           </p>
-        </section>
+        </Slide>
       )}
 
       {/* 7 · RAIO-X DO PATRIMÔNIO — o que a família consegue usar de verdade */}
       {temRaioX && (
-        <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
+        <Slide nome="patrimonio" className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>Raio-X do patrimônio</p>
           <h2 className="mt-3 max-w-3xl text-center text-3xl font-semibold tracking-tight text-slate-900">
             Você construiu {brlCompacto(e.patrimonioBruto)}.
@@ -412,26 +876,27 @@ export default function Proposta({ publica = false }) {
               disponível</strong> — e é isso que o seguro entrega.</>
             )}
           </p>
-        </section>
+        </Slide>
       )}
 
       {/* 8 · SUCESSÃO — o custo do inventário e o déficit de liquidez */}
       {e.tem014 && temPatrimonio && e.custoInventario > 0 && (
-        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+        <Slide nome="sucessao" className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>Sucessão e blindagem patrimonial</p>
           <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
             O inventário custa caro — e só libera os bens depois de pago
           </h2>
-          <div className="mt-10 grid w-full max-w-4xl gap-5 md:grid-cols-2">
+          <Revelar className="mt-10 grid w-full max-w-4xl gap-5 md:grid-cols-2">
             <div className="rounded-2xl border border-red-100 bg-red-50/60 p-7">
               <p className="text-xs font-semibold uppercase tracking-wide text-red-500">A família precisa pagar</p>
               <p className="mt-3 font-display text-4xl font-semibold text-red-600 tabular">{brlCompacto(e.custoInventario)}</p>
               <p className="mt-1 text-sm font-semibold text-red-700">e espera de meses a anos pelos bens</p>
               <p className="mt-2 text-sm text-red-800/80">
-                ITCMD ({e.itcmd.toFixed(1).replace('.', ',')}%) + custas e honorários ({e.custas.toFixed(1).replace('.', ',')}%)
-                sobre os {brlCompacto(e.bensInventariaveis)} que passam por inventário — pagos
+                ITCMD ({e.itcmd.toFixed(1).replace('.', ',')}%) + custas e honorários
+                {' '}({e.sucessao.custasEfetivas.toFixed(1).replace('.', ',')}%)
+                sobre os {brlCompacto(e.sucessao.baseInventario)} que passam por inventário — pagos
                 {' '}<strong>à vista, em dinheiro</strong>, antes de a família acessar qualquer bem.
-                {plano.herdeiros_menores && ' Com herdeiros menores, o inventário é judicial: mais lento e mais caro.'}
+                {e.sucessao.inventarioJudicial && ' Com herdeiro menor de idade o inventário é judicial por lei: mais lento e mais caro.'}
               </p>
             </div>
             <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-7">
@@ -455,7 +920,7 @@ export default function Proposta({ publica = false }) {
                 )}
               </p>
             </div>
-          </div>
+          </Revelar>
 
           {/* O déficit: a conta que ninguém tinha feito */}
           {e.tem019 && (
@@ -470,7 +935,12 @@ export default function Proposta({ publica = false }) {
               <p className="mt-4 text-sm text-slate-500">
                 {e.deficitLiquidez > 0 ? (
                   <>Sem esse dinheiro, a saída é vender um bem com pressa — e quem compra sabe disso.
-                  {plano.tem_holding && ' A holding organiza a partilha, mas o ITCMD continua sendo pago em dinheiro.'}</>
+                  {e.bensIliquidos > 0 && (
+                    <> Um imóvel vendido com a urgência do inventário costuma sair 20% a 30% abaixo do
+                    valor de mercado: para levantar {brlCompacto(e.deficitLiquidez)} líquidos, a família
+                    entrega perto de <strong>{brlCompacto(e.deficitLiquidez / 0.75)}</strong> em bens.</>
+                  )}
+                  {e.sucessao.temHolding && ' A holding organiza a partilha e corta as custas, mas o ITCMD continua sendo pago em dinheiro.'}</>
                 ) : (
                   <>A liquidez atual já cobre o inventário. O seguro entra para <strong>preservar essa reserva</strong> em
                   vez de consumi-la logo no primeiro mês.</>
@@ -478,12 +948,53 @@ export default function Proposta({ publica = false }) {
               </p>
             </div>
           )}
-        </section>
+        </Slide>
+      )}
+
+      {/* 8b · A LINHA DO TEMPO DO INVENTÁRIO — o que acontece mês a mês */}
+      {e.tem019 && temPatrimonio && e.custoInventario > 0 && (
+        <Slide nome="linha-inventario" className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>O que acontece de verdade</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            A conta não espera o inventário terminar
+          </h2>
+          <p className="mt-4 max-w-2xl text-center text-slate-500">
+            Este é o calendário que a família enfrenta —{' '}
+            {e.sucessao.inventarioJudicial
+              ? <>e como há <strong className="text-slate-700">herdeiro menor de idade</strong>, o rito
+                é judicial por lei: cartório não resolve.</>
+              : <>com todos os herdeiros maiores e de acordo, pelo rito mais rápido, o extrajudicial.</>}
+          </p>
+
+          <Revelar como="ol" className="mt-10 w-full max-w-3xl space-y-3">
+            <Etapa marco="Semana 1" tom="ruim"
+              titulo="As contas continuam chegando"
+              texto={`Escola, condomínio, financiamento, plano de saúde. Some ${brl(e.custoVida)} por mês que
+                     não param — e a renda de ${brl(e.renda)} parou.`} />
+            <Etapa marco="Mês 1 a 3" tom="ruim"
+              titulo={`ITCMD: ${brlCompacto(e.custoInventario)} à vista`}
+              texto="O imposto vence antes de qualquer bem ser liberado. Sem ele pago, nada anda — e ele
+                     se paga em dinheiro, não em imóvel." />
+            <Etapa marco={`Até o mês ${e.sucessao.prazoInventarioMeses}`} tom="alerta"
+              titulo={`Os ${brlCompacto(e.bensInventariaveis)} seguem travados`}
+              texto={e.sucessao.inventarioJudicial
+                ? 'Inventário judicial: audiências, prazos e a agenda do fórum. A média fica entre um ano e meio e dois anos.'
+                : 'Inventário extrajudicial, o caminho rápido: ainda assim são meses até a escritura de partilha sair.'} />
+            <Etapa marco="Enquanto isso" tom="ruim"
+              titulo="A saída vira vender com pressa"
+              texto="Quem compra de família com inventário aberto sabe que ela precisa vender. O deságio é a
+                     conta invisível — e ela costuma ser maior que o próprio imposto." />
+            <Etapa marco="Com o plano" tom="bom"
+              titulo={`${brlCompacto(e.valores.sucessao)} em dias, direto aos beneficiários`}
+              texto="O capital do seguro não entra em inventário e é livre de ITCMD na maioria dos estados.
+                     A família paga o imposto no prazo, mantém o padrão de vida e não vende nada." />
+          </Revelar>
+        </Slide>
       )}
 
       {/* 9 · PLANEJAMENTO EMPRESARIAL */}
       {temEmpresa && (
-        <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
+        <Slide nome="empresa" className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>Planejamento empresarial</p>
           <h2 className="mt-3 max-w-3xl text-center text-3xl font-semibold tracking-tight text-slate-900">
             A empresa não pode parar — e a sua família não pode virar sócia de ninguém
@@ -523,20 +1034,73 @@ export default function Proposta({ publica = false }) {
             herdeiros na sociedade. <strong className="text-slate-900">O seguro resolve isso à vista</strong>,
             no mês seguinte, sem discussão e sem processo.
           </p>
-        </section>
+        </Slide>
+      )}
+
+      {/* 9b · APOSENTADORIA — só para quem veio por esse motivo */}
+      {e.aposentadoria && e.focos.includes('aposentadoria') && (
+        <Slide nome="aposentadoria" className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>Aposentadoria e acúmulo</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            Parar de trabalhar aos {e.aposentadoria.idadeAlvo} sem baixar o padrão de vida
+          </h2>
+          <div className="mt-10 grid w-full max-w-4xl gap-5 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200/70 bg-canvas p-6 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">A meta</p>
+              <p className="mt-2 font-display text-3xl font-semibold text-slate-900 tabular">
+                {brlCompacto(e.aposentadoria.capitalNecessario)}
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                é o capital que paga {brl(e.aposentadoria.alvoMensal)} por mês sem acabar
+              </p>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-6 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">O caminho de hoje leva a</p>
+              <p className="mt-2 font-display text-3xl font-semibold text-amber-700 tabular">
+                {brlCompacto(e.aposentadoria.projetadoLiquido)}
+              </p>
+              <p className="mt-1 text-sm text-amber-900/80">
+                em {e.aposentadoria.anos} anos, já descontado o imposto de renda —
+                {' '}{brl(e.aposentadoria.rendaProjetada)} por mês
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200/70 bg-canvas p-6 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Para chegar lá</p>
+              <p className="mt-2 font-display text-3xl font-semibold text-slate-900 tabular">
+                {e.aposentadoria.aporteNecessario != null
+                  ? `${brl(e.aposentadoria.aporteNecessario)}` : '—'}
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                por mês, contra os {brl(e.aposentadoria.aporteAtual)} de hoje
+              </p>
+            </div>
+          </div>
+          <p className="mt-10 max-w-2xl text-center text-lg text-slate-600">
+            Esse aporte sai da sua renda todo mês. Se a renda parar —
+            {' '}<strong className="text-slate-900">e é justamente disso que este estudo trata</strong> —
+            {' '}o plano de aposentadoria para no mesmo dia.{' '}
+            {e.valores.invalidez > 0
+              ? <>Com {brlCompacto(e.valores.invalidez)} de invalidez na apólice, ele continua de pé mesmo
+                que você não possa mais trabalhar.</>
+              : <>Proteger a renda é o que mantém o plano de aposentadoria vivo.</>}
+          </p>
+          <p className="mt-4 text-xs text-slate-400">
+            Projeção a {(e.aposentadoria.taxaReal * 100).toFixed(0)}% ao ano acima da inflação, em valores de hoje.
+          </p>
+        </Slide>
       )}
 
       {/* 10 · O GAP — quanto falta */}
       {temGap && (
-        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+        <Slide nome="gap" className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>O que falta</p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
             {e.gap > 0 ? 'A proteção atual não cobre o plano' : 'A proteção atual está no alvo'}
           </h2>
-          <div className="mt-12 w-full max-w-2xl space-y-6">
+          <Revelar className="mt-12 w-full max-w-2xl space-y-6">
             <Barra rotulo="Você tem hoje" valor={e.coberturaAtual} max={Math.max(e.valores.morte, e.coberturaAtual)} cor="bg-slate-300" />
             <Barra rotulo="O plano recomenda" valor={e.valores.morte} max={Math.max(e.valores.morte, e.coberturaAtual)} cor="bg-laranja-500" />
-          </div>
+          </Revelar>
           {e.gap > 0 && (
             <>
               <p className="mt-12 text-xl text-slate-600">
@@ -550,11 +1114,11 @@ export default function Proposta({ publica = false }) {
               )}
             </>
           )}
-        </section>
+        </Slide>
       )}
 
       {/* 11 · O PLANO COMPLETO — o quadro da apólice, logo antes do preço */}
-      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
+      <Slide nome="plano" className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
         <p className={rotuloSecao}>Seu plano completo</p>
         <h2 className="mt-3 text-center text-3xl font-semibold tracking-tight text-slate-900">
           Tudo que {primeiroNome} passa a ter
@@ -602,6 +1166,11 @@ export default function Proposta({ publica = false }) {
             <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-laranja-500/10 blur-3xl print:hidden" />
             <p className="relative text-xs font-semibold uppercase tracking-wide text-gold-400">Importância segurada total</p>
             <p className="relative mt-2 font-display text-4xl font-semibold tabular md:text-5xl">{brlCompacto(e.capitalTotal)}</p>
+            {e.renda > 0 && (
+              <p className="relative mt-1 text-sm font-medium text-gold-400">
+                {Math.round(e.capitalTotal / (e.renda * 12))} anos da sua renda atual
+              </p>
+            )}
             <p className="relative mt-2 text-sm text-white/70">
               A amplitude total da sua proteção — capital que a família recebe conforme a necessidade
               de cada momento.
@@ -643,11 +1212,11 @@ export default function Proposta({ publica = false }) {
             )}
           </div>
         </div>
-      </section>
+      </Slide>
 
       {/* 12 · O INVESTIMENTO — mensal ou anual, a escolha é do cliente */}
       {inv && (
-        <section className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+        <Slide nome="investimento" className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>O investimento</p>
           <h2 className="mt-3 text-center text-3xl font-semibold tracking-tight text-slate-900">
             Quanto custa proteger tudo isso?
@@ -713,17 +1282,234 @@ export default function Proposta({ publica = false }) {
             )}
             {' '}no momento em que ela mais precisar.
           </p>
+          {e.previdenciaAporte > 0 && inv && (
+            <p className="mt-8 max-w-2xl text-center text-lg text-slate-600">
+              Para comparar: você já destina{' '}
+              <strong className="text-slate-900">{brl(e.previdenciaAporte)}</strong> por mês à
+              previdência, que só vale o valor cheio lá na frente. O plano custa{' '}
+              <strong className="text-slate-900">
+                {Math.round((inv.mensal / e.previdenciaAporte) * 100)}%
+              </strong>{' '}
+              disso — e vale o valor cheio já no mês que vem.
+            </p>
+          )}
           <p className="mt-6 max-w-lg text-center text-sm text-slate-400">
             Valores de referência cotados nas seguradoras para o plano completo — sujeitos à análise da proposta.
           </p>
-        </section>
+        </Slide>
+      )}
+
+      {/* 12a · SE ACONTECER AMANHÃ — a comparação que decide */}
+      {comp && anoUm && (
+        <Slide nome="se-acontecer" className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>A pergunta que ninguém faz</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            E se acontecesse no ano que vem?
+          </h2>
+          <p className="mt-4 max-w-2xl text-center text-slate-500">
+            O mesmo dinheiro, os dois caminhos, no primeiro ano. É aqui que a diferença aparece —
+            e ela não é de percentual, é de ordem de grandeza.
+          </p>
+          <Revelar className="mt-10 grid w-full max-w-4xl gap-5 md:grid-cols-2">
+            <Cenario tom="ruim" icone={Hourglass} etiqueta="Investindo o mesmo valor"
+              numero={brlCompacto(anoUm.investidoLiquido)} unidade=""
+              rodape={`${brl(inv.mensal)}/mês × 12, já descontado o imposto`}>
+              É o que estaria na conta depois de um ano de aportes. Correto, disciplinado — e
+              longe do que a sua família precisaria para manter tudo de pé.
+            </Cenario>
+            <Cenario tom="bom" icone={ShieldCheck} etiqueta="Com o plano"
+              numero={brlCompacto(anoUm.seguroMorte)} unidade=""
+              rodape="disponível desde a primeira parcela paga">
+              O capital não espera acumular. Ele existe inteiro no dia seguinte ao da assinatura —
+              e é isso que um plano de proteção faz que um plano de acúmulo não faz.
+            </Cenario>
+          </Revelar>
+          <p className="mt-10 max-w-2xl text-center text-lg text-slate-600">
+            A diferença no primeiro ano é de{' '}
+            <strong className="text-slate-900">{brlCompacto(anoUm.descoberto)}</strong>.
+            {comp.anoDoCruzamento
+              ? <> Investindo, esse buraco só fecha no <strong className="text-slate-900">ano {comp.anoDoCruzamento}</strong> —
+                e o risco não combinou de esperar até lá.</>
+              : <> Investindo, esse buraco não fecha nem em {comp.premissas.anos} anos.</>}
+          </p>
+        </Slide>
+      )}
+
+      {/* 12b · INVESTIR OU PROTEGER — a objeção mais comum, respondida com conta */}
+      {e.acumularEmVezDeSegurar && (
+        <Slide nome="investir-ou-proteger" className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>Uma pergunta justa</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            “Não seria melhor investir esse dinheiro?”
+          </h2>
+          <p className="mt-4 max-w-2xl text-center text-slate-500">
+            É a pergunta certa — e a resposta não é escolher um dos dois. É olhar o prazo.
+          </p>
+          <div className="mt-10 grid w-full max-w-4xl gap-5 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200/70 bg-white p-7 shadow-card">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Investindo os mesmos</p>
+              <p className="mt-2 font-display text-2xl font-semibold text-slate-900 tabular">
+                {brl(e.acumularEmVezDeSegurar.aporteMensal)}<span className="text-base font-normal text-slate-400">/mês</span>
+              </p>
+              <p className="mt-4 font-display text-5xl font-semibold text-slate-900 tabular">
+                {e.acumularEmVezDeSegurar.anos != null
+                  ? `${String(e.acumularEmVezDeSegurar.anos).replace('.', ',')}`
+                  : '∞'}
+              </p>
+              <p className="mt-1 text-lg font-semibold text-slate-700">
+                {e.acumularEmVezDeSegurar.anos != null ? 'anos até chegar ao capital' : 'não chega'}
+              </p>
+              <p className="mt-3 text-sm text-slate-500">
+                {e.acumularEmVezDeSegurar.partindoDe > 0 && (
+                  <>Partindo dos {brlCompacto(e.acumularEmVezDeSegurar.partindoDe)} que você já tem
+                  aplicados, </>
+                )}
+                a {(e.acumularEmVezDeSegurar.taxaReal * 100).toFixed(0)}% ao ano acima da inflação.
+                {' '}<strong>E o risco não espera esse prazo.</strong>
+              </p>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-7 shadow-card">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Com o plano</p>
+              <p className="mt-2 font-display text-2xl font-semibold text-emerald-700 tabular">
+                {brl(e.acumularEmVezDeSegurar.aporteMensal)}<span className="text-base font-normal text-emerald-600/70">/mês</span>
+              </p>
+              <p className="mt-4 font-display text-5xl font-semibold text-emerald-600 tabular">1</p>
+              <p className="mt-1 text-lg font-semibold text-emerald-700">mês até valer o capital inteiro</p>
+              <p className="mt-3 text-sm text-emerald-900/80">
+                Da primeira parcela paga, os {brlCompacto(e.acumularEmVezDeSegurar.alvo)} já estão
+                garantidos. É a única aplicação que vale o valor cheio no dia seguinte.
+              </p>
+            </div>
+          </div>
+          <p className="mt-10 max-w-2xl text-center text-lg text-slate-600">
+            Investimento e seguro <strong className="text-slate-900">não competem</strong> — o seguro é
+            justamente o que impede o seu investimento de ser consumido no pior momento.
+          </p>
+        </Slide>
+      )}
+
+      {/* 12b2 · O GRÁFICO DO CRUZAMENTO — a prova, ano a ano */}
+      {comp && (
+        <Slide nome="cruzamento" className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>A conta, ano a ano</p>
+          <h2 className="mt-3 max-w-3xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            {comp.anoDoCruzamento
+              ? `O investimento só alcança o seguro no ano ${comp.anoDoCruzamento}`
+              : `Em ${comp.premissas.anos} anos, o investimento não alcança o seguro`}
+          </h2>
+          <div className="mt-8 w-full max-w-5xl">
+            <ComparadorCurvas comp={comp} altura={300} anotar={false} />
+          </div>
+          <p className="mt-8 max-w-3xl text-center text-lg text-slate-600">
+            A área riscada é <strong className="text-slate-900">o que faltaria à sua família</strong>{' '}
+            se acontecesse naquele ano. Ela é maior justamente no começo — quando a reserva ainda não
+            existe, os filhos são menores e o financiamento está no início.
+          </p>
+          <p className="mt-4 max-w-3xl text-center text-sm text-slate-400">
+            Projeção a {(comp.premissas.taxaReal * 100).toFixed(1).replace('.', ',')}% ao ano acima da
+            inflação, comparando com {comp.premissas.alternativa === 'pgbl' ? 'PGBL' : 'VGBL'}, com a
+            tabela regressiva de imposto de renda
+            {comp.premissas.deducaoAnual > 0 && ` e creditando ${brl(comp.premissas.deducaoAnual)} por ano de dedução no IR`}.
+            Em valores de hoje.
+          </p>
+        </Slide>
+      )}
+
+      {/* 12b3 · CADA COISA SERVE PARA UMA COISA — inclusive onde o outro ganha */}
+      {comp && (
+        <Slide nome="dimensoes" className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>Lado a lado, sem torcida</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            Cada coisa serve para uma coisa
+          </h2>
+          <Revelar className="mt-9 grid w-full max-w-5xl gap-3 md:grid-cols-2">
+            {DIMENSOES_COMPARACAO.map((d) => {
+              const ganhaSeguro = d.vencedor === 'seguro'
+              const ganhaOutro = d.vencedor === 'investimento' || d.vencedor === 'pgbl'
+              return (
+                <div key={d.id}
+                  className={`rounded-2xl border p-5 ${ganhaSeguro ? 'border-emerald-200 bg-emerald-50/40'
+                    : ganhaOutro ? 'border-blue-200 bg-blue-50/40' : 'border-slate-200/70 bg-white'}`}>
+                  <p className="text-sm font-semibold text-slate-900">{d.pergunta}</p>
+                  <div className="mt-3 space-y-1 text-sm">
+                    <p className={ganhaSeguro ? 'font-semibold text-emerald-800' : 'text-slate-600'}>
+                      <span className="text-xs uppercase tracking-wide text-slate-400">Seguro · </span>
+                      {d.seguro}
+                    </p>
+                    <p className={ganhaOutro ? 'font-semibold text-blue-800' : 'text-slate-600'}>
+                      <span className="text-xs uppercase tracking-wide text-slate-400">
+                        {comp.premissas.alternativa === 'pgbl' ? 'PGBL · ' : 'VGBL · '}
+                      </span>
+                      {comp.premissas.alternativa === 'pgbl' ? d.pgbl : d.vgbl}
+                    </p>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-400">{d.nota}</p>
+                </div>
+              )
+            })}
+          </Revelar>
+          <p className="mt-9 max-w-3xl text-center text-lg text-slate-600">
+            Repare que <strong className="text-slate-900">o investimento ganha duas linhas dessa
+            tabela</strong> — e é para ganhar mesmo. Ele acumula mais no longo prazo e você tira o
+            dinheiro quando quiser. O seguro não está aqui para render mais que ele:
+            {' '}<strong className="text-slate-900">está para o dinheiro existir no dia em que não
+            houve tempo de acumular</strong>. Os dois continuam no seu plano.
+          </p>
+        </Slide>
+      )}
+
+      {/* 12c · O CUSTO DA ESPERA — a resposta ao "depois eu contrato" */}
+      {e.custoDaEspera && (
+        <Slide nome="custo-espera" className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>O preço de deixar para depois</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            Esperar não é neutro. Esperar tem preço.
+          </h2>
+          <p className="mt-4 max-w-2xl text-center text-slate-500">
+            O prêmio acompanha a idade. Este é o mesmo plano, contratado mais tarde:
+          </p>
+          <div className={`mt-10 grid w-full gap-5 ${e.custoDaEspera.cenarios.length > 2 ? 'max-w-5xl md:grid-cols-4' : 'max-w-3xl md:grid-cols-3'}`}>
+            <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50/50 p-6 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
+                Hoje · {e.custoDaEspera.idade} anos
+              </p>
+              <p className="mt-2 font-display text-3xl font-semibold text-emerald-600 tabular">
+                {brl(e.custoDaEspera.mensalHoje)}
+              </p>
+              <p className="mt-1 text-sm text-emerald-700">por mês</p>
+            </div>
+            {e.custoDaEspera.cenarios.map((c) => (
+              <div key={c.daquiAAnos} className="rounded-2xl border border-slate-200/70 bg-canvas p-6 text-center">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Em {c.daquiAAnos} ano{c.daquiAAnos > 1 ? 's' : ''} · {c.idadeNaEpoca} anos
+                </p>
+                <p className="mt-2 font-display text-3xl font-semibold text-slate-900 tabular">
+                  {brl(c.mensal)}
+                </p>
+                <p className="mt-1 text-sm text-red-600">
+                  +{String(c.aMaisPct).replace('.', ',')}% · {brl(c.aMaisPorAno)} a mais por ano
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-10 max-w-2xl text-center text-lg text-slate-600">
+            E o preço é a parte menor.{' '}
+            <strong className="text-slate-900">A sua saúde de hoje é o melhor ativo que você tem
+            na análise da seguradora</strong> — e ela não volta. Um exame alterado no meio do caminho
+            muda a conversa de lugar: deixa de ser quanto custa e passa a ser se ainda dá para contratar.
+          </p>
+          <p className="mt-6 text-xs text-slate-400">
+            Estimativa pela curva de agravamento por idade{e.custoDaEspera.fumante && ', com o agravo de fumante'}.
+            A cotação definitiva vem da seguradora.
+          </p>
+        </Slide>
       )}
 
       {/* 13 · PRÓXIMOS PASSOS */}
-      <section className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
+      <Slide nome="passos" className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
         <p className={rotuloSecao}>Como ativamos o plano</p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Quatro passos simples</h2>
-        <div className="mt-10 grid max-w-4xl gap-5 md:grid-cols-4">
+        <Revelar className="mt-10 grid max-w-4xl gap-5 md:grid-cols-4">
           <Passo n={1} icone={ClipboardCheck} titulo="Declaração de saúde"
             texto="Você responde a DPS pelo link que eu envio — leva poucos minutos." />
           <Passo n={2} icone={Search} titulo="Análise da seguradora"
@@ -732,17 +1518,17 @@ export default function Proposta({ publica = false }) {
             texto="Assinatura digital e proteção ativa desde o primeiro pagamento." />
           <Passo n={4} icone={Handshake} titulo="Acompanhamento"
             texto="Revisão anual do plano — a proteção acompanha a sua vida." />
-        </div>
+        </Revelar>
         {(plano.conjuge_nome || e.filhos.length > 0) && (
           <p className="mt-9 flex items-center gap-2 text-sm text-slate-500">
             <Users size={15} className="text-laranja-600" />
             Na emissão indicamos os beneficiários — é o que faz o capital chegar em dias, fora do inventário.
           </p>
         )}
-      </section>
+      </Slide>
 
       {/* 14 · FECHAMENTO */}
-      <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-brand-800 via-brand-900 to-slate-900 p-5 sm:p-8 text-center text-white print:min-h-0 print:py-24">
+      <Slide nome="fechamento" className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-brand-800 via-brand-900 to-slate-900 p-5 sm:p-8 text-center text-white print:min-h-0 print:py-24">
         <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-gold-400/10 blur-3xl print:hidden" />
         <div className="relative mb-10"><Logo claro tamanho={52} /></div>
         <h2 className="relative max-w-2xl text-3xl font-semibold leading-snug tracking-tight md:text-4xl">
@@ -759,8 +1545,9 @@ export default function Proposta({ publica = false }) {
         <p className="relative mt-12 text-sm text-white/50">
           Valores sujeitos à análise da seguradora. Estudo elaborado por Natália Maschendorf em {new Date().toLocaleDateString('pt-BR')}.
         </p>
-      </section>
+      </Slide>
     </div>
+    </ContextoQuadro.Provider>
   )
 }
 
@@ -846,6 +1633,24 @@ function Placar({ icone: Icone, tom, rotulo, valor, texto }) {
 }
 
 // Linha da conta do inventário: precisa pagar − tem disponível = falta
+// Um degrau da linha do tempo do inventário: quando, o que acontece e por quê.
+function Etapa({ marco, titulo, texto, tom = 'neutro' }) {
+  const cor = tom === 'ruim' ? 'border-red-200 bg-red-50/50'
+    : tom === 'alerta' ? 'border-amber-200 bg-amber-50/50'
+      : tom === 'bom' ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200/70 bg-white'
+  const marca = tom === 'ruim' ? 'text-red-600'
+    : tom === 'alerta' ? 'text-amber-700' : tom === 'bom' ? 'text-emerald-600' : 'text-slate-400'
+  return (
+    <li className={`flex flex-col gap-1 rounded-2xl border p-5 sm:flex-row sm:gap-5 ${cor}`}>
+      <p className={`shrink-0 text-xs font-semibold uppercase tracking-wide sm:w-32 ${marca}`}>{marco}</p>
+      <div className="min-w-0">
+        <p className="font-semibold text-slate-900">{titulo}</p>
+        <p className="mt-0.5 text-sm text-slate-600">{texto}</p>
+      </div>
+    </li>
+  )
+}
+
 function Conta({ rotulo, valor, sinal, destaque, ok }) {
   const caixa = destaque ? 'border-red-200 bg-red-50/60'
     : ok ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200/70 bg-slate-50/60'

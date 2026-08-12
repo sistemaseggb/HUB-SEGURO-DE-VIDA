@@ -38,12 +38,17 @@ e registrar os dados; o sistema cuida do resto.
 - **Pipeline** — Kanban com arrastar-e-soltar, dias parados com alerta
   amarelo/vermelho configurável, motivo obrigatório ao perder um cliente.
 - **Clientes** — perfil 360º com abas: Planejamento (dados da reunião),
+  **Comparador** (seguro resgatável × previdência, com o gráfico do cruzamento),
   Roteiro, **Transcrição** (análise da gravação do Tactiq), Reuniões, Apólices,
   **Documentos** (anexos no Storage), Formulário de onboarding, Tarefas e
   Histórico. Faixa de **Próxima Melhor Ação** e
   temperatura no topo. Botão **Gerar proposta** cria a apresentação.
 - **Proposta** — apresentação em tela cheia com navegação de deck (setas do
-  teclado, bolinhas laterais, contador): capa, diagnóstico, "quanto tempo a
+  teclado, bolinhas laterais, contador) e **modo apresentação**: tela cheia de
+  verdade, tela sempre acesa, um slide por vez e a **Apple Pencil desenhando
+  por cima do slide** — caneta com pressão, marcador, borracha, laser e
+  simulação ao vivo dos números, tudo dentro da página (vai junto no
+  compartilhamento de tela do Meet). Capítulos: capa, diagnóstico, "quanto tempo a
   família aguentaria hoje?" (sem vender nada × vendendo tudo × com o plano),
   capital recomendado, futuro dos filhos, **raio-X do patrimônio** (o que trava
   no inventário e o que vai direto ao beneficiário), sucessão com a conta do
@@ -93,8 +98,9 @@ mesmo com `.env`, use `VITE_DEMO=1 npm run dev`.
 npm run build && npm test        # lint + motor + ponta a ponta
 ```
 
-Ou em separado: `npm run test:motor` (rápido, não precisa de navegador) e
-`npm run test:e2e`. A suíte de navegador sobe o servidor de preview sozinha
+Ou em separado: os que não precisam de navegador — `npm run test:motor`,
+`npm run test:transcricao`, `npm run test:comparador`,
+`npm run test:apresentacao` — e `npm run test:e2e`. A suíte de navegador sobe o servidor de preview sozinha
 (e reaproveita um que já esteja rodando), então basta um terminal.
 
 **`test:motor`** — `calcularEstudo()` é a única fonte dos números do
@@ -106,6 +112,22 @@ patrimônio bruto igual à soma das classes, custo do inventário nunca maior qu
 o que trava, maior evento indenizável nunca maior que a soma das importâncias,
 porcentagens dentro de 0–100. Reproduzível: `CASOS=20000 SEMENTE=7 npm run
 test:motor`.
+
+**`test:transcricao`** — o fuzz prova que a análise não explode; isso não prova
+que ela extrai CERTO (um parser que devolve lista vazia passa em qualquer teste
+de robustez). Aqui cada caso é um pedaço de reunião escrito do jeito que as
+pessoas falam — "a Alice tem 6 e o Lucas 9", "ganho uns quarenta e oito mil",
+"a clínica fatura 4,2 milhões" — com o resultado esperado declarado ao lado.
+Quando o parser regride, o teste diz qual frase parou de ser entendida.
+
+**`test:comparador`** — o teste mais importante do arquivo mais delicado: os
+números do comparador vão para um gráfico apresentado contra o assessor de
+investimentos do cliente, e um erro de tributação não aparece como tela
+quebrada — aparece como afirmação falsa numa reunião. Cada caso tem o
+**resultado calculado à mão** (taxa zero, aportes exatos), não uma expectativa
+colhida da própria implementação: a alíquota certa em cada faixa da regressiva,
+VGBL tributando só o ganho e PGBL o total, a dedução do PGBL limitada aos 12%
+da renda, e o ano do cruzamento numa conta redonda.
 
 **`test:e2e`** — quatro suítes. A **principal** navega o sistema inteiro
 nas duas visões — consultora (login, dashboard, pipeline, cliente 360 com o
@@ -120,9 +142,12 @@ celular (375px) e F5. A de **planejamento** usa a aba como a consultora usa,
 com o cliente na frente: valores hostis campo a campo, o estudo preenchido, a
 alteração não salva que precisa sobreviver à troca de aba, o dado que tem que
 voltar ao sair e retornar no cliente, o roteiro que leva ao bloco certo e a
-proposta sem número quebrado. A de **celular** cobra que nenhuma tela role
-para o lado a 375px — todas as páginas e todas as abas do Cliente 360 — e
-aponta o elemento culpado quando falha. Capturas em `e2e-shots/`.
+proposta sem número quebrado. A **varredura geral** passa por TUDO: cada
+rota e cada aba do Cliente 360, no computador e no celular, com clientes em
+quatro estados — do lead recém-cadastrado (sem nada preenchido) ao PF+PJ
+completo, mais um cliente perdido. Em cada parada cobra que não haja erro de
+console, NaN/Infinity/undefined na tela, tela em branco nem rolagem horizontal
+a 375px — apontando o elemento culpado quando falha. Capturas em `e2e-shots/`.
 
 ### Marca
 
@@ -173,6 +198,9 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 18. [`supabase/migrations/018_roteiro_reuniao.sql`](supabase/migrations/018_roteiro_reuniao.sql)
 19. [`supabase/migrations/019_planejamento_completo.sql`](supabase/migrations/019_planejamento_completo.sql)
 20. [`supabase/migrations/020_transcricoes_reuniao.sql`](supabase/migrations/020_transcricoes_reuniao.sql)
+21. [`supabase/migrations/021_planejamento_inteligente.sql`](supabase/migrations/021_planejamento_inteligente.sql)
+22. [`supabase/migrations/022_comparador.sql`](supabase/migrations/022_comparador.sql)
+23. [`supabase/migrations/023_apresentacao.sql`](supabase/migrations/023_apresentacao.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -232,6 +260,11 @@ npm run dev
 │   │   ├── supabase.js           # Cliente Supabase
 │   │   ├── constants.js          # Etapas do funil, paleta dos gráficos
 │   │   ├── format.js             # Moeda, datas, links de WhatsApp
+│   │   ├── estudo.js             # Motor do estudo: todo número da proposta
+│   │   ├── comparador.js         # Seguro × VGBL/PGBL, ano a ano
+│   │   ├── transcricao.js        # Análise da gravação da reunião
+│   │   ├── apresentacao.js       # Traço da caneta, borracha e simulação
+│   │   ├── telaDeApresentacao.js # Tela cheia e tela acesa (iPad/Safari)
 │   │   └── formularioConfig.js   # Perguntas do formulário de onboarding
 │   ├── components/               # Layout (sidebar) + componentes de UI
 │   └── pages/                    # Dashboard, Pipeline, Clientes, Cliente 360º,
@@ -313,11 +346,104 @@ npm run dev
 - [x] **Roteiro do preenchimento**: a espinha do estudo em uma linha — cada
       bloco com o que já está em pé ("renda R$ 48 mil", "13 na apólice") e um
       clique que leva direto até ele, na ordem da conversa com o cliente
+- [x] **A idade entra no estudo** (a data de nascimento já estava no cadastro e
+      nunca tinha sido lida): janela real de proteção — o mais longo entre o
+      filho mais novo virar adulto e o titular chegar à aposentadoria — e o
+      **preço de deixar para depois**, com a mesma apólice em 1, 3 e 5 anos
+      pela curva de agravamento por idade (estimativa, sempre rotulada)
+- [x] **Sucessão de verdade** (migração 021): herdeiro menor obriga rito
+      judicial (18 meses em vez de 6), holding corta as custas mas não o ITCMD,
+      testamento não antecipa o imposto, e a **meação** entra só quando é certa
+      — em comunhão parcial o estudo avisa quanto pode ser meação em vez de
+      descontar por conta própria
+- [x] **Previdência líquida de IR**: o extrato mostra o bruto, a família saca o
+      líquido. PGBL é tributado sobre o total resgatado, VGBL só sobre o
+      rendimento — e é o líquido que paga o inventário
+- [x] **Comparador: seguro resgatável × VGBL/PGBL** (migração 022) — a prova
+      numérica e gráfica. A consultora cola a tabela de resgate da cotação (o
+      sistema interpola o meio, não inventa valor) e recebe a série ano a ano
+      com a tributação certa dos dois lados: o **gráfico do cruzamento**, com a
+      área hachurada do que faltaria à família, o **custo real da proteção** por
+      mil de capital ao ano, e o quadro das dimensões que não são dinheiro
+      (isenção de IR, inventário, impenhorabilidade, dedução do PGBL).
+      A comparação é **de propósito justa**: credita a dedução de até 12% da
+      renda no PGBL, usa a tabela regressiva de verdade e admite em voz alta
+      que num horizonte longo sem sinistro o investimento acumula mais — é isso
+      que a torna difícil de derrubar
+- [x] **Modo apresentação com Apple Pencil** (migração 023) — a consultora
+      apresenta pelo iPad compartilhando a tela no Meet, e a proposta deixa de
+      ser um deck mudo. Botão **Apresentar**: tela cheia, tela sempre acesa
+      (Wake Lock), rolagem que encaixa **um slide por vez** e uma barra de
+      controles ao alcance do polegar, com alvos de 48px, que ela recolhe num
+      toque quando quer a tela limpa.
+      - **Caneta com pressão de verdade** (Pointer Events + eventos agrupados),
+        **marcador** que grifa sem esconder o texto, **borracha** que apaga o
+        traço inteiro ao encostar, e **laser** com rastro que apaga sozinho —
+        gesto, nunca anotação.
+      - **Rejeição de palma**: assim que uma caneta encosta no aparelho, o dedo
+        para de desenhar. Sem isso, cada palavra escrita vem com o borrão do
+        punho apoiado.
+      - Os traços são **vetor em coordenadas relativas (0 a 1)**, guardados por
+        **nome de capítulo** — o mesmo círculo funciona no iPad em pé, no
+        deitado, no computador e no celular do cliente, e um cliente que ganha
+        o capítulo da empresa não vê a anotação escorregar para o slide errado.
+      - **Simulação ao vivo**: "e se fosse R$ 1.200?" muda o número na frente
+        do cliente e a proposta inteira se recalcula — capital, gráficos,
+        comparador. **Nada é gravado**, e uma etiqueta amarela diz isso o tempo
+        todo; o planejamento continua sendo a fonte da verdade.
+      - **A liberdade de decidir é dela**: o sistema não guarda o desenho
+        sozinho nem joga fora sozinho. Na saída, e só quando há mesmo algo
+        novo, ele pergunta — guardar, descartar ou voltar à apresentação. E
+        fechar a aba com desenho pendente avisa antes.
+- [x] **A apresentação vira conversa** — o que a tira de "deck bonito" e a
+      coloca na reunião:
+      - **Revelação por etapas**: um slide que abre com tudo escrito já
+        entregou o final — o cliente lê antes de ela falar e a conversa vira
+        legenda do slide. Com a revelação ligada, os cartões aparecem um a um
+        no ritmo dela. A seta e a barra de espaço revelam primeiro e só depois
+        viram o capítulo; **voltando, o capítulo aparece inteiro**, porque é
+        um que ela já explicou.
+      - **Seta** que sai reta de um ponto ao outro, com a ponta fechada e
+        proporcional — "daqui vai para cá" é meia conversa de reunião, e à mão
+        livre no iPad a seta sai torta.
+      - **Três espessuras**: fino para escrever um número dentro do texto,
+        grosso para circular um título de longe.
+      - **Desfazer e refazer de verdade** (Ctrl+Z / Ctrl+Shift+Z), com
+        histórico de estados: **a borracha passa a ter volta**. Antes, encostar
+        sem querer num traço que sustentava o argumento o perdia para sempre,
+        no meio da reunião. Um arrasto de borracha é um passo só.
+      - **Pular capítulos nesta reunião**: um solteiro sem filhos não precisa
+        do capítulo de sucessão, e passar por ele "porque está no roteiro" é o
+        que torna a apresentação chata. Ela desliga no índice e a navegação
+        passa por cima — sem apagar nada do estudo.
+      - **Atalhos** para quem apresenta pelo computador ligado na TV: A/L/C/M/
+        S/E trocam a ferramenta, 1 a 5 trocam a tinta, B apaga a tela,
+        Home/End vão às pontas.
+      - **Cronômetro** da reunião e **tela preta** num toque.
+- [x] **Aposentadoria e acúmulo** deixa de ser só um foco na lista: meta de
+      capital, o que a previdência atual entrega projetada e líquida, a renda
+      que isso sustenta de verdade e quanto falta aportar por mês — com o elo
+      que ninguém faz: o aporte sai da renda, e sem invalidez coberta o plano
+      de acúmulo para junto com ela
 - [x] **Transcrição da reunião** (migração 020): cole o texto do Tactiq (ou
       solte o arquivo) e receba na hora o resumo executivo, os números que o
       cliente falou prontos para aplicar no planejamento, as objeções com a
       resposta sugerida, os compromissos virando tarefa e um raio-X de como a
       reunião foi conduzida — tudo offline, sem chave de API
+- [x] **O perfil que a conversa revela** (e não é número): idade, tabagismo,
+      condição de saúde para a DPS, o motivo de ele ter aceitado a conversa,
+      quem decide, em quanto tempo, o orçamento que ele declarou, os seguros
+      que já tem — com o alerta de por que cada um não basta (o da empresa
+      acaba com o emprego, o prestamista paga ao banco) — cada achado com o
+      trecho da conversa que serve de prova
+- [x] **Números falados por extenso**: "quinhentos reais", "vinte e cinco mil",
+      "um milhão e meio" viram valor — ninguém fala "R$ 500,00" numa reunião
+- [x] **O que ainda falta perguntar**: a ponte entre a transcrição e o estudo —
+      a lista de perguntas da próxima conversa sai pronta, escrita como
+      pergunta e não como nome de campo
+- [x] **Dois resumos**: o interno (com nota de condução, objeções e estratégia)
+      e o **para mandar ao cliente** — só o "combinamos isso", pronto para o
+      WhatsApp
 - [x] Aprofundamento opcional com **Claude** (Edge Function `analisar-reuniao`):
       perfil do cliente, dores com evidência, respostas sob medida e a
       mensagem de follow-up pronta. Sem a chave configurada, a análise local

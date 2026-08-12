@@ -114,6 +114,71 @@
 }
 
 /* ============================================================================
+   MODO APRESENTAÇÃO — o iPad na mão, compartilhando a tela na reunião.
+
+   A classe entra no <html> enquanto a apresentação está ligada, e faz três
+   coisas que não dá para fazer em componente:
+
+   1. UM SLIDE POR VEZ. `scroll-snap` prende a rolagem no início de cada
+      capítulo: o dedo desliza e o slide encaixa. Sem isso, a apresentação
+      passa metade do tempo mostrando o rodapé de um slide com o título do
+      seguinte — o defeito que faz a tela parecer amadora no compartilhamento.
+
+   2. ALTURA DE VERDADE NO IPAD. `100dvh` acompanha a barra do Safari, que
+      aparece e some conforme ela rola. Com `100vh` sobra uma faixa branca no
+      pé de todo slide, justamente onde o cliente está olhando.
+
+   3. A ROLAGEM NÃO VAZA. `overscroll-behavior: none` impede o "puxar para
+      recarregar" do iPad de disparar quando ela desenha perto do topo — o
+      que recarregaria a página e apagaria a reunião inteira.
+   ============================================================================ */
+html.apresentando {
+  scroll-snap-type: y mandatory;
+  overscroll-behavior: none;
+}
+html.apresentando body { overscroll-behavior: none; }
+html.apresentando .proposta section {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  min-height: 100dvh;
+}
+
+/* ── Revelação por etapas ────────────────────────────────────────────────────
+   Um slide que abre com tudo escrito já entregou o final: o cliente lê antes
+   de ela falar e a conversa vira legenda do slide. Com a revelação ligada, o
+   bloco marcado mostra o primeiro item junto com o título e os outros no
+   ritmo dela.
+
+   O contador vem no `data-etapa` e o CSS esconde o que vem depois. É feio
+   escrever oito regras à mão, e é o único jeito: `nth-child()` não aceita
+   variável, e a alternativa — embrulhar cada filho num <div> ou mexer no
+   estilo por fora do React — quebraria os `grid` de todos os capítulos.
+
+   Some quando não está apresentando: o PDF impresso e o link do cliente
+   mostram tudo, sempre. E `visibility` em vez de `display` para o slide não
+   dar pulos de layout a cada revelação. */
+.proposta [data-etapa] > * {
+  transition: opacity 0.32s ease-out, transform 0.32s ease-out;
+}
+.proposta [data-etapa="0"] > :nth-child(n + 2),
+.proposta [data-etapa="1"] > :nth-child(n + 3),
+.proposta [data-etapa="2"] > :nth-child(n + 4),
+.proposta [data-etapa="3"] > :nth-child(n + 5),
+.proposta [data-etapa="4"] > :nth-child(n + 6),
+.proposta [data-etapa="5"] > :nth-child(n + 7),
+.proposta [data-etapa="6"] > :nth-child(n + 8),
+.proposta [data-etapa="7"] > :nth-child(n + 9),
+.proposta [data-etapa="8"] > :nth-child(n + 10) {
+  opacity: 0;
+  transform: translateY(10px);
+  visibility: hidden;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .proposta [data-etapa] > * { transition: none; }
+  .proposta [data-etapa] > * { transform: none !important; }
+}
+/* ============================================================================
    PDF DA PROPOSTA — "Salvar em PDF / Imprimir" gera um deck de verdade:
    cada slide vira UMA página A4 paisagem, centralizado, com as cores da
    marca preservadas (fundos escuros da capa/fechamento incluídos).

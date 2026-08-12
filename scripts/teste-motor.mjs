@@ -16,7 +16,8 @@
 //
 // Roda com `npm run test:motor` (e junto do e2e em `npm run test`).
 // ─────────────────────────────────────────────────────────────────────────────
-import { calcularEstudo, CLASSES_PATRIMONIO } from '../src/lib/estudo.js'
+import { calcularEstudo, CLASSES_PATRIMONIO, porqueCobertura } from '../src/lib/estudo.js'
+import { compararSeguroComInvestimento, normalizarResgates } from '../src/lib/comparador.js'
 import { analisarTranscricao } from '../src/lib/transcricao.js'
 
 const CASOS = Number(process.env.CASOS ?? 4000)
@@ -66,6 +67,28 @@ function planoAleatorio() {
     dit_dias: escolher(['', 0, 30, 720, 9999, -4]), dit_franquia_dias: escolher(['', 0, 15, 400, -2]),
     funeral_individual: v(), funeral_familiar: v(),
   }
+  plano.regime_bens = escolher(['', null, 'Comunhão parcial', 'Comunhão universal',
+    'Separação total', 'Separação obrigatória', 'Participação final nos aquestos', 'inventado'])
+  plano.tem_holding = escolher([true, false, null, 'x'])
+  plano.tem_testamento = escolher([true, false, null])
+  plano.herdeiros_menores = escolher([true, false, null])
+  plano.previdencia_tipo = escolher(['VGBL', 'PGBL', 'Ambos', '', null, 'x'])
+  plano.fumante = escolher([true, false, null, 'sim'])
+  plano.idade_aposentadoria = escolher(['', null, 55, 65, 90, 200, -3, 'abc'])
+  // tabelas de resgate como elas chegam de verdade — e como chegam erradas
+  plano.seguro_resgatavel = escolher([
+    [], null, 'x',
+    [{ ano: 5, resgate: 12_000 }, { ano: 10, resgate: 40_000 }],
+    [{ ano: 10, resgate: 40_000 }, { ano: 5, resgate: 12_000 }],   // fora de ordem
+    [{ ano: 5, resgate: 40_000 }, { ano: 10, resgate: 12_000 }],   // decrescente
+    [{ ano: 0, resgate: 1000 }, { ano: -3, resgate: 500 }],        // ano inválido
+    [{ ano: 5, resgate: 1e15 }],                                    // acima do capital
+    [{ ano: 'x', resgate: 'y' }, null, undefined],
+    [{ ano: 3, resgate: 900 }],                                     // um ponto só
+  ])
+  plano.comparador_alternativa = escolher(['vgbl', 'pgbl', '', null, 'cripto'])
+  plano.comparador_taxa_real = escolher(['', null, 4, 0, -3, 40, 'abc'])
+  plano.aliquota_ir_cliente = escolher(['', null, 27.5, 0, -5, 200, 'x'])
   for (const c of CLASSES_PATRIMONIO) plano[c.campo] = v()
   // filhos: da lista vazia à lista com lixo dentro
   plano.dependentes = escolher([
@@ -87,7 +110,7 @@ function numerosImpossiveis(no, caminho = '') {
       // Alguns números negativos são a informação: patrimônio líquido negativo
       // é dívida maior que o bem, e poupança mensal negativa é família gastando
       // mais do que ganha — a tela mostra os dois em vermelho, de propósito.
-      else if (v < 0 && !/(^|\.)(patrimonioLiquido|poupancaMensal|economia|gap|saldo|diferenca)/i.test(c)) {
+      else if (v < 0 && !/(^|\.)(patrimonioLiquido|poupancaMensal|taxaReal|economia|gap|saldo|diferenca)/i.test(c)) {
         achados.push(`${c} = ${v} (negativo)`)
       }
     } else if (Array.isArray(v)) v.forEach((x, i) => visitar(x, `${c}[${i}]`))
@@ -100,9 +123,13 @@ function numerosImpossiveis(no, caminho = '') {
 console.log(`Motor do estudo: ${CASOS} combinações (semente ${process.env.SEMENTE ?? 20260807})`)
 for (let i = 0; i < CASOS; i++) {
   const plano = planoAleatorio()
+  const nascimento = escolher([
+    null, '', '1985-03-18', '1960-12-01', '2005-07-09', '1948-01-31',
+    '9999-99-99', 'não é data', '2030-01-01',
+  ])
   let e
   try {
-    e = calcularEstudo(plano)
+    e = calcularEstudo(plano, { dataNascimento: nascimento })
   } catch (err) {
     registrar(i, `explodiu: ${err.message}`)
     continue
@@ -147,7 +174,110 @@ for (let i = 0; i < CASOS; i++) {
   }
   for (const c of e.ativas) {
     if (!(c.valor > 0)) registrar(i, `cobertura ativa ${c.id} com valor ${c.valor}`)
+    // O porquê é texto que vai para a tela e para o slide: nunca pode sair
+    // com NaN, undefined ou "R$ 0" — seria pior do que não ter porquê nenhum.
+    let pq
+    try {
+      pq = porqueCobertura(c.id, e)
+    } catch (err) {
+      registrar(i, `porquê de ${c.id} explodiu: ${err.message}`)
+      continue
+    }
+    if (pq != null) {
+      if (typeof pq !== 'string' || pq.trim() === '') registrar(i, `porquê de ${c.id} vazio`)
+      else if (/NaN|Infinity|undefined|null/.test(pq)) registrar(i, `porquê de ${c.id}: ${pq.slice(0, 80)}`)
+      else if (/R\$ -/.test(pq)) registrar(i, `porquê de ${c.id} com valor negativo: ${pq.slice(0, 80)}`)
+    }
   }
+  // ── idade, sucessão e previdência ──
+  if (e.idade != null && (e.idade < 0 || e.idade > 120)) {
+    registrar(i, `idade ${e.idade} fora de 0..120`)
+  }
+  if (e.sucessao.baseInventario > e.bensInventariaveis + eps) {
+    registrar(i, `base do inventário ${e.sucessao.baseInventario} > bens ${e.bensInventariaveis}`)
+  }
+  if (e.sucessao.meacao > 0 && e.sucessao.meacaoPotencial > 0) {
+    registrar(i, 'meação certa e potencial ao mesmo tempo — são excludentes')
+  }
+  if (e.sucessao.custasEfetivas > e.custas + eps) {
+    registrar(i, `custas efetivas ${e.sucessao.custasEfetivas} > custas informadas ${e.custas}`)
+  }
+  if (![6, 18].includes(e.sucessao.prazoInventarioMeses)) {
+    registrar(i, `prazo de inventário ${e.sucessao.prazoInventarioMeses} fora do esperado`)
+  }
+  if (e.previdenciaLiquida > e.previdencia + eps) {
+    registrar(i, `previdência líquida ${e.previdenciaLiquida} > bruta ${e.previdencia}`)
+  }
+  if (e.previdencia > 0 && e.previdenciaLiquida < e.previdencia * 0.85) {
+    registrar(i, `IR da previdência mordeu demais: ${e.previdenciaLiquida} de ${e.previdencia}`)
+  }
+  if (e.janelaProtecao && (e.janelaProtecao.anos < 1 || e.janelaProtecao.anos > 60)) {
+    registrar(i, `janela de proteção ${e.janelaProtecao.anos} fora de 1..60`)
+  }
+  if (e.custoDaEspera) {
+    if (e.custoDaEspera.estimativa !== true) registrar(i, 'custo da espera sem a marca de estimativa')
+    let anterior = e.custoDaEspera.mensalHoje
+    for (const c of e.custoDaEspera.cenarios) {
+      // esperar nunca pode sair mais barato, e a curva tem que ser monótona
+      if (c.mensal < anterior - eps) {
+        registrar(i, `custo da espera não é monótono: ${anterior} → ${c.mensal}`)
+      }
+      if (c.idadeNaEpoca > 80) registrar(i, `cenário de espera aos ${c.idadeNaEpoca} anos`)
+      anterior = c.mensal
+    }
+  }
+  // ── o comparador, com o que o estudo produziu ──
+  let comp
+  try {
+    comp = compararSeguroComInvestimento({
+      capital: e.valores.morte,
+      premioMensal: e.investimento?.mensal ?? 0,
+      resgates: plano.seguro_resgatavel,
+      alternativa: plano.comparador_alternativa,
+      taxaReal: plano.comparador_taxa_real === '' || plano.comparador_taxa_real == null
+        ? undefined : Number(plano.comparador_taxa_real) / 100,
+      aliquotaIR: Number(plano.aliquota_ir_cliente) / 100,
+      rendaMensal: e.renda,
+      anos: e.anos,
+    })
+  } catch (err) {
+    registrar(i, `comparador explodiu: ${err.message}`)
+  }
+  if (comp) {
+    for (const p of numerosImpossiveis(comp, 'comp')) registrar(i, p)
+    if (comp.serie.length < 1 || comp.serie.length > 40) {
+      registrar(i, `série do comparador com ${comp.serie.length} pontos`)
+    }
+    for (const ponto of comp.serie) {
+      if (ponto.descoberto < 0) registrar(i, `descoberto negativo no ano ${ponto.ano}`)
+      if (ponto.seguroMorte !== comp.premissas.capital) {
+        registrar(i, `o capital mudou no ano ${ponto.ano}`)
+      }
+      if (ponto.aliquota < 0.1 || ponto.aliquota > 0.35) {
+        registrar(i, `alíquota ${ponto.aliquota} fora da tabela regressiva`)
+      }
+    }
+    // O resgate da série reflete a tabela colada. Só cobramos monotonia quando
+    // a tabela é monótona: se ela digitou um valor caindo, o gráfico mostra o
+    // que ela digitou e o aviso grave manda corrigir — "consertar" por dentro
+    // esconderia o erro de digitação atrás de uma curva plausível.
+    const tab = normalizarResgates(plano.seguro_resgatavel)
+    const tabelaSobe = tab.every((p, k) => k === 0 || p.resgate >= tab[k - 1].resgate)
+    for (let k = 1; k < comp.serie.length; k++) {
+      if (tabelaSobe && comp.serie[k].seguroResgate < comp.serie[k - 1].seguroResgate - 0.01) {
+        registrar(i, `resgate caiu do ano ${k} para o ${k + 1}`)
+      }
+      if (comp.serie[k].investidoBruto < comp.serie[k - 1].investidoBruto - 0.01
+        && comp.premissas.taxaReal >= 0) {
+        registrar(i, `investido bruto caiu do ano ${k} para o ${k + 1}`)
+      }
+    }
+    if (comp.anoDoCruzamento != null
+      && (comp.anoDoCruzamento < 1 || comp.anoDoCruzamento > comp.serie.length)) {
+      registrar(i, `ano do cruzamento ${comp.anoDoCruzamento} fora da série`)
+    }
+  }
+
   for (const inc of e.inconsistencias) {
     if (typeof inc.texto !== 'string' || inc.texto.trim() === '') registrar(i, 'inconsistência sem texto')
     if (inc.corrigir != null && !Number.isFinite(inc.valor)) {

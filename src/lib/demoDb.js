@@ -147,6 +147,15 @@ function semear() {
     funeral_individual: 15_000, funeral_familiar: 15_000,
     // anual com 5% de desconto sobre as 12 parcelas de R$ 480
     premio_anual: 5_472, forma_pagamento: 'mensal',
+    // migração 021 — perfil de risco, aposentadoria e o que ele já tem
+    fumante: false, renda_desejada_aposentadoria: null, idade_aposentadoria: null,
+    seguros_existentes: [
+      { origem: 'consignado', descricao: 'Prestamista do financiamento do imóvel',
+        capital: 120_000, custeio: 'proprio' },
+    ],
+    quem_decide: null, prazo_decisao: null,
+    // migração 023 — ainda sem desenho: é o estado em que toda proposta nasce
+    anotacoes_proposta: {},
     token_proposta: 'demo-proposta-rodrigo', roteiro: {},
     created_at: iso(diasAtras(10)), updated_at: iso(diasAtras(2)),
   }, {
@@ -169,7 +178,7 @@ function semear() {
     conjuge_nome: 'Mariana', filhos_idades: '6 e 9 anos',
     // migração 019 — estudo PF + PJ, com sucessão e acordo de sócios
     tipo_planejamento: 'pf_pj',
-    focos: ['renda', 'educacao', 'sucessao', 'blindagem', 'empresarial'],
+    focos: ['renda', 'educacao', 'sucessao', 'blindagem', 'empresarial', 'aposentadoria'],
     patrimonio_imoveis: 2_300_000, patrimonio_investimentos: 700_000, patrimonio_empresa: 600_000,
     patrimonio_veiculos: 200_000, patrimonio_outros: null,
     previdencia_saldo: 450_000, previdencia_tipo: 'PGBL', previdencia_aporte_mensal: 4_000,
@@ -183,6 +192,36 @@ function semear() {
     funeral_individual: 20_000, funeral_familiar: 20_000,
     // anual com 10% de desconto sobre as 12 parcelas de R$ 1.890
     premio_anual: 20_412, forma_pagamento: 'anual',
+    // migração 021 — quer parar aos 60 com R$ 20 mil por mês; o seguro que ele
+    // tem hoje é da clínica, e acaba no dia em que ele sair de lá
+    fumante: false, renda_desejada_aposentadoria: 20_000, idade_aposentadoria: 60,
+    seguros_existentes: [
+      { origem: 'empresa', descricao: 'Vida em grupo da Cardiocare',
+        capital: 500_000, custeio: 'empresa' },
+      { origem: 'banco', descricao: 'Seguro do financiamento da sala comercial',
+        capital: 300_000, custeio: 'proprio' },
+    ],
+    quem_decide: 'Ele e a esposa, juntos', prazo_decisao: 'Quer decidir até o fim do mês',
+    // migração 022 — a tabela de resgate colada da cotação do resgatável
+    seguro_resgatavel: [
+      { ano: 5, resgate: 42_000 }, { ano: 10, resgate: 138_000 },
+      { ano: 15, resgate: 268_000 }, { ano: 20, resgate: 432_000 },
+      { ano: 30, resgate: 840_000 },
+    ],
+    comparador_alternativa: 'pgbl', comparador_taxa_real: 4, aliquota_ir_cliente: 27.5,
+    premio_temporario_mensal: 640,
+    // migração 023 — o círculo que ela fez em volta do déficit de liquidez na
+    // reunião de fechamento, guardado por nome de capítulo e em coordenadas
+    // relativas (0..1), do jeito que sai do quadro de desenho
+    anotacoes_proposta: {
+      sucessao: [{ t: 'caneta', c: '#d96527', l: 0.0032, p: [
+        0.6566, 0.5091, 0.45, 0.6694, 0.5589, 0.53, 0.6432, 0.6066, 0.6,
+        0.5841, 0.6413, 0.67, 0.5056, 0.6549, 0.72, 0.4258, 0.6445, 0.77,
+        0.3631, 0.6122, 0.79, 0.3319, 0.5657, 0.8, 0.3394, 0.5155, 0.79,
+        0.3839, 0.4733, 0.77, 0.4551, 0.4487, 0.72, 0.5366, 0.4475, 0.67,
+        0.6097, 0.4698, 0.6, 0.6576, 0.5106, 0.53, 0.6692, 0.5605, 0.45,
+      ] }],
+    },
     token_proposta: 'demo-proposta-carlos',
     roteiro: { blocos: {
       abertura: { feito: true, nota: 'Muito receptivo. Falou da clínica e dos dois filhos.' },

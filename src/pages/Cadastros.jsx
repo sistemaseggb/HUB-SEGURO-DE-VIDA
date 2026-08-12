@@ -20,7 +20,7 @@ export default function Cadastros() {
         escritório), suas <strong>metas do mês</strong> e os <strong>textos das mensagens</strong> automáticas.
       </ComoFunciona>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <div className="space-y-6">
           <PainelAssessores />
           <PainelMensagens />

@@ -80,6 +80,144 @@ const inteiro = (v, padrao, min, max) => {
 // Idade em que o filho deixa de depender financeiramente (fim da faculdade)
 export const IDADE_INDEPENDENCIA = 24
 
+// Idade em que o mercado costuma encerrar a aceitação e a renovação de vida
+// individual. Serve para avisar quando o horizonte pedido passa do produto.
+export const IDADE_LIMITE_PRODUTO = 80
+
+// ─── O PREÇO DA ESPERA ───────────────────────────────────────────────────────
+// O prêmio de risco de vida acompanha a mortalidade, que cresce de forma
+// acelerada com a idade — devagar até os 35, mais rápido a cada década depois.
+// A curva abaixo é o índice relativo de prêmio por idade usado nas ESTIMATIVAS
+// da tela e da proposta. Não é cotação: serve para dimensionar a conversa
+// ("esperar 5 anos custa mais ou menos isso"), e toda aparição dela na
+// interface leva a etiqueta de estimativa.
+//
+// Base: agravamento típico das tábuas de mortalidade usadas no mercado
+// brasileiro de vida individual (o prêmio de risco aproximadamente dobra a
+// cada 8–10 anos na faixa dos 30 aos 60). Ajuste os pares aqui se a carteira
+// mostrar outro comportamento — nenhum outro lugar do código depende deles.
+const CURVA_PREMIO_IDADE = [
+  [18, 0.55], [25, 0.70], [30, 0.85], [35, 1.00], [40, 1.28],
+  [45, 1.70], [50, 2.35], [55, 3.30], [60, 4.70], [65, 6.80], [70, 9.50],
+]
+// Fumante paga tipicamente entre 50% e 100% a mais no risco de vida.
+const AGRAVO_FUMANTE = 1.6
+
+// Índice de prêmio para uma idade, interpolado entre os pontos da curva.
+export function indicePremioIdade(idade, { fumante = false } = {}) {
+  if (!Number.isFinite(idade)) return null
+  const i = Math.min(Math.max(idade, CURVA_PREMIO_IDADE[0][0]),
+    CURVA_PREMIO_IDADE[CURVA_PREMIO_IDADE.length - 1][0])
+  let base = CURVA_PREMIO_IDADE[CURVA_PREMIO_IDADE.length - 1][1]
+  for (let k = 0; k < CURVA_PREMIO_IDADE.length - 1; k++) {
+    const [x0, y0] = CURVA_PREMIO_IDADE[k]
+    const [x1, y1] = CURVA_PREMIO_IDADE[k + 1]
+    if (i >= x0 && i <= x1) { base = y0 + ((i - x0) / (x1 - x0)) * (y1 - y0); break }
+  }
+  return base * (fumante ? AGRAVO_FUMANTE : 1)
+}
+
+// Idade a partir da data de nascimento (aniversário já feito ou não no ano)
+export function idadeEm(dataNascimento, referencia = new Date()) {
+  if (!dataNascimento) return null
+  const [a, m, d] = String(dataNascimento).slice(0, 10).split('-').map(Number)
+  if (!a || !m || !d) return null
+  let idade = referencia.getFullYear() - a
+  const mesAtual = referencia.getMonth() + 1
+  if (mesAtual < m || (mesAtual === m && referencia.getDate() < d)) idade -= 1
+  return idade >= 0 && idade <= 120 ? idade : null
+}
+
+// ─── SUCESSÃO: O QUE MUDA O CUSTO E O PRAZO DO INVENTÁRIO ────────────────────
+// Prazo típico do inventário no Brasil. Extrajudicial (cartório) só é possível
+// com todos os herdeiros maiores, capazes e de acordo; havendo menor, o rito é
+// judicial por lei — mais lento e mais caro, e é isso que a família enfrenta.
+export const PRAZO_INVENTARIO = { extrajudicial: 6, judicial: 18 }
+
+// Holding familiar não reduz o ITCMD (o imposto incide na transmissão das
+// quotas do mesmo jeito), mas corta boa parte das custas e honorários porque
+// a partilha já está desenhada em contrato social.
+const DESCONTO_CUSTAS_HOLDING = 0.4
+
+// Regime de bens e MEAÇÃO: a parte do patrimônio que já é do cônjuge e por
+// isso não entra na herança nem na base do ITCMD. Meação não é herança — é a
+// metade que já era dele.
+//
+// O detalhe que separa um estudo sério de um chute: em comunhão UNIVERSAL a
+// meação alcança todo o patrimônio, e o estudo pode aplicá-la com segurança.
+// Em comunhão PARCIAL ela só alcança o que foi adquirido na constância do
+// casamento — o apartamento que ele já tinha antes de casar é inventariado
+// inteiro. Como o formulário não pergunta quais bens são comuns, o estudo NÃO
+// desconta sozinho: mostra o quanto poderia ser meação e pede a confirmação.
+// Descontar por conta própria produziria um imposto menor que o real, e o
+// advogado da família desmontaria a apresentação.
+const MEACAO_POR_REGIME = {
+  'Comunhão parcial': { pct: 0.5, certo: false },
+  'Comunhão universal': { pct: 0.5, certo: true },
+  'Separação total': { pct: 0, certo: true },
+  'Separação obrigatória': { pct: 0, certo: true },
+  'Participação final nos aquestos': { pct: 0.5, certo: false },
+}
+
+// ─── PREVIDÊNCIA: O QUE A FAMÍLIA RECEBE DE VERDADE ──────────────────────────
+// VGBL e PGBL são tributados de forma diferente no resgate/benefício:
+//   VGBL → IR só sobre o RENDIMENTO
+//   PGBL → IR sobre o VALOR TOTAL resgatado (o aporte foi deduzido no IR)
+// Na tabela regressiva, um plano antigo chega a 10%. Usamos 10% como a
+// alíquota do longo prazo — é a hipótese mais favorável ao cliente, e mesmo
+// assim o PGBL entrega bem menos do que o saldo que aparece no extrato.
+const IR_PREVIDENCIA_LONGO_PRAZO = 0.10
+// Sem saber quanto do saldo é rendimento, assumimos um terço — proporção
+// conservadora para um plano de alguns anos.
+const FRACAO_RENDIMENTO_PRESUMIDA = 1 / 3
+
+// ─── ACÚMULO E APOSENTADORIA ─────────────────────────────────────────────────
+// Taxa de juros REAL (acima da inflação) usada nas projeções de acúmulo e na
+// comparação "investir ou proteger". 4% ao ano é conservador para o Brasil no
+// longo prazo — quem quiser discutir a premissa discute UM número, aqui.
+// Ela aparece escrita na tela e no slide: projeção sem premissa à vista é
+// adivinhação.
+export const TAXA_REAL_ANUAL = 0.04
+
+// Taxa de retirada sustentável: quanto dá para sacar por ano de um capital
+// sem consumi-lo. É a mesma taxa real — retirar o rendimento mantém o
+// principal e a renda dura enquanto ele durar.
+const TAXA_RETIRADA = TAXA_REAL_ANUAL
+
+// Valor futuro de um saldo + aportes mensais, a juros reais compostos.
+function valorFuturo(saldoInicial, aporteMensal, anos, taxaAnual = TAXA_REAL_ANUAL) {
+  if (!(anos > 0)) return saldoInicial
+  const i = (1 + taxaAnual) ** (1 / 12) - 1
+  const meses = Math.round(anos * 12)
+  const doSaldo = saldoInicial * (1 + i) ** meses
+  const dosAportes = i > 0 ? aporteMensal * (((1 + i) ** meses - 1) / i) : aporteMensal * meses
+  return doSaldo + dosAportes
+}
+
+// Aporte mensal necessário para chegar a um capital em N anos.
+function aportePara(alvo, saldoInicial, anos, taxaAnual = TAXA_REAL_ANUAL) {
+  if (!(anos > 0)) return null
+  const i = (1 + taxaAnual) ** (1 / 12) - 1
+  const meses = Math.round(anos * 12)
+  const faltando = alvo - saldoInicial * (1 + i) ** meses
+  if (faltando <= 0) return 0
+  return i > 0 ? faltando / (((1 + i) ** meses - 1) / i) : faltando / meses
+}
+
+// Quantos anos de aporte mensal levam até um capital — a conta que responde
+// "prefiro investir": o seguro entrega esse valor amanhã de manhã.
+export function anosParaAcumular(alvo, aporteMensal, saldoInicial = 0, taxaAnual = TAXA_REAL_ANUAL) {
+  if (!(alvo > 0) || !(aporteMensal > 0)) return null
+  if (saldoInicial >= alvo) return 0
+  const i = (1 + taxaAnual) ** (1 / 12) - 1
+  let saldo = saldoInicial
+  for (let m = 1; m <= 12 * 100; m++) {
+    saldo = saldo * (1 + i) + aporteMensal
+    if (saldo >= alvo) return Math.round((m / 12) * 10) / 10
+  }
+  return null // mais de 100 anos: a resposta é "nunca", e a tela diz isso
+}
+
 // Teto das simulações de autonomia: acima disso o padrão de vida se sustenta
 // pelo resto da vida e o número deixa de significar alguma coisa.
 export const MESES_VITALICIO = 1200
@@ -261,6 +399,84 @@ export const COBERTURAS = [
   },
 ]
 
+// ─── O PORQUÊ DE CADA NÚMERO ─────────────────────────────────────────────────
+// `comoCalcula` explica a fórmula em abstrato ("24 × a renda mensal"). Isto
+// aqui explica com os números DESTE cliente ("24 × os R$ 48 mil que ele ganha
+// = R$ 1,2 mi, ≈ 2 anos de tratamento sem trabalhar"). É a diferença entre a
+// consultora ler um slide e ela sustentar o número quando o cliente pergunta
+// "de onde saiu isso?".
+//
+// Recebe o estudo já calculado. Devolve null quando não há dado que sustente
+// a frase — inventar um porquê é pior do que não ter nenhum.
+export function porqueCobertura(id, e) {
+  if (!e) return null
+  const m = (v) => `R$ ${Math.round(v).toLocaleString('pt-BR')}`
+  const v = e.valores?.[id] ?? 0
+  if (!(v > 0)) return null
+
+  switch (id) {
+    case 'morte': {
+      if (!(e.custoVida > 0)) return null
+      const partes = [`${m(e.custoVidaBase)}/mês de padrão de vida por ${e.anos} anos`]
+      if (e.capitalFilhos > 0) partes.push(`${m(e.capitalFilhos)} para os filhos até os ${IDADE_INDEPENDENCIA}`)
+      if (e.dividas > 0) partes.push(`${m(e.dividas)} de dívidas quitadas`)
+      return `${partes.join(', mais ')}.`
+    }
+    case 'invalidez':
+      return e.valores.morte > 0 && v === e.valores.morte
+        ? 'O mesmo capital da morte: inválido, ele para de gerar renda igual — e ainda passa a custar tratamento.'
+        : 'A renda para do mesmo jeito da morte, com a diferença de que ele continua aqui para ser sustentado.'
+    case 'doencas_graves':
+      return e.renda > 0
+        ? `24 × os ${m(e.renda)} de renda: cerca de dois anos de tratamento sem depender de trabalhar.`
+        : null
+    case 'dit': {
+      const d = e.diariaPorId?.dit
+      if (!d) return null
+      return `${m(v)} por dia parado, a partir do ${(d.franquia ?? 0) + 1}º dia, até ${d.dias} diárias — ${m(d.total)} no limite.`
+    }
+    case 'dih': {
+      const d = e.diariaPorId?.dih
+      if (!d) return null
+      return `${m(v)} por dia internado, até ${d.dias} diárias (${m(d.total)}) — cobre o que o plano de saúde não paga.`
+    }
+    case 'morte_acidental':
+      return e.valores.morte > 0
+        ? `Soma aos ${m(e.valores.morte)} da morte: num acidente a família recebe ${m(e.valores.morte + v)}.`
+        : null
+    case 'fraturas':
+      return 'Indeniza por tabela conforme o osso — cobre o custo imediato do acidente sem mexer na reserva.'
+    case 'funeral_individual':
+      return 'Acionada por telefone e resolvida em horas: a família não gasta nem decide nada no pior dia.'
+    case 'funeral_familiar':
+      return 'Estende a assistência a cônjuge e filhos — e, em vários produtos, aos pais.'
+    case 'sucessao': {
+      if (!(e.custoInventario > 0)) return null
+      const rito = e.sucessao?.inventarioJudicial ? 'judicial' : 'extrajudicial'
+      const prazo = e.sucessao?.prazoInventarioMeses
+      const base = `${(e.itcmd + (e.sucessao?.custasEfetivas ?? e.custas)).toFixed(1).replace('.', ',')}% de ${m(e.sucessao?.baseInventario ?? e.bensInventariaveis)}`
+      const falta = e.deficitLiquidez > 0
+        ? ` Hoje faltam ${m(e.deficitLiquidez)} em dinheiro para pagar isso.`
+        : ''
+      return `${base} — o imposto vence antes de qualquer bem ser liberado, e o inventário ${rito} leva cerca de ${prazo} meses.${falta}`
+    }
+    case 'socios':
+      return e.pj?.valuation > 0
+        ? `${e.pj.participacao}% de ${m(e.pj.valuation)}: é o que os sócios precisam ter em caixa para comprar a quota da família em vez de virar sócios dela.`
+        : null
+    case 'homem_chave':
+      return e.pj?.lucroBase > 0
+        ? `2 × ${m(e.pj.lucroBase)} de lucro anual — o fôlego para a empresa se reorganizar sem quem a fazia girar.`
+        : null
+    case 'aval':
+      return e.pj?.dividaAval > 0
+        ? `${m(e.pj.dividaAval)} de dívida com aval pessoal: morrer não cancela o aval, ele vira dívida do espólio e alcança o patrimônio da família.`
+        : null
+    default:
+      return null
+  }
+}
+
 // ─── FILHOS ──────────────────────────────────────────────────────────────────
 // Normaliza a lista de filhos do planejamento (coluna jsonb `dependentes`,
 // formato [{nome, idade, custo_mensal}]) e calcula, por filho, quantos anos de
@@ -310,8 +526,18 @@ function mesesSustentados(recursoLiquido, custoBaseMensal, filhos) {
 }
 
 // ─── O ESTUDO ────────────────────────────────────────────────────────────────
-export function calcularEstudo(plano) {
+// O segundo parâmetro é opcional de propósito: quem chama sem ele (telas
+// antigas, testes) continua funcionando, só sem os capítulos que dependem da
+// idade. A idade não mora no planejamento — mora no cadastro do cliente.
+export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada = null, hoje = new Date() } = {}) {
   if (!plano) return null
+
+  // A proposta pública recebe só a idade (a RPC não expõe a data de
+  // nascimento); as telas internas passam a data e a idade sai daqui.
+  const idade = idadeEm(dataNascimento, hoje)
+    ?? (Number.isFinite(Number(idadeDada)) && idadeDada > 0 && idadeDada <= 120
+      ? Math.round(Number(idadeDada)) : null)
+  const fumante = plano.fumante === true
 
   const renda = q(plano.renda_mensal)
   const custoVida = q(plano.custo_vida_mensal)
@@ -371,14 +597,54 @@ export function calcularEstudo(plano) {
   const pctIliquido = detalhado && patrimonioBruto > 0
     ? Math.round((bensIliquidos / patrimonioBruto) * 100) : null
 
-  // Inventário: a base é só o que passa por ele. Previdência e seguro ficam
-  // fora — esse é o ponto que a maioria dos clientes nunca ouviu.
-  const custoInventario = bensInventariaveis * (itcmd + custas) / 100
+  // ── Sucessão: meação, holding e o rito do inventário ──────────────────────
+  // MEAÇÃO. Em comunhão de bens, metade do patrimônio do casal já é do cônjuge
+  // — não é herança e não paga ITCMD. Cobrar imposto sobre o patrimônio
+  // inteiro superdimensiona a verba sucessória e desmonta na frente de um
+  // cliente que conversou com o advogado.
+  const casado = ['Casado(a)', 'União estável'].includes(plano.estado_civil)
+  const regra = (casado && MEACAO_POR_REGIME[plano.regime_bens]) || { pct: 0, certo: true }
+  // Só descontamos o que é certo (comunhão universal). O resto vira um número
+  // a confirmar, exibido como possibilidade e não como fato.
+  const meacao = regra.certo ? bensInventariaveis * regra.pct : 0
+  const meacaoPotencial = regra.certo ? 0 : bensInventariaveis * regra.pct
+  const pctMeacao = regra.certo ? regra.pct : 0
+  // A base do ITCMD é o que efetivamente se transmite
+  const baseInventario = bensInventariaveis - meacao
+
+  // HOLDING familiar: não mexe no ITCMD, corta parte das custas e honorários.
+  const temHolding = plano.tem_holding === true
+  const custasEfetivas = temHolding ? custas * (1 - DESCONTO_CUSTAS_HOLDING) : custas
+
+  // RITO: herdeiro menor obriga inventário judicial — mais lento e mais caro.
+  const herdeirosMenores = plano.herdeiros_menores === true
+    || filhos.some((f) => f.idade != null && f.idade < 18)
+  const inventarioJudicial = herdeirosMenores
+  const prazoInventarioMeses = inventarioJudicial
+    ? PRAZO_INVENTARIO.judicial : PRAZO_INVENTARIO.extrajudicial
+
+  // Inventário: a base é só o que passa por ele, já descontada a meação.
+  // Previdência e seguro ficam fora — esse é o ponto que a maioria dos
+  // clientes nunca ouviu.
+  const custoInventario = baseInventario * (itcmd + custasEfetivas) / 100
   const coberturaAtual = q(plano.cobertura_atual)
-  // Recursos que a família acessa em DIAS, sem alvará e sem inventário
-  const liquidezImediata = previdencia + coberturaAtual
+
+  // ── Previdência: saldo do extrato x o que a família recebe ────────────────
+  // PGBL é tributado sobre o total; VGBL só sobre o rendimento. O extrato
+  // mostra o bruto e ninguém faz essa conta antes da hora.
+  const previdenciaTipo = ['VGBL', 'PGBL', 'Ambos'].includes(plano.previdencia_tipo)
+    ? plano.previdencia_tipo : null
+  const previdenciaAporte = q(plano.previdencia_aporte_mensal, 1e7)
+  const baseIRPrevidencia = previdenciaTipo === 'PGBL' ? 1
+    : previdenciaTipo === 'Ambos' ? (1 + FRACAO_RENDIMENTO_PRESUMIDA) / 2
+      : previdenciaTipo === 'VGBL' ? FRACAO_RENDIMENTO_PRESUMIDA : 0
+  const irPrevidencia = previdencia * baseIRPrevidencia * IR_PREVIDENCIA_LONGO_PRAZO
+  const previdenciaLiquida = previdencia - irPrevidencia
+
+  // Recursos que a família acessa em DIAS, sem alvará e sem inventário — e é o
+  // valor LÍQUIDO que paga conta, não o do extrato.
+  const liquidezImediata = previdenciaLiquida + coberturaAtual
   const deficitLiquidez = Math.max(custoInventario - liquidezImediata, 0)
-  // Meses até o inventário ser resolvido — média de mercado citada na reunião
   const patrimonioTravado = bensInventariaveis
 
   // ── Capital de morte ──────────────────────────────────────────────────────
@@ -479,7 +745,8 @@ export function calcularEstudo(plano) {
   // ── Autonomia: a pergunta que abre os olhos ───────────────────────────────
   // Hoje, sem o plano, a família vive do que é líquido (investimentos +
   // previdência + seguro que já existe), depois começa a vender bens.
-  const recursosLiquidos = investimentos + previdencia
+  // Previdência entra pelo LÍQUIDO: é o que a família saca de fato.
+  const recursosLiquidos = investimentos + previdenciaLiquida
   // Sem a composição por classe não dá para separar o líquido do ilíquido:
   // devolvemos null em vez de "0 meses", que seria uma afirmação que o estudo
   // não pode sustentar. A apresentação então mostra dois cenários em vez de três.
@@ -524,6 +791,33 @@ export function calcularEstudo(plano) {
     }
   }
 
+  // ── A janela real de proteção ─────────────────────────────────────────────
+  // "Anos de proteção" não é um número escolhido no chute: é o tempo até a
+  // família parar de depender daquela renda. Dois relógios correm juntos —
+  // o filho mais novo virando adulto e o titular chegando à aposentadoria —
+  // e a proteção precisa cobrir o mais longo dos dois.
+  const idadeAposentar = inteiro(plano.idade_aposentadoria, 65, 40, 90)
+  const anosAteAposentar = idade != null ? Math.max(idadeAposentar - idade, 0) : null
+  const janelaProtecao = (() => {
+    const motivos = []
+    let sugerido = null
+    if (anosSugeridosPorFilhos != null) {
+      sugerido = anosSugeridosPorFilhos
+      motivos.push(`o filho mais novo faz ${IDADE_INDEPENDENCIA} em ${anosSugeridosPorFilhos} ano(s)`)
+    }
+    if (anosAteAposentar != null && anosAteAposentar > 0) {
+      if (sugerido == null || anosAteAposentar > sugerido) sugerido = anosAteAposentar
+      motivos.push(`faltam ${anosAteAposentar} ano(s) para os ${idadeAposentar}`)
+    }
+    if (sugerido == null) return null
+    return {
+      anos: Math.min(sugerido, TETO_ANOS),
+      motivo: motivos.join(' e '),
+      // a consultora digitou menos do que a família precisa?
+      curto: anos < sugerido,
+    }
+  })()
+
   // ── O investimento: mensal E anual, o cliente escolhe ─────────────────────
   const premioMensal = q(plano.premio_estimado, 1e7)
   const premioAnualCotado = q(plano.premio_anual, 1e8)
@@ -565,6 +859,102 @@ export function calcularEstudo(plano) {
         ? Math.round(capitalMaximoEvento / mensal) : null,
     }
   })() : null
+
+  // ── O preço da espera ─────────────────────────────────────────────────────
+  // ESTIMATIVA, nunca cotação: o índice de prêmio por idade dimensiona quanto
+  // a mesma apólice custaria se a decisão ficasse para depois. É a resposta
+  // concreta ao "depois eu contrato", e o argumento de que a saúde de hoje é o
+  // melhor ativo dele na análise — porque ela não volta. O campo `estimativa`
+  // existe para a tela nunca esquecer de dizer que é estimativa.
+  const custoDaEspera = (() => {
+    const mensalHoje = investimento?.mensal ?? 0
+    if (idade == null || !(mensalHoje > 0)) return null
+    const indiceHoje = indicePremioIdade(idade, { fumante })
+    if (!(indiceHoje > 0)) return null
+    const cenarios = [1, 3, 5]
+      .filter((d) => idade + d <= IDADE_LIMITE_PRODUTO)
+      .map((daquiAAnos) => {
+        const indice = indicePremioIdade(idade + daquiAAnos, { fumante })
+        const mensal = Math.round(mensalHoje * (indice / indiceHoje) * 100) / 100
+        return {
+          daquiAAnos,
+          idadeNaEpoca: idade + daquiAAnos,
+          mensal,
+          aMaisPorMes: Math.round((mensal - mensalHoje) * 100) / 100,
+          aMaisPct: Math.round(((mensal / mensalHoje) - 1) * 1000) / 10,
+          // o que a espera custa por ANO, para sempre, enquanto a apólice viver
+          aMaisPorAno: Math.round((mensal - mensalHoje) * 12 * 100) / 100,
+        }
+      })
+      .filter((c) => c.aMaisPorMes > 0)
+    if (cenarios.length === 0) return null
+    return { idade, fumante, mensalHoje, cenarios, estimativa: true }
+  })()
+
+  // ── Aposentadoria e acúmulo ───────────────────────────────────────────────
+  // O foco "aposentadoria" existia na lista e não tinha cálculo nenhum atrás.
+  // Aqui ele vira pilar: a meta, o que a previdência atual entrega já líquida
+  // de IR, e a lacuna. O elo que fecha a conversa está no fim: sem invalidez
+  // coberta, o plano de acúmulo para junto com a renda — porque o aporte sai
+  // da renda, e ela é que parou.
+  const rendaAposentadoria = q(plano.renda_desejada_aposentadoria, 1e7)
+  const aposentadoria = (() => {
+    const querAposentadoria = focos.includes('aposentadoria')
+    if (!querAposentadoria && !(rendaAposentadoria > 0)) return null
+    if (anosAteAposentar == null) return null
+
+    // Meta padrão: manter o padrão de vida atual, se ele não disse outro valor
+    const alvoMensal = rendaAposentadoria > 0 ? rendaAposentadoria : custoVida
+    if (!(alvoMensal > 0)) return null
+
+    // Capital que sustenta essa renda pela retirada do rendimento real
+    const capitalNecessario = (alvoMensal * 12) / TAXA_RETIRADA
+    // O que a previdência de hoje entrega lá na frente, já sem o IR
+    const projetadoBruto = valorFuturo(previdencia, previdenciaAporte, anosAteAposentar)
+    const projetadoLiquido = projetadoBruto * (1 - baseIRPrevidencia * IR_PREVIDENCIA_LONGO_PRAZO)
+    const lacuna = Math.max(capitalNecessario - projetadoLiquido, 0)
+    const aporteNecessario = aportePara(capitalNecessario, previdenciaLiquida, anosAteAposentar)
+
+    return {
+      alvoMensal,
+      idadeAlvo: idadeAposentar,
+      anos: anosAteAposentar,
+      taxaReal: TAXA_REAL_ANUAL,
+      capitalNecessario,
+      projetadoBruto,
+      projetadoLiquido,
+      lacuna,
+      // renda mensal que a previdência projetada sustenta de verdade
+      rendaProjetada: (projetadoLiquido * TAXA_RETIRADA) / 12,
+      aporteNecessario: aporteNecessario == null ? null : Math.round(aporteNecessario),
+      aporteAtual: previdenciaAporte,
+      faltaAportar: aporteNecessario == null ? null
+        : Math.max(Math.round(aporteNecessario - previdenciaAporte), 0),
+      // O acúmulo depende da renda continuar existindo: é aqui que o pilar de
+      // proteção e o de aposentadoria se encontram.
+      dependeDaRenda: previdenciaAporte > 0 && renda > 0,
+      cobreInvalidez: valores.invalidez > 0,
+    }
+  })()
+
+  // ── Investir ou proteger: quantos anos de aporte levariam até o capital ───
+  // Responde a "prefiro investir" sem brigar com a ideia — mostrando o prazo.
+  const acumularEmVezDeSegurar = (() => {
+    const alvo = valores.morte
+    const aporte = investimento?.mensal ?? 0
+    if (!(alvo > 0) || !(aporte > 0)) return null
+    const anosAcumulando = anosParaAcumular(alvo, aporte, recursosLiquidos)
+    return {
+      alvo,
+      aporteMensal: aporte,
+      partindoDe: recursosLiquidos,
+      taxaReal: TAXA_REAL_ANUAL,
+      // null = nem em 100 anos; a tela escreve isso em vez de um número
+      anos: anosAcumulando,
+      // o seguro entrega o valor cheio já no primeiro mês
+      mesesAteOSeguroValer: 1,
+    }
+  })()
 
   // ── Completude do estudo ──────────────────────────────────────────────────
   const camposChave = [
@@ -637,6 +1027,12 @@ export function calcularEstudo(plano) {
   if (pjParticipacao > 100) {
     inconsistencias.push({ grave: true, texto: 'A participação societária passou de 100%.' })
   }
+  if (meacaoPotencial > 0) {
+    inconsistencias.push({
+      grave: false,
+      texto: `Regime de ${String(plano.regime_bens).toLowerCase()}: até ${Math.round(meacaoPotencial).toLocaleString('pt-BR')} podem ser meação do cônjuge e ficar fora do ITCMD — mas só os bens adquiridos durante o casamento. Confirme quais são antes de apresentar; o estudo está calculando o imposto sobre o patrimônio inteiro.`,
+    })
+  }
   if (temPJ && pjValuation > 0 && detalhado && n(plano.patrimonio_empresa) === 0) {
     inconsistencias.push({
       grave: false, corrigir: 'patrimonio_empresa', valor: Math.round(pjQuota),
@@ -644,15 +1040,102 @@ export function calcularEstudo(plano) {
     })
   }
 
+  // ── Conferências que só existem com a idade e a apólice montada ───────────
+  // O horizonte acaba antes de o filho mais novo virar adulto: a família fica
+  // descoberta justamente nos anos em que ainda depende da renda.
+  if (janelaProtecao?.curto && anosSugeridosPorFilhos != null && anos < anosSugeridosPorFilhos) {
+    inconsistencias.push({
+      grave: true, corrigir: 'anos_protecao', valor: anosSugeridosPorFilhos,
+      texto: `A proteção acaba em ${anos} anos, mas o filho mais novo só completa ${IDADE_INDEPENDENCIA} daqui a ${anosSugeridosPorFilhos} — sobram ${anosSugeridosPorFilhos - anos} anos descobertos.`,
+    })
+  }
+  // Capital menor que a dívida: a família herda o saldo devedor.
+  if (dividas > 0 && valores.morte > 0 && valores.morte < dividas) {
+    inconsistencias.push({
+      grave: true,
+      texto: `O capital de morte (${Math.round(valores.morte).toLocaleString('pt-BR')}) é menor que as dívidas (${Math.round(dividas).toLocaleString('pt-BR')}) — do jeito que está, a família recebe o seguro e ainda fica devendo.`,
+    })
+  }
+  // Franquia igual ou maior que o limite: a diária nunca chega a pagar.
+  for (const d of diarias) {
+    if (d.franquia != null && d.valor > 0 && d.franquia >= d.dias) {
+      const cob = COBERTURAS.find((c) => c.id === d.id)
+      inconsistencias.push({
+        grave: true,
+        texto: `${cob?.curto ?? d.id}: a franquia de ${d.franquia} dias é maior ou igual ao limite de ${d.dias} diárias — essa cobertura nunca paga.`,
+      })
+    }
+  }
+  // Idade + horizonte passando do limite de produto
+  if (idade != null && idade + anos > IDADE_LIMITE_PRODUTO) {
+    inconsistencias.push({
+      grave: false,
+      texto: `Com ${idade} anos e ${anos} de proteção, a apólice iria até os ${idade + anos} — acima dos ${IDADE_LIMITE_PRODUTO} a maioria dos produtos não renova. Confirme o prazo com a seguradora.`,
+    })
+  }
+  // Sociedade que não fecha: participações incompatíveis com o nº de sócios
+  const numSociosInf = inteiro(plano.pj_num_socios, 0, 0, 999)
+  if (temPJ && numSociosInf > 1 && pjParticipacao > 0
+    && pjParticipacao * numSociosInf > 100 + 0.5 && pjParticipacao > 100 / numSociosInf) {
+    const sobra = Math.round((100 - pjParticipacao) * 10) / 10
+    if (sobra >= 0 && numSociosInf - 1 > 0 && sobra / (numSociosInf - 1) < 1) {
+      inconsistencias.push({
+        grave: false,
+        texto: `${numSociosInf} sócios e ${pjParticipacao}% para o cliente deixam menos de 1% para cada um dos outros — confira a participação ou o número de sócios.`,
+      })
+    }
+  }
+  // Previdência maior que o patrimônio total declarado (um dos dois está errado)
+  if (previdencia > 0 && totalDeclarado > 0 && !detalhado && previdencia > totalDeclarado) {
+    inconsistencias.push({
+      grave: false,
+      texto: 'A previdência sozinha é maior que o patrimônio total declarado — confira se o total já inclui o saldo do VGBL/PGBL (não deveria: previdência entra à parte).',
+    })
+  }
+  // Foco de aposentadoria marcado e nada para calcular
+  if (focos.includes('aposentadoria') && !aposentadoria) {
+    inconsistencias.push({
+      grave: false,
+      texto: idade == null
+        ? 'Foco em aposentadoria, mas sem a data de nascimento do cliente no cadastro o estudo não consegue projetar nada.'
+        : 'Foco em aposentadoria sem renda desejada nem custo de vida — preencha um dos dois para o estudo projetar a meta.',
+    })
+  }
+  // Idade-alvo já passou
+  if (idade != null && definido(plano.idade_aposentadoria) && idadeAposentar <= idade) {
+    inconsistencias.push({
+      grave: false,
+      texto: `A idade de aposentadoria (${idadeAposentar}) não é maior que a idade atual (${idade}) — sem prazo à frente não há o que projetar.`,
+    })
+  }
+  // O prêmio saiu numa forma só, mas a proposta mostra as duas
+  if (premioMensal > 0 && premioAnualCotado === 0) {
+    inconsistencias.push({
+      grave: false,
+      texto: 'Só o prêmio mensal foi cotado. Cote o anual também: quase toda seguradora dá desconto à vista, e a escolha é do cliente.',
+    })
+  }
+
   return {
     // entrada normalizada
     renda, custoVida, dividas, anos, itcmd, custas, tipo, focos, temPJ,
+    // quem é o cliente (vem do cadastro, não do planejamento)
+    idade, fumante, idadeAposentar, anosAteAposentar, janelaProtecao, custoDaEspera,
     // filhos
     filhos, custoFilhosMensal, capitalFilhos, custoVidaBase,
     // patrimônio
     classes, detalhado, patrimonio: bensInventariaveis, patrimonioBruto, patrimonioLiquido,
     previdencia, investimentos, recursosLiquidos, bensIliquidos, pctIliquido,
     bensInventariaveis, patrimonioTravado, custoInventario, liquidezImediata, deficitLiquidez,
+    // sucessão: o que muda a conta e o rito
+    sucessao: {
+      casado, regimeBens: plano.regime_bens || null,
+      pctMeacao, meacao, meacaoPotencial, baseInventario,
+      custasEfetivas, temHolding, temTestamento: plano.tem_testamento === true,
+      herdeirosMenores, inventarioJudicial, prazoInventarioMeses,
+    },
+    // previdência: o extrato x o que a família saca
+    previdenciaTipo, previdenciaAporte, previdenciaLiquida, irPrevidencia,
     // coberturas
     sugestoes, valores, ativas, diarias, diariaPorId, tem014, tem019,
     capitalTotal, capitalPF, capitalPJ, totalDiarias, cenarios, capitalMaximoEvento,
@@ -667,6 +1150,8 @@ export function calcularEstudo(plano) {
     coberturaAtual, gap, gapReal, mesesProtegidos, mesesLiquidos, mesesVendendoTudo,
     mesesComPlano, autonomiaAtualMeses, poupancaMensal, comprometimentoRenda,
     anosSugeridosPorFilhos, investimento, completude, inconsistencias,
+    // acúmulo
+    aposentadoria, acumularEmVezDeSegurar, taxaReal: TAXA_REAL_ANUAL,
     // compat: capital de morte + sucessão
     protecaoTotal: valores.morte + valores.sucessao,
   }
