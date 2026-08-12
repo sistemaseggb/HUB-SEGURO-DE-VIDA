@@ -17,11 +17,12 @@
 // Roda com `node scripts/teste-apresentacao.mjs` (e junto em `npm test`).
 // ─────────────────────────────────────────────────────────────────────────────
 import {
-  ALAVANCAS, CALIBRES, TINTAS, EPSILON_PADRAO,
-  anotacoesIguais, apagarEm, aplicarSimulacao, comTraco, comTracos, contarTracos,
-  descreverSimulacao, larguraDoPonto, montarTraco, pontoRelativo, pontosDoTraco,
-  pressaoDe, sanitizarAnotacoes, simplificar, simulacaoAtiva, slidesAnotados,
-  tracoAlcancado,
+  ALAVANCAS, CALIBRES, ESPESSURAS, TINTAS, EPSILON_PADRAO, LIMITE_HISTORICO,
+  agora, anotacoesIguais, apagarEm, aplicarSimulacao, comTraco, comTracos,
+  contarTracos, descreverSimulacao, desfazerHist, larguraDoPonto, montarTraco,
+  novoHistorico, podeDesfazer, podeRefazer, pontoRelativo, pontosDoTraco,
+  pressaoDe, proximoCapitulo, refazerHist, registrar, sanitizarAnotacoes,
+  simplificar, simulacaoAtiva, slidesAnotados, tracoAlcancado,
 } from '../src/lib/apresentacao.js'
 
 const falhas = []
@@ -299,9 +300,108 @@ console.log('\n── A caixa de canetas ──')
     'as coloridas são exatamente a paleta que passou no validador', coloridas)
   ok(CALIBRES.marcador > CALIBRES.caneta * 3,
     'o marcador é bem mais largo que a caneta — grifo é faixa, não risco')
+  ok(ESPESSURAS.length === 3 && ESPESSURAS.some((e) => e.fator === 1),
+    'há fino, médio e grosso, e o médio é o calibre de fábrica')
+  const fatores = ESPESSURAS.map((e) => e.fator)
+  ok(fatores.every((f, i) => i === 0 || f > fatores[i - 1]),
+    'os fatores crescem — a lista da barra sai na ordem que o olho espera')
+  ok(fatores[fatores.length - 1] / fatores[0] > 2,
+    'e o grosso é pelo menos o dobro do fino, senão a escolha não muda nada')
 }
 
-// ── 11. FUZZ: a mão dela não desenha bonito ─────────────────────────────────
+// ── 11. A SETA ──────────────────────────────────────────────────────────────
+console.log('\n── "Daqui vai para cá" ──')
+{
+  const s = montarTraco({
+    tipo: 'seta', cor: '#a51e42', calibre: CALIBRES.seta,
+    // o meio do gesto é a mão tremendo; a seta vale pelas duas pontas
+    pontos: [{ x: 0.2, y: 0.2 }, { x: 0.31, y: 0.42 }, { x: 0.28, y: 0.5 }, { x: 0.7, y: 0.6 }],
+  })
+  ok(s.t === 'seta' && s.p.length === 6, 'a seta guarda exatamente duas pontas', s.p.length)
+  ok(s.p[0] === 0.2 && s.p[1] === 0.2 && s.p[3] === 0.7 && s.p[4] === 0.6,
+    'começa onde a caneta encostou e termina onde ela soltou', JSON.stringify(s.p))
+
+  ok(montarTraco({ tipo: 'seta', cor: '#000', calibre: 0.003,
+    pontos: [{ x: 0.5, y: 0.5 }, { x: 0.503, y: 0.502 }] }) === null,
+  'um toque parado não vira seta de tamanho zero')
+  ok(montarTraco({ tipo: 'seta', cor: '#000', calibre: 0.003, pontos: [] }) === null,
+    'seta sem ponto nenhum não é guardada')
+
+  const volta = sanitizarAnotacoes(JSON.parse(JSON.stringify({ x: [s] })))
+  ok(volta.x?.[0]?.t === 'seta', 'a seta sobrevive ao jsonb como seta, não vira caneta')
+}
+
+// ── 12. DESFAZER E REFAZER ──────────────────────────────────────────────────
+console.log('\n── A borracha precisa ter volta ──')
+{
+  const t = (n) => montarTraco({ tipo: 'caneta', cor: '#111', calibre: 0.003,
+    pontos: [{ x: 0, y: 0 }, { x: n / 10, y: 1 }] })
+
+  let h = novoHistorico({})
+  ok(!podeDesfazer(h) && !podeRefazer(h), 'histórico novo não desfaz nem refaz nada')
+  ok(contarTracos(agora(h)) === 0, 'e começa vazio')
+
+  h = registrar(h, { a: [t(1)] })
+  h = registrar(h, { a: [t(1), t(2)] })
+  ok(contarTracos(agora(h)) === 2, 'dois traços registrados', contarTracos(agora(h)))
+  ok(podeDesfazer(h) && !podeRefazer(h), 'dá para desfazer, ainda não para refazer')
+
+  h = desfazerHist(h)
+  ok(contarTracos(agora(h)) === 1, 'desfazer volta um passo', contarTracos(agora(h)))
+  ok(podeRefazer(h), 'e abre o refazer')
+  h = desfazerHist(h)
+  ok(contarTracos(agora(h)) === 0, 'desfazer de novo volta ao começo')
+  ok(!podeDesfazer(h), 'e o começo é o fim da linha')
+  ok(desfazerHist(h) === h, 'desfazer no começo devolve o mesmo histórico, sem erro')
+
+  h = refazerHist(refazerHist(h))
+  ok(contarTracos(agora(h)) === 2, 'refazer duas vezes traz os dois de volta')
+  ok(refazerHist(h) === h, 'refazer no fim devolve o mesmo histórico')
+
+  // desenhar depois de desfazer fecha o caminho de refazer, como em todo editor
+  h = desfazerHist(h)
+  h = registrar(h, { a: [t(1), t(9)] })
+  ok(!podeRefazer(h), 'um passo novo descarta o que estava adiante')
+  ok(contarTracos(agora(h)) === 2, 'e o passo novo vale', contarTracos(agora(h)))
+
+  // Arrastar a borracha apaga vários traços em sequência: é UM passo, não um
+  // por traço alcançado — senão desfazer devolveria um traço de cada vez.
+  let g = novoHistorico({ a: [t(1), t(2), t(3)] })
+  g = registrar(g, { a: [t(1), t(2)] })
+  g = registrar(g, { a: [t(1)] }, { substituir: true })
+  g = registrar(g, { a: [] }, { substituir: true })
+  ok(g.pilha.length === 2, 'o arrasto inteiro da borracha é um passo só', g.pilha.length)
+  ok(contarTracos(agora(desfazerHist(g))) === 3,
+    'e desfazer devolve os TRÊS traços de uma vez', contarTracos(agora(desfazerHist(g))))
+
+  // o histórico não pode crescer para sempre numa reunião longa
+  let longo = novoHistorico({})
+  for (let i = 0; i < LIMITE_HISTORICO + 40; i++) longo = registrar(longo, { a: [t(i % 9)] })
+  ok(longo.pilha.length === LIMITE_HISTORICO, 'o histórico para de crescer no limite', longo.pilha.length)
+  ok(longo.pos === LIMITE_HISTORICO - 1, 'e a posição continua no passo mais recente', longo.pos)
+  ok(contarTracos(agora(longo)) === 1, 'com o estado certo no topo')
+}
+
+// ── 13. CAPÍTULOS PULADOS ───────────────────────────────────────────────────
+console.log('\n── Nem todo cliente merece o deck inteiro ──')
+{
+  const nada = new Set()
+  ok(proximoCapitulo(3, 1, 10, nada) === 4, 'sem nada pulado, avança um')
+  ok(proximoCapitulo(3, -1, 10, nada) === 2, 'e volta um')
+  ok(proximoCapitulo(0, -1, 10, nada) === 0, 'no primeiro capítulo, voltar não sai do lugar')
+  ok(proximoCapitulo(9, 1, 10, nada) === 9, 'no último, avançar também não')
+
+  const pulados = new Set([4, 5])
+  ok(proximoCapitulo(3, 1, 10, pulados) === 6, 'avançar salta os dois desligados em sequência')
+  ok(proximoCapitulo(6, -1, 10, pulados) === 3, 'e voltar salta os mesmos dois')
+
+  // a capa e o fechamento nunca somem: são a abertura e o pedido de decisão
+  ok(proximoCapitulo(1, -1, 10, new Set([0])) === 0, 'a capa continua alcançável mesmo desligada')
+  ok(proximoCapitulo(8, 1, 10, new Set([9])) === 9, 'o fechamento também')
+  ok(proximoCapitulo(0, 1, 0, nada) === 0, 'proposta sem capítulo nenhum não quebra')
+}
+
+// ── 14. FUZZ: a mão dela não desenha bonito ─────────────────────────────────
 console.log('\n── Dez mil traços aleatórios, incluindo os malucos ──')
 {
   let quebrou = null

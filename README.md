@@ -393,7 +393,33 @@ npm run dev
         todo; o planejamento continua sendo a fonte da verdade.
       - **A liberdade de decidir é dela**: o sistema não guarda o desenho
         sozinho nem joga fora sozinho. Na saída, e só quando há mesmo algo
-        novo, ele pergunta — guardar, descartar ou voltar à apresentação.
+        novo, ele pergunta — guardar, descartar ou voltar à apresentação. E
+        fechar a aba com desenho pendente avisa antes.
+- [x] **A apresentação vira conversa** — o que a tira de "deck bonito" e a
+      coloca na reunião:
+      - **Revelação por etapas**: um slide que abre com tudo escrito já
+        entregou o final — o cliente lê antes de ela falar e a conversa vira
+        legenda do slide. Com a revelação ligada, os cartões aparecem um a um
+        no ritmo dela. A seta e a barra de espaço revelam primeiro e só depois
+        viram o capítulo; **voltando, o capítulo aparece inteiro**, porque é
+        um que ela já explicou.
+      - **Seta** que sai reta de um ponto ao outro, com a ponta fechada e
+        proporcional — "daqui vai para cá" é meia conversa de reunião, e à mão
+        livre no iPad a seta sai torta.
+      - **Três espessuras**: fino para escrever um número dentro do texto,
+        grosso para circular um título de longe.
+      - **Desfazer e refazer de verdade** (Ctrl+Z / Ctrl+Shift+Z), com
+        histórico de estados: **a borracha passa a ter volta**. Antes, encostar
+        sem querer num traço que sustentava o argumento o perdia para sempre,
+        no meio da reunião. Um arrasto de borracha é um passo só.
+      - **Pular capítulos nesta reunião**: um solteiro sem filhos não precisa
+        do capítulo de sucessão, e passar por ele "porque está no roteiro" é o
+        que torna a apresentação chata. Ela desliga no índice e a navegação
+        passa por cima — sem apagar nada do estudo.
+      - **Atalhos** para quem apresenta pelo computador ligado na TV: A/L/C/M/
+        S/E trocam a ferramenta, 1 a 5 trocam a tinta, B apaga a tela,
+        Home/End vão às pontas.
+      - **Cronômetro** da reunião e **tela preta** num toque.
 - [x] **Aposentadoria e acúmulo** deixa de ser só um foco na lista: meta de
       capital, o que a previdência atual entrega projetada e líquida, a renda
       que isso sustenta de verdade e quanto falta aportar por mês — com o elo

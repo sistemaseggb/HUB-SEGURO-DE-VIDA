@@ -107,7 +107,7 @@ await page.locator('button:has-text("Apresentar")').first().click()
 await page.waitForTimeout(600)
 ok(await page.evaluate(() => document.documentElement.classList.contains('apresentando')),
   'a rolagem passa a encaixar um slide por vez (classe no <html>)')
-ok(await page.locator('button[title*="Próximo slide"]').isVisible(),
+ok(await page.locator('button[title*="Avançar um passo"]').isVisible(),
   'a barra da apresentadora está na tela')
 ok(!(await page.locator('button:has-text("Apresentar")').first().isVisible()),
   'a barra de ações do sistema sai da frente do cliente')
@@ -143,7 +143,7 @@ ok(await temGuardar() === 1, 'o traço entrou: aparece o botão de guardar')
 }
 
 console.log('\n══ Rejeição de palma ══')
-await page.locator('button[title*="Desfazer"]').first().click()
+await page.locator('button[title*="Desfazer —"]').first().click()
 await page.waitForTimeout(300)
 ok(await temGuardar() === 0, 'desfazer volta ao estado guardado')
 {
@@ -173,6 +173,57 @@ console.log('\n══ Apontar e grifar ══')
   ok(await temGuardar() === 0, '"limpar" apaga o capítulo inteiro de uma vez')
 }
 
+// Conta os pixels com tinta na camada de baixo do slide ativo — é o jeito de
+// perguntar "isso apareceu MESMO na tela?" em vez de confiar no estado.
+const tinta = () => page.evaluate(() => {
+  const c = [...document.querySelectorAll('.proposta section canvas')]
+    .filter((x) => x.width > 0 && getComputedStyle(x).pointerEvents === 'none')
+    .find((x) => x.closest('section').getBoundingClientRect().top > -50
+      && x.closest('section').getBoundingClientRect().top < 50)
+  if (!c) return -1
+  const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
+  let n = 0
+  for (let i = 3; i < d.length; i += 4) if (d[i] > 20) n++
+  return n
+})
+
+console.log('\n══ Seta e espessura ══')
+{
+  await page.locator('button[title*="Puxe de um ponto ao outro"]').first().click()
+  await page.waitForTimeout(200)
+  await riscar(page, [[0.3, 0.3], [0.45, 0.4], [0.6, 0.55]])
+  await page.waitForTimeout(400)
+  ok(await temGuardar() === 1, 'a seta virou traço')
+  const comSeta = await tinta()
+  ok(comSeta > 0, 'a seta foi pintada na tela', comSeta)
+
+  // uma seta de comprimento zero é toque acidental, não gesto
+  await riscar(page, [[0.5, 0.9], [0.502, 0.901]])
+  await page.waitForTimeout(300)
+  ok(await tinta() === comSeta, 'um toque parado não vira seta de tamanho zero')
+
+  // trocar a espessura muda o traço SEGUINTE; o anterior fica como estava
+  await page.locator('button[title*="Escreve e circula"]').first().click()
+  await page.locator('button[aria-label="Espessura Fino"]').click()
+  await riscar(page, [[0.15, 0.72], [0.85, 0.72]])
+  await page.waitForTimeout(400)
+  const fino = (await tinta()) - comSeta
+  await page.locator('button[title*="Desfazer —"]').first().click()
+  await page.waitForTimeout(300)
+  await page.locator('button[aria-label="Espessura Grosso"]').click()
+  await riscar(page, [[0.15, 0.72], [0.85, 0.72]])
+  await page.waitForTimeout(400)
+  const grosso = (await tinta()) - comSeta
+  ok(grosso > fino * 1.8, 'o traço grosso cobre bem mais tela que o fino',
+    `fino ${fino}px · grosso ${grosso}px`)
+
+  await page.locator('button[aria-label="Espessura Médio"]').click()
+  await page.locator('button[title*="Apagar tudo que foi desenhado"]').first().click()
+  await page.waitForTimeout(300)
+  ok(await temGuardar() === 0, 'limpou tudo antes de seguir')
+  ok(await tinta() === 0, 'e a tela ficou limpa de verdade')
+}
+
 console.log('\n══ Borracha ══')
 await page.locator('button[title*="Caneta"]').first().click()
 await riscar(page, RISCO)
@@ -183,6 +234,62 @@ await page.waitForTimeout(200)
 await riscar(page, [[0.5, 0.52], [0.51, 0.52]])
 await page.waitForTimeout(400)
 ok(await temGuardar() === 0, 'a borracha encostou e o traço sumiu inteiro')
+
+console.log('\n══ Desfazer e refazer — a borracha tem volta ══')
+{
+  // Este é o defeito que mais dói: ela encosta a borracha sem querer num traço
+  // que sustentava o argumento e ele some para sempre, no meio da reunião.
+  await page.locator('button[title*="Desfazer —"]').first().click()
+  await page.waitForTimeout(400)
+  ok(await temGuardar() === 1, 'DESFAZER TRAZ DE VOLTA O QUE A BORRACHA APAGOU')
+  await page.locator('button[title*="Refazer"]').first().click()
+  await page.waitForTimeout(400)
+  ok(await temGuardar() === 0, 'refazer apaga de novo')
+  // e pelo teclado, que é como se faz no computador ligado na TV
+  await page.keyboard.press('Control+z')
+  await page.waitForTimeout(400)
+  ok(await temGuardar() === 1, 'Ctrl+Z faz o mesmo')
+  await page.keyboard.press('Control+Shift+z')
+  await page.waitForTimeout(400)
+  ok(await temGuardar() === 0, 'Ctrl+Shift+Z refaz')
+  // um traço novo descarta o caminho refeito, como em qualquer editor
+  await page.locator('button[title*="Caneta"]').first().click()
+  await riscar(page, [[0.2, 0.2], [0.4, 0.25]])
+  await page.waitForTimeout(400)
+  ok(await page.locator('button[title*="Refazer"]').first().isDisabled(),
+    'desenhar depois de desfazer fecha o caminho de refazer')
+  await page.locator('button[title*="Apagar tudo que foi desenhado"]').first().click()
+  await page.waitForTimeout(300)
+  await page.locator('button[title*="Desfazer —"]').first().click()
+  await page.waitForTimeout(400)
+  ok(await temGuardar() === 1, 'e "limpar o capítulo" também tem volta')
+  await page.locator('button[title*="Apagar tudo que foi desenhado"]').first().click()
+  await page.waitForTimeout(400)
+}
+
+console.log('\n══ Atalhos de ferramenta ══')
+{
+  const ativa = () => page.evaluate(() => document
+    .querySelector('.fixed.inset-x-0.bottom-0 button[aria-pressed="true"][title*="—"]')?.title ?? '')
+  await page.keyboard.press('m')
+  await page.waitForTimeout(250)
+  ok(/Marcador/.test(await ativa()), 'a tecla M pega o marcador', await ativa())
+  await page.keyboard.press('s')
+  await page.waitForTimeout(250)
+  ok(/Seta/.test(await ativa()), 'a tecla S pega a seta', await ativa())
+  await page.keyboard.press('c')
+  await page.waitForTimeout(250)
+  ok(/Caneta/.test(await ativa()), 'a tecla C pega a caneta', await ativa())
+  await page.keyboard.press('3')
+  await page.waitForTimeout(250)
+  ok(await page.locator('button[aria-label="Tinta O que sai"][aria-pressed="true"]').count() === 1,
+    'a tecla 3 troca para a tinta do "o que sai"')
+  await page.keyboard.press('2')
+  await page.waitForTimeout(250)
+  await page.keyboard.press('a')
+  await page.waitForTimeout(250)
+  ok(/^Passar \(A\)/.test(await ativa()), 'a tecla A devolve o dedo para passar slide', await ativa())
+}
 
 // ── A simulação ao vivo ─────────────────────────────────────────────────────
 console.log('\n══ "E se fosse um pouco menos?" ══')
@@ -232,7 +339,7 @@ await page.locator('button[title*="Sair da apresentação"]').first().click()
 await page.waitForTimeout(400)
 ok(await page.locator('text=Guardar os desenhos desta reunião?').count() === 0,
   'sem desenho novo, ela sai direto — o sistema não pergunta à toa')
-ok(!(await page.locator('button[title*="Próximo slide"]').isVisible()),
+ok(!(await page.locator('button[title*="Avançar um passo"]').isVisible()),
   'saiu da apresentação')
 
 await page.locator('button:has-text("Apresentar")').first().click()
@@ -251,7 +358,7 @@ ok(await page.locator('button:has-text("Descartar")').isVisible()
 
 await page.locator('button:has-text("Voltar à apresentação")').click()
 await page.waitForTimeout(300)
-ok(await page.locator('button[title*="Próximo slide"]').isVisible(),
+ok(await page.locator('button[title*="Avançar um passo"]').isVisible(),
   '"voltar à apresentação" volta mesmo, com o desenho no lugar')
 ok(await temGuardar() === 1, 'e o traço continua lá, esperando a decisão')
 
@@ -300,6 +407,135 @@ await page.waitForTimeout(1400)
   ok(posicao < 90, 'clicar no índice leva ao capítulo, encaixado no topo', `${Math.round(posicao)}px`)
 }
 await page.keyboard.press('Escape')
+
+// ── Revelação por etapas ────────────────────────────────────────────────────
+console.log('\n══ O capítulo abre por partes, no ritmo dela ══')
+{
+  // o reenquadramento tem três cartões marcados para revelar
+  await page.locator('button[title="Índice dos capítulos"]').click()
+  await page.waitForTimeout(400)
+  await page.locator('button:has-text("O que o plano resolve")').first().click()
+  await page.waitForTimeout(1500)
+
+  const visiveis = () => page.evaluate(() => {
+    const bloco = document.querySelector(
+      '.proposta section[data-slide="reenquadramento"] [data-revelar]')
+    if (!bloco) return -1
+    return [...bloco.children].filter((c) => getComputedStyle(c).visibility !== 'hidden').length
+  })
+
+  ok(await visiveis() === 1,
+    'ao chegar no capítulo, só o primeiro cartão está na tela', await visiveis())
+  await page.keyboard.press('ArrowRight')
+  await page.waitForTimeout(500)
+  ok(await visiveis() === 2, 'a seta revela o segundo — e NÃO pula o slide', await visiveis())
+  await page.keyboard.press(' ')
+  await page.waitForTimeout(500)
+  ok(await visiveis() === 3, 'a barra de espaço revela o terceiro', await visiveis())
+  {
+    const noLugar = await page.evaluate(() => Math.abs(document.querySelector(
+      '.proposta section[data-slide="reenquadramento"]').getBoundingClientRect().top))
+    ok(noLugar < 90, 'e depois de três passos ainda é o mesmo capítulo', `${Math.round(noLugar)}px`)
+  }
+  await page.keyboard.press('ArrowRight')
+  await page.waitForTimeout(1400)
+  {
+    const passou = await page.evaluate(() => document.querySelector(
+      '.proposta section[data-slide="reenquadramento"]').getBoundingClientRect().top < -100)
+    ok(passou, 'revelado tudo, o passo seguinte finalmente vira o slide')
+  }
+  await page.keyboard.press('ArrowLeft')
+  await page.waitForTimeout(1400)
+  ok(await visiveis() === 3,
+    'voltando, o capítulo aparece inteiro — ela não reconta o que já contou', await visiveis())
+
+  // desligar a revelação abre tudo de uma vez
+  await page.locator('button[title*="Revelar o capítulo por partes"]').first().click()
+  await page.waitForTimeout(500)
+  ok(await visiveis() === 3, 'com a revelação desligada, o capítulo abre inteiro')
+  await page.locator('button[title*="Revelar o capítulo por partes"]').first().click()
+  await page.waitForTimeout(400)
+}
+
+// ── Capítulos pulados ───────────────────────────────────────────────────────
+console.log('\n══ Tirar um capítulo desta reunião ══')
+{
+  await page.locator('button[title="Índice dos capítulos"]').click()
+  await page.waitForTimeout(400)
+  await page.locator('button[aria-label^="Pular nesta reunião: Sucessão"]').click()
+  await page.waitForTimeout(300)
+  ok(await page.locator('button[aria-label^="Trazer de volta: Sucessão"]').count() === 1,
+    'o capítulo fica riscado no índice')
+  await page.locator('button:has-text("Raio-X do patrimônio")').first().click()
+  await page.waitForTimeout(1500)
+
+  // o próximo do raio-X é a sucessão; com ela pulada, tem que cair na linha
+  // do inventário. A revelação está ligada, então avança até virar o slide.
+  for (let i = 0; i < 8; i++) {
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(450)
+    const chegou = await page.evaluate(() => {
+      const s = document.querySelector('.proposta section[data-slide="linha-inventario"]')
+      return s && Math.abs(s.getBoundingClientRect().top) < 90
+    })
+    if (chegou) break
+  }
+  const ondeEstou = await page.evaluate(() => [...document.querySelectorAll('.proposta section')]
+    .find((s) => Math.abs(s.getBoundingClientRect().top) < 90)?.dataset.slide ?? '?')
+  ok(ondeEstou === 'linha-inventario',
+    'avançar passa POR CIMA do capítulo desligado', ondeEstou)
+
+  await page.locator('button[title="Índice dos capítulos"]').click()
+  await page.waitForTimeout(400)
+  await page.locator('button[aria-label^="Trazer de volta: Sucessão"]').click()
+  await page.waitForTimeout(300)
+  ok(await page.locator('button[aria-label^="Pular nesta reunião: Sucessão"]').count() === 1,
+    'e ela traz o capítulo de volta quando quiser')
+  await page.keyboard.press('Escape')
+  await page.locator('button[title="Índice dos capítulos"]').click()
+  await page.waitForTimeout(300)
+  await page.locator('button:has-text("Sucessão")').first().click()
+  await page.waitForTimeout(1400)
+}
+
+// ── Girar o iPad no meio da reunião ─────────────────────────────────────────
+console.log('\n══ Ela gira o iPad e o desenho continua onde estava ══')
+{
+  await page.locator('button[title*="Caneta"]').first().click()
+  await page.waitForTimeout(200)
+  await riscar(page, [[0.25, 0.45], [0.5, 0.5], [0.75, 0.45]])
+  await page.waitForTimeout(500)
+  const antes = await page.evaluate(() => {
+    const s = [...document.querySelectorAll('.proposta section')]
+      .find((x) => Math.abs(x.getBoundingClientRect().top) < 90)
+    const c = s.querySelectorAll('canvas')[0]
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
+    let n = 0
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 20) n++
+    return { slide: s.dataset.slide, pixels: n, largura: c.width }
+  })
+  ok(antes.pixels > 0, 'desenhou no capítulo da sucessão', `${antes.pixels}px`)
+
+  // iPad em pé: a caixa muda de forma e o canvas é remontado do zero
+  await page.setViewportSize({ width: 820, height: 1180 })
+  await page.waitForTimeout(1200)
+  const depois = await page.evaluate((slide) => {
+    const c = document.querySelector(`.proposta section[data-slide="${slide}"] canvas`)
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
+    let n = 0
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 20) n++
+    return { pixels: n, largura: c.width }
+  }, antes.slide)
+  ok(depois.largura !== antes.largura, 'o quadro foi mesmo redimensionado',
+    `${antes.largura} → ${depois.largura}`)
+  ok(depois.pixels > 0,
+    'O DESENHO SOBREVIVEU À ROTAÇÃO — é o que as coordenadas relativas compram',
+    `${depois.pixels}px`)
+  await page.setViewportSize({ width: 1180, height: 820 })
+  await page.waitForTimeout(900)
+  await page.locator('button[title*="Apagar tudo que foi desenhado"]').first().click()
+  await page.waitForTimeout(400)
+}
 
 // ── Sem rolagem lateral em nenhum dos formatos do iPad ──────────────────────
 console.log('\n══ iPad em pé e deitado ══')

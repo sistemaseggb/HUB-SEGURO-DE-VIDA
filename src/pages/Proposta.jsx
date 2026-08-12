@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Printer, Heart, GraduationCap, Activity,
@@ -14,8 +14,10 @@ import {
 } from '../lib/estudo'
 import { compararSeguroComInvestimento, DIMENSOES_COMPARACAO } from '../lib/comparador.js'
 import {
-  TINTAS, anotacoesIguais, aplicarSimulacao, comTracos, contarTracos,
-  descreverSimulacao, sanitizarAnotacoes, simulacaoAtiva, slidesAnotados,
+  TINTAS, agora, anotacoesIguais, aplicarSimulacao, comTracos, contarTracos,
+  descreverSimulacao, desfazerHist, novoHistorico, podeDesfazer, podeRefazer,
+  proximoCapitulo, refazerHist, registrar, sanitizarAnotacoes, simulacaoAtiva,
+  slidesAnotados,
 } from '../lib/apresentacao'
 import { entrarTelaCheia, manterAcordado, sairTelaCheia } from '../lib/telaDeApresentacao'
 import ComparadorCurvas from '../components/ComparadorCurvas'
@@ -42,6 +44,50 @@ import Logo from '../components/Logo'
 // ─────────────────────────────────────────────────────────────────────────────
 const ContextoQuadro = createContext(null)
 
+// Atalhos de ferramenta, para quem apresenta pelo computador ligado na TV:
+// no iPad ela usa a barra, mas na sala de reunião com teclado isto vale ouro.
+const ATALHO_FERRAMENTA = {
+  a: 'apontar', A: 'apontar',
+  l: 'laser', L: 'laser',
+  c: 'caneta', C: 'caneta',
+  m: 'marcador', M: 'marcador',
+  s: 'seta', S: 'seta',
+  e: 'borracha', E: 'borracha',
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REVELAÇÃO POR ETAPAS
+//
+// Um slide que abre com tudo escrito já entregou o final. O cliente lê antes
+// de ela falar, e a conversa vira legenda do slide. Marcando o bloco com
+// <Revelar>, os cartões aparecem um a um conforme ela avança — o primeiro
+// junto com o título, os outros no ritmo dela.
+//
+// O truque é o `data-etapa`: o CSS esconde os filhos além da etapa atual (ver
+// `index.css`). Nada de embrulhar cada filho num <div>, que quebraria os
+// `grid` de todos os capítulos, e nada de mexer no DOM por fora do React.
+// Fora da apresentação o atributo nem existe, então a proposta impressa e o
+// link do cliente mostram tudo, sempre.
+// ─────────────────────────────────────────────────────────────────────────────
+const ContextoSlide = createContext('')
+
+// `como` preserva o elemento original do bloco: a linha do tempo do inventário
+// é uma <ol> de <li>, e trocá-la por <div> deixaria itens de lista soltos fora
+// de uma lista — HTML inválido e leitor de tela perdido.
+function Revelar({ como: Elemento = 'div', className = '', children, ...resto }) {
+  const q = useContext(ContextoQuadro)
+  const meuSlide = useContext(ContextoSlide)
+  // só o capítulo em que ela está revela por etapas; os outros ficam inteiros,
+  // senão o slide seguinte aparece pela metade durante a rolagem
+  const ligado = !!q?.apresentando && q.revelando && q.slideAtivo === meuSlide
+  return (
+    <Elemento className={className} data-revelar=""
+      data-etapa={ligado ? Math.min(q.etapa, 8) : undefined} {...resto}>
+      {children}
+    </Elemento>
+  )
+}
+
 function Slide({ nome, className = '', children }) {
   const q = useContext(ContextoQuadro)
   const tracos = q?.anotacoes?.[nome]
@@ -50,11 +96,11 @@ function Slide({ nome, className = '', children }) {
   const ativo = !!q?.apresentando && q.slideAtivo === nome && q.ferramenta.tipo !== 'apontar'
   return (
     <section data-slide={nome} className={`relative ${className}`}>
-      {children}
+      <ContextoSlide.Provider value={nome}>{children}</ContextoSlide.Provider>
       {(ativo || (tracos && tracos.length > 0)) && (
         <QuadroDesenho
           slide={nome} tracos={tracos} ativo={ativo} ferramenta={q.ferramenta}
-          aoMudarTracos={(novos) => q.definirTracos(nome, novos)} />
+          aoMudarTracos={(novos, opcoes) => q.definirTracos(nome, novos, opcoes)} />
       )}
     </section>
   )
@@ -121,8 +167,14 @@ export default function Proposta({ publica = false }) {
 
   // ── Estado da apresentação ────────────────────────────────────────────────
   const [apresentando, setApresentando] = useState(false)
-  const [ferramenta, setFerramenta] = useState({ tipo: 'apontar', cor: TINTAS[1].cor })
-  const [anotacoes, setAnotacoes] = useState({})
+  const [ferramenta, setFerramenta] = useState({
+    tipo: 'apontar', cor: TINTAS[1].cor, espessura: 'medio',
+  })
+  // Histórico de estados em vez de "tira o último traço": só assim a BORRACHA
+  // e o "limpar capítulo" têm volta. Ela encostar sem querer num traço que
+  // sustentava o argumento e perdê-lo para sempre era o pior defeito possível
+  // aqui — acontece no meio da reunião e não tem conserto.
+  const [historico, setHistorico] = useState(() => novoHistorico({}))
   const [anotacoesSalvas, setAnotacoesSalvas] = useState({})
   const [simulacao, setSimulacao] = useState({})
   const [painelSimulacao, setPainelSimulacao] = useState(false)
@@ -130,8 +182,22 @@ export default function Proposta({ publica = false }) {
   const [perguntando, setPerguntando] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [erroSalvar, setErroSalvar] = useState(null)
+  const [pulados, setPulados] = useState(() => new Set())
+  const [revelando, setRevelando] = useState(true)
+  // A etapa é ANCORADA ao nome do capítulo, nunca guardada solta. A rolagem
+  // suave atravessa todos os slides do caminho, então qualquer regra baseada
+  // em "de qual slide eu vim" se confunde: pular do capítulo 16 para o 2 pelo
+  // índice passa por 15, 14, 13… e o último passo parece um "voltar um".
+  // Com a âncora, qualquer capítulo que não seja o marcado começa do zero, e
+  // só a navegação que quer o contrário diz isso explicitamente.
+  const [etapaPor, setEtapaPor] = useState({ slide: '', n: 0 })
+  const [inicioReuniao, setInicioReuniao] = useState(null)
 
+  const anotacoes = agora(historico)
   const totalSlides = capitulos.length
+  const etapasDoSlide = capitulos[slideAtual]?.etapas ?? 0
+  const slideDoIndice = capitulos[slideAtual]?.slide ?? ''
+  const etapa = etapaPor.slide === slideDoIndice ? Math.min(etapaPor.n, etapasDoSlide) : 0
 
   const irPara = useCallback((i) => {
     const slides = [...document.querySelectorAll('.proposta section')]
@@ -140,35 +206,104 @@ export default function Proposta({ publica = false }) {
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
-  // Navegação: setas/PageUp-Down/espaço avançam os slides; as bolinhas laterais
-  // mostram onde está e pulam direto ao clicar. O índice de capítulos da barra
-  // de apresentação sai daqui também — a lista é lida do DOM porque é o DOM que
-  // sabe quais capítulos este cliente ganhou.
+  // Tudo o que a navegação precisa saber vive numa referência: o ouvinte de
+  // teclado é montado uma vez e leria valores congelados se dependesse do
+  // fechamento — a seta pararia de andar depois do primeiro slide.
+  const navRef = useRef({})
+  navRef.current = {
+    irPara, slideAtual, etapa, etapasDoSlide, revelando, pulados, totalSlides,
+    apresentando, capitulos, slideDoIndice,
+  }
+
+  // Um passo para frente na apresentação: primeiro revela o que falta DESTE
+  // capítulo, só depois vira o slide. É como todo apresentador espera que a
+  // barra de espaço se comporte — e é o que faz um slide virar conversa em vez
+  // de parede de texto.
+  const avancar = useCallback((direcao) => {
+    const n = navRef.current
+    if (n.revelando && direcao > 0 && n.etapa < n.etapasDoSlide) {
+      setEtapaPor({ slide: n.slideDoIndice, n: n.etapa + 1 }); return
+    }
+    if (n.revelando && direcao < 0 && n.etapa > 0) {
+      setEtapaPor({ slide: n.slideDoIndice, n: n.etapa - 1 }); return
+    }
+    const destino = proximoCapitulo(n.slideAtual, direcao, n.totalSlides, n.pulados)
+    if (destino === n.slideAtual) return
+    // Voltando um capítulo, ele aparece INTEIRO: é um capítulo que ela já
+    // explicou, e vê-lo recomeçar do primeiro cartão a obrigaria a reconstruir
+    // o argumento só para chegar de novo onde já estava.
+    if (direcao < 0) {
+      setEtapaPor({ slide: n.capitulos[destino]?.slide ?? '', n: n.capitulos[destino]?.etapas ?? 0 })
+    }
+    n.irPara(destino)
+  }, [])
+
+  // Navegação: setas/PageUp-Down/espaço avançam; as bolinhas laterais mostram
+  // onde está e pulam direto ao clicar. O índice de capítulos da barra sai
+  // daqui também — a lista é lida do DOM porque é o DOM que sabe quais
+  // capítulos este cliente ganhou, e quantas etapas cada um tem.
   useEffect(() => {
     const slides = () => [...document.querySelectorAll('.proposta section')]
     setCapitulos(slides().map((s) => ({
       slide: s.dataset.slide ?? '',
       titulo: TITULO_SLIDE[s.dataset.slide] ?? s.querySelector('h2')?.textContent?.trim() ?? 'Capítulo',
+      // um bloco marcado para revelar tem uma etapa por filho, menos a
+      // primeira, que já entra visível junto com o título
+      etapas: Math.max(0, (s.querySelector('[data-revelar]')?.children.length ?? 1) - 1),
     })))
     function atual() {
       const y = window.scrollY + window.innerHeight / 2
       return Math.max(slides().findLastIndex((s) => s.offsetTop <= y), 0)
     }
-    function onKey(e) {
-      // digitando num campo (o painel de simulação tem controles), as setas são
-      // do campo, não da apresentação
-      const alvo = e.target
-      if (alvo?.tagName === 'INPUT' || alvo?.tagName === 'TEXTAREA') return
-      if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); irPara(atual() + 1) }
-      else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); irPara(atual() - 1) }
-      else if (e.key === 'b' || e.key === 'B') setEscuro((v) => !v)
-    }
     function onScroll() { setSlideAtual(atual()) }
-    window.addEventListener('keydown', onKey)
     window.addEventListener('scroll', onScroll, { passive: true })
     onScroll()
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('scroll', onScroll) }
-  }, [dados, irPara])
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [dados])
+
+
+  // Atalhos. Montados uma vez só e lendo tudo por referência.
+  useEffect(() => {
+    function onKey(e) {
+      // digitando num campo (o painel de simulação tem controles), as setas
+      // são do campo, não da apresentação
+      const alvo = e.target
+      if (alvo?.tagName === 'INPUT' || alvo?.tagName === 'TEXTAREA' || alvo?.isContentEditable) return
+      if (e.metaKey || e.ctrlKey) {
+        if (e.key === 'z' || e.key === 'Z') {
+          e.preventDefault()
+          setHistorico((h) => (e.shiftKey ? refazerHist(h) : desfazerHist(h)))
+        }
+        return
+      }
+      if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); avancar(1) }
+      else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); avancar(-1) }
+      else if (e.key === 'Home') { e.preventDefault(); navRef.current.irPara(0) }
+      else if (e.key === 'End') { e.preventDefault(); navRef.current.irPara(navRef.current.totalSlides - 1) }
+      else if (!navRef.current.apresentando) return
+      // daqui para baixo, só durante a apresentação: quem folheia a proposta
+      // sem apresentar não deve ver a tela apagar ao digitar "b"
+      else if (e.key === 'b' || e.key === 'B') setEscuro((v) => !v)
+      else if (ATALHO_FERRAMENTA[e.key]) setFerramenta((f) => ({ ...f, tipo: ATALHO_FERRAMENTA[e.key] }))
+      else if (/^[1-5]$/.test(e.key)) setFerramenta((f) => ({ ...f, cor: TINTAS[Number(e.key) - 1].cor }))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [avancar])
+
+  // Fechar a aba com desenho não guardado apagaria a reunião inteira sem
+  // pergunta nenhuma. O navegador só deixa avisar a partir de um `preventDefault`
+  // no beforeunload, e só quando há de fato o que perder.
+  const pendenteRef = useRef(false)
+  useEffect(() => {
+    const aoFechar = (e) => {
+      if (!pendenteRef.current) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', aoFechar)
+    return () => window.removeEventListener('beforeunload', aoFechar)
+  }, [])
 
   // As anotações que já estavam guardadas para este cliente. A coluna só existe
   // depois da migração 023: sem ela, a proposta continua inteira, apenas sem
@@ -176,7 +311,7 @@ export default function Proposta({ publica = false }) {
   useEffect(() => {
     const plano = dados?.plano
     const guardadas = sanitizarAnotacoes(plano?.anotacoes_proposta)
-    setAnotacoes(guardadas)
+    setHistorico(novoHistorico(guardadas))
     setAnotacoesSalvas(guardadas)
   }, [dados])
 
@@ -259,10 +394,13 @@ export default function Proposta({ publica = false }) {
   // desenha na reunião inteira — só não tem onde guardar, e o sistema diz isso
   // em vez de oferecer um botão que falharia.
   const podeGuardar = !publica && 'anotacoes_proposta' in plano
+  pendenteRef.current = desenhosPendentes && podeGuardar
 
-  const definirTracos = (nome, novos) => setAnotacoes((a) => comTracos(a, nome, novos))
-  const desfazer = () => setAnotacoes((a) => comTracos(a, slideAtivo, (a[slideAtivo] ?? []).slice(0, -1)))
-  const limparSlide = () => setAnotacoes((a) => comTracos(a, slideAtivo, []))
+  const definirTracos = (nome, novos, { continuando = false } = {}) =>
+    setHistorico((h) => registrar(h, comTracos(agora(h), nome, novos), { substituir: continuando }))
+  const desfazer = () => setHistorico(desfazerHist)
+  const refazer = () => setHistorico(refazerHist)
+  const limparSlide = () => setHistorico((h) => registrar(h, comTracos(agora(h), slideAtivo, [])))
 
   function abrirApresentacao() {
     // O pedido de tela cheia tem que sair DIRETO do clique: depois de um await
@@ -273,6 +411,8 @@ export default function Proposta({ publica = false }) {
     // a tecla B funciona em qualquer momento; sem zerar aqui, quem digitou um
     // "b" folheando a proposta entraria na apresentação com a tela preta
     setEscuro(false)
+    setEtapaPor({ slide: '', n: 0 })
+    setInicioReuniao(Date.now())
   }
 
   function tentarSair() {
@@ -304,8 +444,19 @@ export default function Proposta({ publica = false }) {
   }
 
   function descartarDesenhos() {
-    setAnotacoes(anotacoesSalvas)
+    // volta ao que está no banco, mas o histórico guarda o passo: se ela
+    // clicar em descartar sem querer, um Ctrl+Z devolve o desenho
+    setHistorico((h) => registrar(h, anotacoesSalvas))
     encerrar()
+  }
+
+  function alternarPulado(i) {
+    setPulados((p) => {
+      const novo = new Set(p)
+      if (novo.has(i)) novo.delete(i)
+      else novo.add(i)
+      return novo
+    })
   }
 
   function copiarLink() {
@@ -390,7 +541,7 @@ export default function Proposta({ publica = false }) {
 
   return (
     <ContextoQuadro.Provider
-      value={{ apresentando, ferramenta, anotacoes, definirTracos, slideAtivo }}>
+      value={{ apresentando, ferramenta, anotacoes, definirTracos, slideAtivo, revelando, etapa }}>
     <div className="proposta">
       {/* barra de ações — some na impressão e durante a apresentação */}
       <div className={`fixed left-0 right-0 top-0 z-20 flex flex-wrap items-center justify-between gap-2 bg-slate-900/95 px-4 py-2.5 backdrop-blur print:hidden ${apresentando ? 'hidden' : ''}`}>
@@ -473,10 +624,17 @@ export default function Proposta({ publica = false }) {
           )}
 
           <BarraApresentacao
-            slideAtual={slideAtual} totalSlides={totalSlides} irPara={irPara}
-            nomes={capitulos.map((c) => ({ ...c, anotado: (anotacoes[c.slide] ?? []).length > 0 }))}
+            slideAtual={slideAtual} totalSlides={totalSlides} irPara={irPara} avancar={avancar}
+            nomes={capitulos.map((c, i) => ({
+              ...c, anotado: (anotacoes[c.slide] ?? []).length > 0, pulado: pulados.has(i),
+            }))}
+            alternarPulado={alternarPulado}
+            etapa={etapa} etapasDoSlide={etapasDoSlide}
+            revelando={revelando} alternarRevelacao={() => setRevelando((v) => !v)}
+            inicioReuniao={inicioReuniao}
             ferramenta={ferramenta} mudarFerramenta={setFerramenta}
-            desfazer={desfazer} podeDesfazer={tracosDoSlide.length > 0}
+            desfazer={desfazer} podeDesfazer={podeDesfazer(historico)}
+            refazer={refazer} podeRefazer={podeRefazer(historico)}
             limparSlide={limparSlide} temTracosNoSlide={tracosDoSlide.length > 0}
             desenhosPendentes={desenhosPendentes && podeGuardar}
             guardarDesenhos={() => guardarDesenhos()}
@@ -575,11 +733,11 @@ export default function Proposta({ publica = false }) {
           Seguro de vida não é sobre morrer.<br />
           <span className="text-laranja-600">É sobre continuar cuidando.</span>
         </h2>
-        <div className="mt-12 grid w-full max-w-4xl gap-5 md:grid-cols-3">
+        <Revelar className="mt-12 grid w-full max-w-4xl gap-5 md:grid-cols-3">
           {cartoesReenquadramento.map((c) => (
             <Cartao key={c.id} icone={c.icone} titulo={c.titulo}>{c.texto}</Cartao>
           ))}
-        </div>
+        </Revelar>
         <p className="mt-10 max-w-xl text-center text-lg text-slate-600">
           É o único ativo que <strong className="text-slate-900">se multiplica exatamente na hora que você mais precisa</strong>.
         </p>
@@ -594,7 +752,7 @@ export default function Proposta({ publica = false }) {
           </h2>
           {/* Três cenários quando o patrimônio está detalhado por classe; sem
               isso não dá para separar o líquido do ilíquido e mostramos dois. */}
-          <div className={`mt-12 grid w-full gap-5 ${temTresCenarios ? 'max-w-5xl md:grid-cols-3' : 'max-w-3xl md:grid-cols-2'}`}>
+          <Revelar className={`mt-12 grid w-full gap-5 ${temTresCenarios ? 'max-w-5xl md:grid-cols-3' : 'max-w-3xl md:grid-cols-2'}`}>
             {temTresCenarios && (
               <Cenario tom="ruim" icone={Hourglass} etiqueta="Hoje, sem vender nada"
                 numero={mesesNum(e.mesesLiquidos)} unidade={e.mesesLiquidos === 1 ? 'mês' : 'meses'}>
@@ -616,7 +774,7 @@ export default function Proposta({ publica = false }) {
               O capital chega em dias, direto aos beneficiários, e sustenta a casa sem que ninguém
               precise vender nada — <strong>o patrimônio fica inteiro para a família</strong>.
             </Cenario>
-          </div>
+          </Revelar>
           <p className="mt-10 max-w-2xl text-center text-lg text-slate-600">
             {temTresCenarios && (
               <>A comparação justa é a primeira coluna com a última: <strong className="text-slate-900">sem
@@ -728,7 +886,7 @@ export default function Proposta({ publica = false }) {
           <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
             O inventário custa caro — e só libera os bens depois de pago
           </h2>
-          <div className="mt-10 grid w-full max-w-4xl gap-5 md:grid-cols-2">
+          <Revelar className="mt-10 grid w-full max-w-4xl gap-5 md:grid-cols-2">
             <div className="rounded-2xl border border-red-100 bg-red-50/60 p-7">
               <p className="text-xs font-semibold uppercase tracking-wide text-red-500">A família precisa pagar</p>
               <p className="mt-3 font-display text-4xl font-semibold text-red-600 tabular">{brlCompacto(e.custoInventario)}</p>
@@ -762,7 +920,7 @@ export default function Proposta({ publica = false }) {
                 )}
               </p>
             </div>
-          </div>
+          </Revelar>
 
           {/* O déficit: a conta que ninguém tinha feito */}
           {e.tem019 && (
@@ -808,7 +966,7 @@ export default function Proposta({ publica = false }) {
               : <>com todos os herdeiros maiores e de acordo, pelo rito mais rápido, o extrajudicial.</>}
           </p>
 
-          <ol className="mt-10 w-full max-w-3xl space-y-3">
+          <Revelar como="ol" className="mt-10 w-full max-w-3xl space-y-3">
             <Etapa marco="Semana 1" tom="ruim"
               titulo="As contas continuam chegando"
               texto={`Escola, condomínio, financiamento, plano de saúde. Some ${brl(e.custoVida)} por mês que
@@ -830,7 +988,7 @@ export default function Proposta({ publica = false }) {
               titulo={`${brlCompacto(e.valores.sucessao)} em dias, direto aos beneficiários`}
               texto="O capital do seguro não entra em inventário e é livre de ITCMD na maioria dos estados.
                      A família paga o imposto no prazo, mantém o padrão de vida e não vende nada." />
-          </ol>
+          </Revelar>
         </Slide>
       )}
 
@@ -939,10 +1097,10 @@ export default function Proposta({ publica = false }) {
           <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
             {e.gap > 0 ? 'A proteção atual não cobre o plano' : 'A proteção atual está no alvo'}
           </h2>
-          <div className="mt-12 w-full max-w-2xl space-y-6">
+          <Revelar className="mt-12 w-full max-w-2xl space-y-6">
             <Barra rotulo="Você tem hoje" valor={e.coberturaAtual} max={Math.max(e.valores.morte, e.coberturaAtual)} cor="bg-slate-300" />
             <Barra rotulo="O plano recomenda" valor={e.valores.morte} max={Math.max(e.valores.morte, e.coberturaAtual)} cor="bg-laranja-500" />
-          </div>
+          </Revelar>
           {e.gap > 0 && (
             <>
               <p className="mt-12 text-xl text-slate-600">
@@ -1152,7 +1310,7 @@ export default function Proposta({ publica = false }) {
             O mesmo dinheiro, os dois caminhos, no primeiro ano. É aqui que a diferença aparece —
             e ela não é de percentual, é de ordem de grandeza.
           </p>
-          <div className="mt-10 grid w-full max-w-4xl gap-5 md:grid-cols-2">
+          <Revelar className="mt-10 grid w-full max-w-4xl gap-5 md:grid-cols-2">
             <Cenario tom="ruim" icone={Hourglass} etiqueta="Investindo o mesmo valor"
               numero={brlCompacto(anoUm.investidoLiquido)} unidade=""
               rodape={`${brl(inv.mensal)}/mês × 12, já descontado o imposto`}>
@@ -1165,7 +1323,7 @@ export default function Proposta({ publica = false }) {
               O capital não espera acumular. Ele existe inteiro no dia seguinte ao da assinatura —
               e é isso que um plano de proteção faz que um plano de acúmulo não faz.
             </Cenario>
-          </div>
+          </Revelar>
           <p className="mt-10 max-w-2xl text-center text-lg text-slate-600">
             A diferença no primeiro ano é de{' '}
             <strong className="text-slate-900">{brlCompacto(anoUm.descoberto)}</strong>.
@@ -1264,7 +1422,7 @@ export default function Proposta({ publica = false }) {
           <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
             Cada coisa serve para uma coisa
           </h2>
-          <div className="mt-9 grid w-full max-w-5xl gap-3 md:grid-cols-2">
+          <Revelar className="mt-9 grid w-full max-w-5xl gap-3 md:grid-cols-2">
             {DIMENSOES_COMPARACAO.map((d) => {
               const ganhaSeguro = d.vencedor === 'seguro'
               const ganhaOutro = d.vencedor === 'investimento' || d.vencedor === 'pgbl'
@@ -1289,7 +1447,7 @@ export default function Proposta({ publica = false }) {
                 </div>
               )
             })}
-          </div>
+          </Revelar>
           <p className="mt-9 max-w-3xl text-center text-lg text-slate-600">
             Repare que <strong className="text-slate-900">o investimento ganha duas linhas dessa
             tabela</strong> — e é para ganhar mesmo. Ele acumula mais no longo prazo e você tira o
@@ -1351,7 +1509,7 @@ export default function Proposta({ publica = false }) {
       <Slide nome="passos" className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
         <p className={rotuloSecao}>Como ativamos o plano</p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Quatro passos simples</h2>
-        <div className="mt-10 grid max-w-4xl gap-5 md:grid-cols-4">
+        <Revelar className="mt-10 grid max-w-4xl gap-5 md:grid-cols-4">
           <Passo n={1} icone={ClipboardCheck} titulo="Declaração de saúde"
             texto="Você responde a DPS pelo link que eu envio — leva poucos minutos." />
           <Passo n={2} icone={Search} titulo="Análise da seguradora"
@@ -1360,7 +1518,7 @@ export default function Proposta({ publica = false }) {
             texto="Assinatura digital e proteção ativa desde o primeiro pagamento." />
           <Passo n={4} icone={Handshake} titulo="Acompanhamento"
             texto="Revisão anual do plano — a proteção acompanha a sua vida." />
-        </div>
+        </Revelar>
         {(plano.conjuge_nome || e.filhos.length > 0) && (
           <p className="mt-9 flex items-center gap-2 text-sm text-slate-500">
             <Users size={15} className="text-laranja-600" />

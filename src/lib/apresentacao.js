@@ -55,14 +55,27 @@ export const COR_LASER = '#e11d48'
 // motivo dos pontos: um traço de 3px no iPad vira um fio invisível numa TV.
 export const CALIBRES = {
   caneta: 0.0032,
+  seta: 0.0034,
   marcador: 0.020,
 }
+
+// Fino para escrever um número no meio do texto, grosso para circular um
+// título de longe. Um calibre só serve mal aos dois — e trocar de espessura é
+// o segundo pedido de quem desenha, logo depois de trocar de cor.
+export const ESPESSURAS = [
+  { id: 'fino', fator: 0.62, rotulo: 'Fino' },
+  { id: 'medio', fator: 1, rotulo: 'Médio' },
+  { id: 'grosso', fator: 1.75, rotulo: 'Grosso' },
+]
 
 // O marcador é grifa-texto: nib largo, translúcido e em `multiply`, para o
 // texto continuar legível por baixo. Se fosse opaco, grifar seria apagar.
 export const OPACIDADE_MARCADOR = 0.32
 
-export const TIPOS_TRACO = ['caneta', 'marcador']
+// A seta guarda só as duas pontas: ela nasce reta e continua reta em qualquer
+// tela. Desenhar uma seta à mão livre no iPad sai torta e a ponta nunca fecha
+// — e "daqui vai para cá" é meia conversa de reunião.
+export const TIPOS_TRACO = ['caneta', 'marcador', 'seta']
 
 // ── Geometria ────────────────────────────────────────────────────────────────
 
@@ -143,6 +156,19 @@ export function simplificar(pontos, epsilon = EPSILON_PADRAO) {
 // no banco tem o comentário da coluna e este arquivo.
 
 export function montarTraco({ tipo, cor, calibre, pontos }) {
+  // A seta descarta o meio do gesto de propósito: vale onde começou e onde
+  // terminou. Guardar o caminho da mão faria uma seta tremida.
+  if (tipo === 'seta') {
+    if (!Array.isArray(pontos) || pontos.length === 0) return null
+    const a = pontos[0]
+    const b = pontos[pontos.length - 1]
+    // uma seta de comprimento zero é um toque acidental, não um gesto
+    if (Math.hypot(b.x - a.x, b.y - a.y) < 0.01) return null
+    return {
+      t: 'seta', c: cor, l: calibre,
+      p: [arred(a.x, 4), arred(a.y, 4), 0.5, arred(b.x, 4), arred(b.y, 4), 0.5],
+    }
+  }
   const simples = simplificar(pontos)
   if (simples.length === 0) return null
   // Um toque sem arrasto é um ponto só: vira um pinguinho de tinta, que é o
@@ -268,6 +294,59 @@ export function anotacoesIguais(a, b) {
     return ta.every((t, i) => t.t === tb[i].t && t.c === tb[i].c
       && t.p.length === tb[i].p.length && t.p.every((v, j) => v === tb[i].p[j]))
   })
+}
+
+// ── Desfazer e refazer ───────────────────────────────────────────────────────
+// A primeira versão desfazia tirando o último traço do capítulo. Parecia
+// suficiente e não era: a BORRACHA não tinha volta. Ela encostava sem querer
+// num traço que sustentava o argumento e ele ia embora para sempre, no meio da
+// reunião. Um histórico de estados desfaz qualquer coisa — traço, borracha,
+// "limpar o capítulo" — e ainda deixa refazer.
+//
+// Guarda o mapa inteiro a cada passo. São objetos pequenos (um traço
+// simplificado tem poucas dezenas de números) e a clareza vale muito mais do
+// que a memória economizada por um histórico de operações invertíveis.
+export const LIMITE_HISTORICO = 60
+
+export function novoHistorico(inicial = {}) {
+  return { pilha: [inicial], pos: 0 }
+}
+
+export function agora(h) {
+  return h?.pilha?.[h.pos] ?? {}
+}
+
+// `substituir` existe para a borracha: arrastá-la apaga vários traços em
+// sequência, e cada um viraria um passo de desfazer. Um arrasto é UM passo.
+export function registrar(h, anotacoes, { substituir = false } = {}) {
+  if (substituir && h.pos >= 0) {
+    const pilha = h.pilha.slice(0, h.pos + 1)
+    pilha[h.pos] = anotacoes
+    return { pilha, pos: h.pos }
+  }
+  // qualquer passo novo descarta o que estava adiante — é o que todo editor faz
+  const pilha = [...h.pilha.slice(0, h.pos + 1), anotacoes]
+  if (pilha.length > LIMITE_HISTORICO) {
+    return { pilha: pilha.slice(pilha.length - LIMITE_HISTORICO), pos: LIMITE_HISTORICO - 1 }
+  }
+  return { pilha, pos: pilha.length - 1 }
+}
+
+export function podeDesfazer(h) { return (h?.pos ?? 0) > 0 }
+export function podeRefazer(h) { return (h?.pos ?? 0) < (h?.pilha?.length ?? 1) - 1 }
+export function desfazerHist(h) { return podeDesfazer(h) ? { ...h, pos: h.pos - 1 } : h }
+export function refazerHist(h) { return podeRefazer(h) ? { ...h, pos: h.pos + 1 } : h }
+
+// ── Capítulos pulados ────────────────────────────────────────────────────────
+// Nem todo cliente merece o deck inteiro. Um solteiro sem filhos não precisa
+// do capítulo de sucessão, e passar por ele "só porque está no roteiro" é
+// exatamente o que torna a apresentação chata. Ela desliga o capítulo no
+// índice e a navegação passa por cima — sem apagar nada do estudo.
+export function proximoCapitulo(indice, direcao, total, pulados) {
+  if (total <= 0) return 0
+  let i = indice + direcao
+  while (i > 0 && i < total - 1 && pulados?.has(i)) i += direcao
+  return trava(i, 0, total - 1)
 }
 
 // ── A simulação ao vivo ──────────────────────────────────────────────────────

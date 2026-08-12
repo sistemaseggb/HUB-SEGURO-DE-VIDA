@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import {
-  CALIBRES, COR_LASER, OPACIDADE_MARCADOR,
+  CALIBRES, COR_LASER, ESPESSURAS, OPACIDADE_MARCADOR,
   apagarEm, larguraDoPonto, montarTraco, pontoRelativo, pontosDoTraco, pressaoDe,
 } from '../lib/apresentacao'
 
@@ -41,6 +41,13 @@ const CHAVE_CANETA_VISTA = 'hub:canetaVista'
 const RAIO_BORRACHA = 0.018 // fração do slide — encostar por perto já apaga
 const VIDA_LASER = 650      // ms até o rastro sumir por completo
 
+// Calibre final = calibre do instrumento × fator da espessura escolhida.
+const calibreDe = (tipo, espessura) => {
+  const base = CALIBRES[tipo] ?? CALIBRES.caneta
+  const f = ESPESSURAS.find((e) => e.id === espessura)?.fator ?? 1
+  return base * f
+}
+
 function lerCanetaVista() {
   try { return localStorage.getItem(CHAVE_CANETA_VISTA) === '1' } catch { return false }
 }
@@ -62,6 +69,33 @@ function desenharTraco(ctx, traco, L, A) {
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
   ctx.strokeStyle = traco.c
+
+  if (traco.t === 'seta') {
+    // Da primeira à última ponta, reta, com a cabeça proporcional ao calibre
+    // e limitada pelo comprimento: numa seta curta, uma cabeça de tamanho fixo
+    // engole a seta inteira e vira um borrão.
+    const [a, b] = [pts[0], pts[pts.length - 1]]
+    const [ax, ay] = px(a)
+    const [bx, by] = px(b)
+    const comprimento = Math.hypot(bx - ax, by - ay)
+    const cabeca = Math.min(calibre * 7, comprimento * 0.42)
+    const ang = Math.atan2(by - ay, bx - ax)
+    ctx.lineWidth = calibre * 1.15
+    ctx.beginPath()
+    // a haste para antes da ponta para a cabeça fechar sem "orelhas"
+    ctx.moveTo(ax, ay)
+    ctx.lineTo(bx - Math.cos(ang) * cabeca * 0.55, by - Math.sin(ang) * cabeca * 0.55)
+    ctx.stroke()
+    ctx.fillStyle = traco.c
+    ctx.beginPath()
+    ctx.moveTo(bx, by)
+    ctx.lineTo(bx - Math.cos(ang - 0.42) * cabeca, by - Math.sin(ang - 0.42) * cabeca)
+    ctx.lineTo(bx - Math.cos(ang + 0.42) * cabeca, by - Math.sin(ang + 0.42) * cabeca)
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
+    return
+  }
 
   if (traco.t === 'marcador') {
     // O marcador é UM caminho só, de propósito: com transparência, desenhar
@@ -247,8 +281,14 @@ export default function QuadroDesenho({
     const tipo = (ev.buttons & 32) ? 'borracha' : f.tipo
 
     if (tipo === 'borracha') {
-      desenhando.current = { id: ev.pointerId, tipo: 'borracha' }
-      aoMudarTracos(apagarEm(tracosRef.current ?? [], p.x, p.y, RAIO_BORRACHA))
+      // `apagou` marca se este arrasto já criou um passo de desfazer: um
+      // arrasto de borracha é UM passo, não um por traço alcançado
+      desenhando.current = { id: ev.pointerId, tipo: 'borracha', apagou: false }
+      const restantes = apagarEm(tracosRef.current ?? [], p.x, p.y, RAIO_BORRACHA)
+      if (restantes !== (tracosRef.current ?? [])) {
+        desenhando.current.apagou = true
+        aoMudarTracos(restantes)
+      }
       return
     }
     if (tipo === 'laser') {
@@ -258,7 +298,7 @@ export default function QuadroDesenho({
       return
     }
     desenhando.current = {
-      id: ev.pointerId, tipo, cor: f.cor, calibre: CALIBRES[tipo] ?? CALIBRES.caneta,
+      id: ev.pointerId, tipo, cor: f.cor, calibre: calibreDe(tipo, f.espessura),
       pontos: [{ ...p, pressao: pressaoDe(ev.pressure, ev.pointerType) }],
     }
     acordar()
@@ -286,7 +326,10 @@ export default function QuadroDesenho({
       // `apagarEm` devolve o MESMO array quando não alcançou nada: sem essa
       // comparação, arrastar a borracha no vazio remontaria o estado a cada
       // quadro e o React redesenharia o slide inteiro sem motivo
-      if (restantes !== base) aoMudarTracos(restantes)
+      if (restantes !== base) {
+        aoMudarTracos(restantes, { continuando: atual.apagou })
+        atual.apagou = true
+      }
       return
     }
     if (atual.tipo === 'laser') {
