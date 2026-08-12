@@ -44,7 +44,11 @@ e registrar os dados; o sistema cuida do resto.
   Histórico. Faixa de **Próxima Melhor Ação** e
   temperatura no topo. Botão **Gerar proposta** cria a apresentação.
 - **Proposta** — apresentação em tela cheia com navegação de deck (setas do
-  teclado, bolinhas laterais, contador): capa, diagnóstico, "quanto tempo a
+  teclado, bolinhas laterais, contador) e **modo apresentação**: tela cheia de
+  verdade, tela sempre acesa, um slide por vez e a **Apple Pencil desenhando
+  por cima do slide** — caneta com pressão, marcador, borracha, laser e
+  simulação ao vivo dos números, tudo dentro da página (vai junto no
+  compartilhamento de tela do Meet). Capítulos: capa, diagnóstico, "quanto tempo a
   família aguentaria hoje?" (sem vender nada × vendendo tudo × com o plano),
   capital recomendado, futuro dos filhos, **raio-X do patrimônio** (o que trava
   no inventário e o que vai direto ao beneficiário), sucessão com a conta do
@@ -94,8 +98,9 @@ mesmo com `.env`, use `VITE_DEMO=1 npm run dev`.
 npm run build && npm test        # lint + motor + ponta a ponta
 ```
 
-Ou em separado: `npm run test:motor` (rápido, não precisa de navegador) e
-`npm run test:e2e`. A suíte de navegador sobe o servidor de preview sozinha
+Ou em separado: os que não precisam de navegador — `npm run test:motor`,
+`npm run test:transcricao`, `npm run test:comparador`,
+`npm run test:apresentacao` — e `npm run test:e2e`. A suíte de navegador sobe o servidor de preview sozinha
 (e reaproveita um que já esteja rodando), então basta um terminal.
 
 **`test:motor`** — `calcularEstudo()` é a única fonte dos números do
@@ -195,6 +200,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 20. [`supabase/migrations/020_transcricoes_reuniao.sql`](supabase/migrations/020_transcricoes_reuniao.sql)
 21. [`supabase/migrations/021_planejamento_inteligente.sql`](supabase/migrations/021_planejamento_inteligente.sql)
 22. [`supabase/migrations/022_comparador.sql`](supabase/migrations/022_comparador.sql)
+23. [`supabase/migrations/023_apresentacao.sql`](supabase/migrations/023_apresentacao.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -254,6 +260,11 @@ npm run dev
 │   │   ├── supabase.js           # Cliente Supabase
 │   │   ├── constants.js          # Etapas do funil, paleta dos gráficos
 │   │   ├── format.js             # Moeda, datas, links de WhatsApp
+│   │   ├── estudo.js             # Motor do estudo: todo número da proposta
+│   │   ├── comparador.js         # Seguro × VGBL/PGBL, ano a ano
+│   │   ├── transcricao.js        # Análise da gravação da reunião
+│   │   ├── apresentacao.js       # Traço da caneta, borracha e simulação
+│   │   ├── telaDeApresentacao.js # Tela cheia e tela acesa (iPad/Safari)
 │   │   └── formularioConfig.js   # Perguntas do formulário de onboarding
 │   ├── components/               # Layout (sidebar) + componentes de UI
 │   └── pages/                    # Dashboard, Pipeline, Clientes, Cliente 360º,
@@ -359,6 +370,30 @@ npm run dev
       renda no PGBL, usa a tabela regressiva de verdade e admite em voz alta
       que num horizonte longo sem sinistro o investimento acumula mais — é isso
       que a torna difícil de derrubar
+- [x] **Modo apresentação com Apple Pencil** (migração 023) — a consultora
+      apresenta pelo iPad compartilhando a tela no Meet, e a proposta deixa de
+      ser um deck mudo. Botão **Apresentar**: tela cheia, tela sempre acesa
+      (Wake Lock), rolagem que encaixa **um slide por vez** e uma barra de
+      controles ao alcance do polegar, com alvos de 48px, que ela recolhe num
+      toque quando quer a tela limpa.
+      - **Caneta com pressão de verdade** (Pointer Events + eventos agrupados),
+        **marcador** que grifa sem esconder o texto, **borracha** que apaga o
+        traço inteiro ao encostar, e **laser** com rastro que apaga sozinho —
+        gesto, nunca anotação.
+      - **Rejeição de palma**: assim que uma caneta encosta no aparelho, o dedo
+        para de desenhar. Sem isso, cada palavra escrita vem com o borrão do
+        punho apoiado.
+      - Os traços são **vetor em coordenadas relativas (0 a 1)**, guardados por
+        **nome de capítulo** — o mesmo círculo funciona no iPad em pé, no
+        deitado, no computador e no celular do cliente, e um cliente que ganha
+        o capítulo da empresa não vê a anotação escorregar para o slide errado.
+      - **Simulação ao vivo**: "e se fosse R$ 1.200?" muda o número na frente
+        do cliente e a proposta inteira se recalcula — capital, gráficos,
+        comparador. **Nada é gravado**, e uma etiqueta amarela diz isso o tempo
+        todo; o planejamento continua sendo a fonte da verdade.
+      - **A liberdade de decidir é dela**: o sistema não guarda o desenho
+        sozinho nem joga fora sozinho. Na saída, e só quando há mesmo algo
+        novo, ele pergunta — guardar, descartar ou voltar à apresentação.
 - [x] **Aposentadoria e acúmulo** deixa de ser só um foco na lista: meta de
       capital, o que a previdência atual entrega projetada e líquida, a renda
       que isso sustenta de verdade e quanto falta aportar por mês — com o elo
