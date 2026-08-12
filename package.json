@@ -10,10 +10,12 @@
     "preview": "vite preview",
     "test:e2e": "mkdir -p e2e-shots && node scripts/e2e-demo.mjs && node scripts/e2e-erros.mjs && node scripts/e2e-planejamento.mjs && node scripts/e2e-apresentacao.mjs && node scripts/e2e-varredura.mjs",
     "test:motor": "node scripts/teste-motor.mjs",
-    "test": "npm run lint && npm run test:motor && npm run test:transcricao && npm run test:comparador && npm run test:apresentacao && npm run test:e2e",
+    "test": "npm run lint && npm run test:motor && npm run test:transcricao && npm run test:comparador && npm run test:apresentacao && npm run test:formato && npm run test:vigia && npm run test:e2e",
     "test:transcricao": "node scripts/teste-transcricao.mjs",
     "test:comparador": "node scripts/teste-comparador.mjs",
-    "test:apresentacao": "node scripts/teste-apresentacao.mjs"
+    "test:apresentacao": "node scripts/teste-apresentacao.mjs",
+    "test:formato": "node scripts/teste-formato.mjs",
+    "test:vigia": "node scripts/teste-vigia.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",

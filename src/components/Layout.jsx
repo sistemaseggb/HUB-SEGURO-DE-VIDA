@@ -6,6 +6,8 @@ import {
   BarChart3, Upload, Menu, X, GraduationCap, LifeBuoy,
 } from 'lucide-react'
 import { supabase, MODO_DEMO } from '../lib/supabase'
+import { aoFalharConsulta } from '../lib/vigia'
+import { useToast } from './toastContexto'
 import BuscaGlobal from './BuscaGlobal'
 
 // Menu agrupado por seções — mais didático e organizado
@@ -56,11 +58,28 @@ export default function Layout() {
   const [aberto, setAberto] = useState(false)
   const [email, setEmail] = useState('')
   const location = useLocation()
+  const toast = useToast()
 
   useEffect(() => { setAberto(false) }, [location.pathname])
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setEmail(data.session?.user?.email ?? ''))
   }, [])
+
+  // Falha de banco vira aviso na tela, venha de onde vier. Sem isto, uma
+  // consulta que falhou aparece como lista vazia — e "este cliente não tem
+  // apólice" é uma frase que ela pode dizer na frente do cliente.
+  //
+  // Um aviso por vez, com pausa: quando a rede cai, DEZ consultas falham
+  // juntas e dez avisos empilhados escondem a tela em vez de informar.
+  useEffect(() => {
+    let ultimo = 0
+    return aoFalharConsulta(({ contexto }) => {
+      const agora = Date.now()
+      if (agora - ultimo < 6000) return
+      ultimo = agora
+      toast.erro(`Não consegui carregar "${contexto}". Verifique a conexão — o que está na tela pode estar incompleto.`)
+    })
+  }, [toast])
 
   return (
     <div className="min-h-screen">

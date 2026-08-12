@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { CalendarPlus, MessageCircle, CalendarClock, Mail, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { STATUS_REUNIAO, etapaLabel } from '../lib/constants'
-import { whatsapp, dataHoraBR, hojeLocal, diaLocal } from '../lib/format'
+import { whatsapp, dataHoraBR, hojeLocal, diaLocal, localParaISO } from '../lib/format'
 import {
   PageHeader, Card, Button, Select, Input, Textarea, Campo, Modal, Spinner, EmptyState, ComoFunciona, Badge,
 } from '../components/ui'
@@ -35,7 +35,11 @@ export default function Agenda() {
   async function agendar(e) {
     e.preventDefault()
     const { error } = await supabase.from('reunioes').insert({
-      id_cliente: form.id_cliente, data_hora: form.data_hora, notas: form.notas || null,
+      id_cliente: form.id_cliente,
+      // O campo entrega a hora local sem fuso; sem esta conversão o Postgres
+      // (que roda em UTC) lê 14:30 como 14:30Z = 11:30 no Brasil.
+      data_hora: localParaISO(form.data_hora),
+      notas: form.notas || null,
     })
     if (error) return toast.erro(`Não foi possível agendar: ${error.message}`)
     setModal(false)

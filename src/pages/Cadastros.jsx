@@ -242,13 +242,34 @@ function PainelSplit() {
   const [cfg, setCfg] = useState(null)
   const [msg, setMsg] = useState(null)
 
+  // `.single()` devolve erro quando não há linha, e `setCfg(null)` deixava a
+  // tela girando para sempre. A linha de configuração é criada pela migração
+  // 001; se ela sumiu, a tela precisa DIZER isso em vez de fingir que carrega.
   useEffect(() => {
-    supabase.from('configuracoes').select('*').single().then(({ data }) => setCfg(data))
+    supabase.from('configuracoes').select('*').single()
+      .then(({ data, error }) => setCfg(data ?? { _faltando: error?.message ?? 'sem registro' }))
   }, [])
 
   if (!cfg) return <Card className="p-5"><Spinner /></Card>
+  if (cfg._faltando) {
+    return (
+      <Card className="p-5">
+        <p className="font-semibold text-slate-900">Configuração não encontrada</p>
+        <p className="mt-2 text-sm text-slate-500">
+          A linha de configurações do escritório não está no banco ({cfg._faltando}).
+          Rode a migração <code className="rounded bg-slate-100 px-1">001_schema_inicial.sql</code> no
+          SQL Editor do Supabase — ela cria o registro com a divisão padrão.
+        </p>
+      </Card>
+    )
+  }
 
-  const soma = Number(cfg.split_natalia_pct) + Number(cfg.split_assessor_pct) + Number(cfg.split_escritorio_pct)
+  // Arredondado em 2 casas de propósito: 33,4 + 33,3 + 33,3 dá 99,99999999999999
+  // em ponto flutuante, e a tela travava o botão Salvar dizendo que a soma não
+  // era 100% — sem nenhum jeito de ela consertar, porque a conta ESTAVA certa.
+  const soma = Math.round(
+    (Number(cfg.split_natalia_pct || 0) + Number(cfg.split_assessor_pct || 0)
+      + Number(cfg.split_escritorio_pct || 0)) * 100) / 100
 
   async function salvar(e) {
     e.preventDefault()
@@ -352,7 +373,7 @@ function PainelOutlook() {
   useEffect(() => {
     supabase.from('configuracoes')
       .select('outlook_email, outlook_sync_ativo, outlook_ultima_sync')
-      .single().then(({ data }) => setCfg(data))
+      .single().then(({ data }) => setCfg(data ?? {}))
   }, [])
 
   if (!cfg) return <Card className="p-5"><Spinner /></Card>
@@ -416,7 +437,7 @@ function PainelMensagens() {
   useEffect(() => {
     supabase.from('configuracoes')
       .select('msg_aniversario, msg_aniversario_apolice, msg_lead_parado, msg_reuniao')
-      .single().then(({ data }) => setCfg(data))
+      .single().then(({ data }) => setCfg(data ?? {}))
   }, [])
 
   if (!cfg) return <Card className="p-5"><Spinner /></Card>

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { criarSupabaseDemo } from './demoDb.js'
+import { vigiar } from './vigia.js'
 
 // As credenciais vêm do arquivo .env (nunca commitado no git).
 // Use SEMPRE a chave "anon / publishable" aqui — jamais a secret key.
@@ -15,6 +16,11 @@ if (MODO_DEMO) {
   console.info('[Hub] Rodando em MODO DEMONSTRAÇÃO — dados fictícios, nada é persistido.')
 }
 
-export const supabase = MODO_DEMO
+// O cliente sai daqui já OBSERVADO. As telas continuam escrevendo consulta
+// como sempre — a maioria ignorando o `error`, porque tratar 161 lugares à mão
+// seria irreal — e o vigia converte cada falha silenciosa num aviso na tela.
+// Sem ele, uma consulta que falha vira "este cliente não tem apólice".
+// Detalhes e a lista do que NÃO é defeito: `vigia.js`.
+export const supabase = vigiar(MODO_DEMO
   ? criarSupabaseDemo()
-  : createClient(supabaseUrl, supabaseAnonKey)
+  : createClient(supabaseUrl, supabaseAnonKey))

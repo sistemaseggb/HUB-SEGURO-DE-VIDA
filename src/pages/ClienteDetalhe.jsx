@@ -11,7 +11,7 @@ import {
 import { ETAPAS_FORM, ROTULOS_FORM } from '../lib/formularioConfig'
 import { supabase } from '../lib/supabase'
 import { ETAPAS, etapaLabel, STATUS_REUNIAO } from '../lib/constants'
-import { brl, brlCompacto, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib/format'
+import { brl, brlCompacto, dataBR, dataHoraBR, whatsapp, iniciais, localParaISO } from '../lib/format'
 import {
   calcularEstudo, normalizarFilhos, IDADE_INDEPENDENCIA, MESES_VITALICIO,
   COBERTURAS, GRUPOS_COBERTURA, TIPOS_PLANEJAMENTO, FOCOS, CLASSES_PATRIMONIO,
@@ -2092,7 +2092,9 @@ function AbaReunioes({ idCliente, onMudanca }) {
 
   async function agendar(e) {
     e.preventDefault()
-    const { error } = await supabase.from('reunioes').insert({ id_cliente: idCliente, data_hora: form.data_hora, notas: form.notas || null })
+    // mesma conversão da Agenda: hora local do campo → instante em UTC
+    const { error } = await supabase.from('reunioes')
+      .insert({ id_cliente: idCliente, data_hora: localParaISO(form.data_hora), notas: form.notas || null })
     if (error) return toast.erro(`Não foi possível agendar: ${error.message}`)
     setModal(false)
     setForm({ data_hora: '', notas: '' })
@@ -2296,7 +2298,17 @@ function AbaApolices({ idCliente, onMudanca }) {
 
   async function excluir(a) {
     if (!window.confirm(`Excluir a apólice de ${a.seguradoras?.nome ?? 'seguradora'} (${brl(a.valor_premio_mensal)}/mês)?`)) return
-    await supabase.from('apolices').delete().eq('id', a.id)
+    // Sem conferir o erro, a tela dizia "Apólice excluída." e recarregava com
+    // a apólice ainda lá. Numa apólice já ligada a comissão importada, a
+    // exclusão é BARRADA por chave estrangeira — e ela precisa saber disso,
+    // não ver um aviso verde mentindo.
+    const { error } = await supabase.from('apolices').delete().eq('id', a.id)
+    if (error) {
+      toast.erro(/foreign key|violates/i.test(error.message)
+        ? 'Esta apólice já tem comissão lançada e não pode ser excluída. Cancele-a em vez de excluir.'
+        : `Não consegui excluir: ${error.message}`)
+      return
+    }
     toast.ok('Apólice excluída.')
     carregar(); onMudanca()
   }
@@ -2414,6 +2426,7 @@ function AbaDocumentos({ idCliente }) {
   const [categoria, setCategoria] = useState('apolice')
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState(null)
+  const toast = useToast()
 
   const carregar = useCallback(() =>
     supabase.from('documentos').select('*').eq('id_cliente', idCliente)
@@ -2422,36 +2435,77 @@ function AbaDocumentos({ idCliente }) {
 
   useEffect(() => { carregar() }, [carregar])
 
+  // O bucket do Supabase recusa 50 MB por padrão, e a mensagem que ele devolve
+  // não diz isso. No iPad, "escolher arquivo" oferece a galeria: um vídeo de
+  // quatro minutos entra aqui sem querer e a tela fica minutos "enviando" para
+  // terminar em erro incompreensível.
+  const LIMITE_MB = 25
+
+  // O nome vira CHAVE no Storage. Acento, espaço, `#` e `?` são rotina em
+  // arquivo brasileiro ("Apólice João #2.pdf") e quebram a chave ou o link
+  // assinado que a busca depois. O nome bonito continua na coluna `nome`; o
+  // que é sanitizado é só o caminho.
+  const nomeSeguro = (nome) => nome
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9.\-_]+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(-80) || 'arquivo'
+
   async function enviar(e) {
     const arquivo = e.target.files?.[0]
     e.target.value = '' // permite reenviar o mesmo arquivo depois
     if (!arquivo) return
     setErro(null)
+    if (arquivo.size > LIMITE_MB * 1024 * 1024) {
+      setErro(`"${arquivo.name}" tem ${(arquivo.size / 1048576).toFixed(1)} MB. `
+        + `O limite é ${LIMITE_MB} MB — comprima o PDF ou envie em partes.`)
+      return
+    }
     setEnviando(true)
-    const caminho = `${idCliente}/${Date.now()}-${arquivo.name}`
+    const caminho = `${idCliente}/${Date.now()}-${nomeSeguro(arquivo.name)}`
     const up = await supabase.storage.from('documentos').upload(caminho, arquivo)
     if (up.error) {
       setErro(`Falha no upload: ${up.error.message}`)
       setEnviando(false)
       return
     }
-    await supabase.from('documentos').insert({
+    const { error } = await supabase.from('documentos').insert({
       id_cliente: idCliente, nome: arquivo.name, categoria,
       caminho, tamanho_bytes: arquivo.size, tipo_mime: arquivo.type,
     })
+    if (error) {
+      // O arquivo subiu mas o registro não entrou: sem esta limpeza ele fica
+      // órfão no Storage para sempre, invisível na tela e ocupando espaço —
+      // e ela veria a lista igual, achando que o envio simplesmente sumiu.
+      await supabase.storage.from('documentos').remove([caminho])
+      setErro(`O arquivo subiu mas não ficou registrado: ${error.message}. Tente de novo.`)
+      setEnviando(false)
+      return
+    }
     setEnviando(false)
+    toast.ok(`"${arquivo.name}" anexado.`)
     carregar()
   }
 
   async function baixar(doc) {
     const { data, error } = await supabase.storage.from('documentos').createSignedUrl(doc.caminho, 120)
-    if (!error && data?.signedUrl) window.open(data.signedUrl, '_blank')
+    // Sem este aviso o botão simplesmente não fazia nada: ela clicava, clicava
+    // de novo, e concluía que o sistema estava travado.
+    if (error || !data?.signedUrl) {
+      toast.erro(`Não consegui abrir "${doc.nome}". ${error?.message ?? 'O arquivo pode ter sido removido do armazenamento.'}`)
+      return
+    }
+    window.open(data.signedUrl, '_blank')
   }
 
   async function excluir(doc) {
     if (!window.confirm(`Excluir "${doc.nome}"?`)) return
+    // A ordem importa: apaga primeiro o REGISTRO. Se o arquivo sumisse do
+    // Storage e o registro ficasse, sobraria uma linha na tela que não abre.
+    const { error } = await supabase.from('documentos').delete().eq('id', doc.id)
+    if (error) { toast.erro(`Não consegui excluir: ${error.message}`); return }
     await supabase.storage.from('documentos').remove([doc.caminho])
-    await supabase.from('documentos').delete().eq('id', doc.id)
+    toast.ok('Documento excluído.')
     carregar()
   }
 
