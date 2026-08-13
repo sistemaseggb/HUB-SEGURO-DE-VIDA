@@ -36,6 +36,22 @@ jobs:
       - name: Build de produção
         run: npm run build
 
+      # Os testes que não precisam de navegador rodam ANTES dos de tela: são
+      # segundos contra minutos, e é onde mora a prova de que os NÚMEROS estão
+      # certos. Um erro de cálculo não aparece como tela quebrada — aparece
+      # como afirmação falsa numa reunião, que é bem pior.
+      - name: Motor do estudo (fuzz de 4.000 entradas)
+        run: npm run test:motor
+
+      - name: Auditoria de 10.000 planejamentos (qualidade do conselho)
+        run: npm run test:planejamento
+
+      - name: Análise de transcrição, comparador e apresentação
+        run: |
+          npm run test:transcricao
+          npm run test:comparador
+          npm run test:apresentacao
+
       - name: Instalar o Chromium (para os testes de tela)
         id: chrome
         uses: browser-actions/setup-chrome@v1
