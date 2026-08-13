@@ -74,6 +74,19 @@ try {
   console.log('  ⚠️  premio.js/niveis.js ainda não existem — regras R25..R31 desligadas.\n')
 }
 
+// As camadas de conhecimento: subscrição, objeções e beneficiários. Mesma
+// regra de sempre — ausentes, o grupo I fica neutro.
+let analisarSubscricao = null
+let responderObjecoes = null
+let analisarBeneficiarios = null
+try {
+  ({ analisarSubscricao } = await import('../src/lib/subscricao.js'));
+  ({ responderObjecoes } = await import('../src/lib/objecoes.js'));
+  ({ analisarBeneficiarios } = await import('../src/lib/beneficiarios.js'))
+} catch {
+  console.log('  ⚠️  subscricao/objecoes/beneficiarios ainda não existem — regras R32..R36 desligadas.\n')
+}
+
 const CASOS = Number(process.env.CASOS ?? 10000)
 const alvoDetalhe = (() => {
   const i = process.argv.indexOf('--detalhe')
@@ -567,6 +580,32 @@ function gerarCenario() {
   })
   const carteira = carteiraAleatoria(Number(plano.cobertura_atual) || 0)
   if (carteira) plano.seguros_existentes = carteira
+
+  // Atividades de risco, IMC e indicação de beneficiários (migração 025). Sem
+  // isso o código novo passaria batido pelo teste que mais protege o sistema.
+  const ATIVIDADES = ['moto', 'aviacao', 'mergulho', 'altura', 'escalada',
+    'paraquedismo', 'automobilismo', 'artes_marciais', 'caca_submarina']
+  plano.atividades_risco = ATIVIDADES.filter(() => talvez(0.08))
+  if (talvez(0.5)) { plano.altura_cm = inteiroEntre(150, 200); plano.peso_kg = inteiroEntre(45, 190) }
+  if (talvez(0.25)) plano.condicoes_declaradas = 'Condição declarada na reunião'
+  if (talvez(0.55)) {
+    // Metade das indicações inclui um menor — é o caso que o sistema existe
+    // para pegar, e o que mais aparece na carteira de quem tem filho pequeno.
+    const quantos = inteiroEntre(1, 3)
+    const fatias = []
+    for (let k = 0; k < quantos; k++) {
+      const menor = talvez(0.45)
+      const anos = menor ? inteiroEntre(0, 17) : inteiroEntre(19, 75)
+      fatias.push({
+        nome: `Beneficiário ${k + 1}`,
+        parentesco: escolher(['Cônjuge', 'Filho(a)', 'Companheiro(a)', 'Outro', 'Irmão(ã)']),
+        // de propósito nem sempre soma 100: é o erro mais comum da indicação
+        pct: Math.round(100 / quantos),
+        nascimento: nascimentoParaIdade(anos, hoje),
+      })
+    }
+    plano.beneficiarios = fatias
+  }
   return {
     ...base,
     hoje,
@@ -1030,6 +1069,100 @@ const REGRAS = [
       const menorFora = Math.min(...p.fora.map((f) => f.mensal), Infinity)
       if (p.fora.length > 0 && p.mensal + menorFora <= p.teto) {
         return `deixou de fora um item de ${m(menorFora)} que ainda cabia na sobra de ${m(p.sobra)}`
+      }
+      return null
+    },
+  },
+
+  // ── I. As camadas de conhecimento ─────────────────────────────────────────
+  {
+    id: 'R32', gravidade: 'grave',
+    titulo: 'Prazo de emissão prometido sem sustentação',
+    porque: 'A consultora repete esse prazo para o cliente no fim da reunião. Faixa invertida, '
+      + 'prazo zero ou frase vazia vira promessa quebrada — e cliente perdoa preço, não perdoa '
+      + 'surpresa depois de já ter decidido comprar.',
+    quando: (c, e) => {
+      if (!analisarSubscricao || e.ativas.length === 0) return null
+      const s = analisarSubscricao(e, c.plano)
+      if (!s) return null
+      const [min, max] = s.prazoDias
+      if (!(min > 0) || !(max >= min)) return `faixa de prazo inválida: ${min}–${max}`
+      if (!s.combinado || s.combinado.length < 20) return 'sem a frase pronta para dizer ao cliente'
+      if (s.exigencias.length === 0) return 'nenhuma exigência listada'
+      return null
+    },
+  },
+  {
+    id: 'R33', gravidade: 'grave',
+    titulo: 'Atividade que exclui acidente sem virar restrição escrita',
+    porque: 'Agravo é preço; restrição é o cliente achar que está coberto justamente na hora de '
+      + 'maior risco. Confundir os dois é o erro mais caro da subscrição, e ele só aparece no '
+      + 'sinistro, quando ninguém pode mais resolver.',
+    quando: (c, e) => {
+      if (!analisarSubscricao || e.ativas.length === 0) return null
+      const s = analisarSubscricao(e, c.plano)
+      if (!s) return null
+      const excluem = ['aviacao', 'mergulho', 'paraquedismo', 'automobilismo', 'escalada', 'caca_submarina']
+      const declaradas = (c.plano.atividades_risco ?? []).filter((a) => excluem.includes(a))
+      const faltando = declaradas.filter((a) => !s.restricoes.some((r) => r.id === a))
+      return faltando.length > 0 ? `sem restrição escrita para: ${faltando.join(', ')}` : null
+    },
+  },
+  {
+    id: 'R34', gravidade: 'grave',
+    titulo: 'Objeção respondida pela metade',
+    porque: 'Meia resposta é dita na reunião com a mesma confiança da inteira, e é onde a '
+      + 'conversa desanda. Toda objeção precisa de argumento, do que NÃO dizer e da pergunta '
+      + 'que faz avançar — ou não deve aparecer.',
+    quando: (c, e, d) => {
+      if (!responderObjecoes) return null
+      const r = responderObjecoes(e, { diagnostico: d, cliente: c.plano })
+      if (!r) return null
+      const ruim = r.lista.find((o) => !o.argumentos?.length || !o.naoDiga || !o.pergunta || !o.comoSoa)
+      if (ruim) return `"${ruim.rotulo}" incompleta`
+      const texto = JSON.stringify(r)
+      const bug = texto.match(/NaN|Infinity|R\$ -|undefined/)
+      return bug ? `encontrado "${bug[0]}" no texto lido em voz alta` : null
+    },
+  },
+  {
+    id: 'R35', gravidade: 'atencao',
+    titulo: 'Objeção óbvia não prevista pelo estudo',
+    porque: 'A ferramenta promete PREVER o que o cliente vai dizer. Se ele tem vida em grupo e '
+      + '"já tenho seguro" não aparece entre as esperadas, a promessa não se cumpre justamente '
+      + 'no caso em que ela seria mais útil.',
+    quando: (c, e, d) => {
+      if (!responderObjecoes) return null
+      const r = responderObjecoes(e, { diagnostico: d, cliente: c.plano })
+      if (!r) return null
+      const esperado = (id) => r.esperadas.some((o) => o.id === id)
+      if (e.carteira?.condicionada > 0 && !esperado('ja_tem')) {
+        return 'vida em grupo na carteira e "já tenho seguro" fora das esperadas'
+      }
+      if (e.investimento?.pctRenda > 12 && !esperado('preco')) {
+        return `prêmio em ${e.investimento.pctRenda}% da renda e "está caro" fora das esperadas`
+      }
+      return null
+    },
+  },
+  {
+    id: 'R36', gravidade: 'grave',
+    titulo: 'Beneficiário menor sem alerta',
+    porque: 'É o caso que acontece com quem fez tudo certo: o pai que indicou os filhos. A '
+      + 'seguradora paga e o dinheiro trava em autorização judicial por meses — exatamente o '
+      + 'contrário do que o seguro foi contratado para fazer. Passar batido aqui é falhar no '
+      + 'propósito, não na regra.',
+    quando: (c, e) => {
+      if (!analisarBeneficiarios) return null
+      const b = analisarBeneficiarios(c.plano, e, { hoje: c.hoje })
+      if (!b) return null
+      const temMenor = b.itens.some((x) => x.menor === true && x.pct > 0)
+      if (temMenor && !b.alertas.some((x) => x.id === 'menor' && x.grave)) {
+        return 'menor indicado e nenhum alerta grave'
+      }
+      if (b.declarado && Math.abs(b.somaPct - 100) > 0.5
+        && !b.alertas.some((x) => x.id === 'soma')) {
+        return `soma ${b.somaPct}% sem alerta`
       }
       return null
     },

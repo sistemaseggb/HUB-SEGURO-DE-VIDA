@@ -6,7 +6,7 @@ import {
   Phone, Mail, Handshake, StickyNote, Flame, ChartPie, HeartHandshake, RefreshCw, CheckCircle2,
   Users2, Wallet, Shield, Landmark, Sparkles, Plus, Baby, Archive, TrendingDown, TrendingUp,
   ListChecks, Lightbulb, MessageSquareQuote, Clock3,
-  Building2, PiggyBank, Coins, HeartPulse, Ambulance, AlertTriangle,
+  Building2, PiggyBank, Coins, HeartPulse, Ambulance, AlertTriangle, Stethoscope,
 } from 'lucide-react'
 import { ETAPAS_FORM, ROTULOS_FORM } from '../lib/formularioConfig'
 import { supabase } from '../lib/supabase'
@@ -21,11 +21,17 @@ import { BLOCOS_ROTEIRO } from '../lib/roteiro'
 import { diagnosticar } from '../lib/diagnostico'
 import { estimarPremio, conferirCotacao } from '../lib/premio'
 import { montarNiveis, planoQueCabe } from '../lib/niveis'
+import { analisarSubscricao, ATIVIDADES_RISCO } from '../lib/subscricao'
+import { responderObjecoes } from '../lib/objecoes'
+import { analisarBeneficiarios } from '../lib/beneficiarios'
 import { ABAS_CLIENTE } from '../lib/navegacao'
 import { registrarVisita } from '../lib/recentes'
 import PainelDiagnostico from '../components/PainelDiagnostico'
 import PainelPreco from '../components/PainelPreco'
 import PainelCarteira from '../components/PainelCarteira'
+import PainelSubscricao from '../components/PainelSubscricao'
+import PainelObjecoes from '../components/PainelObjecoes'
+import PainelBeneficiarios from '../components/PainelBeneficiarios'
 import {
   Button, Card, Input, InputMoeda, Select, Textarea, Campo, Modal, Badge, Spinner, ComoFunciona,
 } from '../components/ui'
@@ -530,6 +536,8 @@ const SECAO_DO_CAMPO = {
   dit_diaria: 'sec-coberturas', verba_sucessoria: 'sec-coberturas',
   capital_sugerido: 'sec-coberturas', anos_protecao: 'sec-financeira',
   seguros_existentes: 'sec-financeira',
+  beneficiarios: 'sec-beneficiarios',
+  atividades_risco: 'sec-subscricao', condicoes_declaradas: 'sec-subscricao',
 }
 
 function AbaPlanejamento({ idCliente, cliente }) {
@@ -558,14 +566,15 @@ function AbaPlanejamento({ idCliente, cliente }) {
     // formulário de um cliente com os dados de outro
     setPlano(null)
     setColunas(null)
+    ancoraFeitaRef.current = false
     const probe = (coluna) => supabase.from('planejamentos').select(coluna).limit(1)
       .then(({ error }) => !error)
     Promise.all([
       supabase.from('planejamentos').select('*').eq('id_cliente', idCliente).maybeSingle(),
       probe('capital_invalidez'), probe('premio_estimado'), probe('tipo_planejamento'),
-      probe('renda_desejada_aposentadoria'), probe('uf'),
-    ]).then(([{ data }, tem014, tem015, tem019, tem021, tem024]) => {
-      setColunas({ tem014, tem015, tem019, tem021, tem024 })
+      probe('renda_desejada_aposentadoria'), probe('uf'), probe('beneficiarios'),
+    ]).then(([{ data }, tem014, tem015, tem019, tem021, tem024, tem025]) => {
+      setColunas({ tem014, tem015, tem019, tem021, tem024, tem025 })
       // Rascunho local vence a resposta do banco quando é mais recente que a
       // linha lida — cobre tanto a gravação ainda em voo quanto a volta rápida
       // para a aba. Se outra tela (a Transcrição, por exemplo) gravou depois,
@@ -597,6 +606,10 @@ function AbaPlanejamento({ idCliente, cliente }) {
           seguros_existentes: [], quem_decide: '', prazo_decisao: '',
         }),
         ...(tem024 && { uf: '', dividas_prazo_anos: '' }),
+        ...(tem025 && {
+          atividades_risco: [], altura_cm: '', peso_kg: '',
+          condicoes_declaradas: '', beneficiarios: [],
+        }),
       })
     })
   }, [idCliente])
@@ -632,9 +645,34 @@ function AbaPlanejamento({ idCliente, cliente }) {
     return () => window.removeEventListener('beforeunload', aviso)
   }, [])
 
+  // ── A âncora da URL leva ao bloco ─────────────────────────────────────────
+  // `/clientes/<id>/planejamento#sec-beneficiarios` abre a aba JÁ no bloco
+  // certo. É o que faz a paleta de comandos alcançar o interior do formulário
+  // mais longo do sistema, e o que permite colar no WhatsApp um link que abre
+  // exatamente onde a conversa parou.
+  //
+  // Roda UMA VEZ, quando o formulário aparece. O `plano` é reconstruído a cada
+  // tecla digitada, então um efeito que dependesse dele rolaria a tela de volta
+  // ao bloco no meio da digitação — o oposto de ajudar. A trava fica numa
+  // referência, e não no array de dependências, porque é o primeiro desenho do
+  // formulário que importa, não a última letra.
+  const ancoraFeitaRef = useRef(false)
+  useEffect(() => {
+    if (!plano || ancoraFeitaRef.current) return undefined
+    ancoraFeitaRef.current = true
+    const alvo = window.location.hash.replace('#', '')
+    if (!alvo) return undefined
+    // no instante da montagem o elemento ainda não tem posição: rolar agora
+    // pararia no lugar errado
+    const t = setTimeout(() => {
+      document.getElementById(alvo)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 120)
+    return () => clearTimeout(t)
+  }, [plano])
+
   if (!plano || !colunas) return <Spinner />
 
-  const { tem014, tem015, tem019, tem021, tem024 } = colunas
+  const { tem014, tem015, tem019, tem021, tem024, tem025 } = colunas
   const estudo = calcularEstudo(plano, { dataNascimento: cliente?.data_nascimento })
   const set = (k) => (e) => setPlano({ ...plano, [k]: e.target.value })
   const setValor = (k, v) => setPlano({ ...plano, [k]: v })
@@ -757,6 +795,23 @@ function AbaPlanejamento({ idCliente, cliente }) {
         uf: (plano.uf || '').trim().toUpperCase() || null,
         dividas_prazo_anos: num(plano.dividas_prazo_anos),
       }),
+      ...(tem025 && {
+        // ids fechados: um valor estranho vindo de fora não entra no banco
+        atividades_risco: (Array.isArray(plano.atividades_risco) ? plano.atividades_risco : [])
+          .filter((a) => ATIVIDADES_RISCO.some((x) => x.id === a)),
+        altura_cm: num(plano.altura_cm),
+        peso_kg: num(plano.peso_kg),
+        condicoes_declaradas: plano.condicoes_declaradas || null,
+        // linhas em branco não vão para o banco, como nos filhos e nos seguros
+        beneficiarios: (Array.isArray(plano.beneficiarios) ? plano.beneficiarios : [])
+          .filter((b) => String(b?.nome ?? '').trim() !== '' || Number(b?.pct) > 0)
+          .map((b) => ({
+            nome: String(b.nome ?? '').trim(),
+            parentesco: b.parentesco || 'Outro',
+            pct: num(b.pct) ?? 0,
+            nascimento: b.nascimento || null,
+          })),
+      }),
       ...(tem021 && {
         fumante: !!plano.fumante,
         renda_desejada_aposentadoria: num(plano.renda_desejada_aposentadoria),
@@ -836,6 +891,33 @@ function AbaPlanejamento({ idCliente, cliente }) {
   if (estudo.temPJ && estudo.pj.valuation <= 0)
     pendencias.push('Estudo com PJ: informe o valuation e a participação para calcular o acordo de sócios.')
 
+  // A leitura do estudo (perfil, recomendações e pendências). Roda a cada
+  // tecla, como o resto do formulário: é determinístico e leva milissegundos.
+  const diagnostico = diagnosticar(estudo, { cliente })
+
+  // ── As ferramentas de preço ───────────────────────────────────────────────
+  // Todas dependem da idade (o prêmio de risco é quase todo idade), e todas
+  // devolvem null sem ela — em vez de chutar um número convincente e falso.
+  // Recalculam a cada tecla como o resto: são contas determinísticas de
+  // milissegundos, sem rede e sem chave de API.
+  const premio = estimarPremio(estudo)
+  const conferencia = conferirCotacao(estudo, premio)
+  const niveis = montarNiveis(estudo, { perfil: diagnostico?.perfil })
+  // O teto do "plano que cabe" é a sobra real do cliente. Só faz sentido
+  // mostrar quando o plano cheio de fato não cabe nela: com orçamento
+  // sobrando, a ferramenta não tem o que resolver.
+  const cabe = premio && estudo.poupancaMensal > 0 && premio.mensal > estudo.poupancaMensal
+    ? planoQueCabe(estudo, estudo.poupancaMensal, { perfil: diagnostico?.perfil })
+    : null
+
+  // ── As três camadas de conhecimento ───────────────────────────────────────
+  // Subscrição responde "isso sai, e em quanto tempo"; as objeções respondem
+  // "o que ele vai dizer"; os beneficiários respondem "quem recebe, e o que
+  // trava". Todas leem o estudo já calculado e não fazem rede — como o resto.
+  const subscricao = estudo.ativas.length > 0 ? analisarSubscricao(estudo, plano) : null
+  const objecoes = responderObjecoes(estudo, { diagnostico, premio, cliente: { ...cliente, ...plano } })
+  const beneficiarios = tem025 ? analisarBeneficiarios(plano, estudo) : null
+
   // ── Roteiro do preenchimento ──────────────────────────────────────────────
   // O formulário é longo porque a apólice é grande. Em vez de pedir que ela
   // role atrás do que falta, o roteiro mostra a espinha do estudo: cada bloco
@@ -865,6 +947,13 @@ function AbaPlanejamento({ idCliente, cliente }) {
       resumo: estudo.aposentadoria
         ? `meta ${brlCompacto(estudo.aposentadoria.capitalNecessario)}`
         : 'renda desejada e idade' },
+    tem025 && { id: 'sec-beneficiarios', rotulo: 'Beneficiários', icone: Users2,
+      ok: (beneficiarios?.itens.length ?? 0) > 0,
+      resumo: beneficiarios?.declarado
+        ? `${beneficiarios.itens.length} indicado(s)` : 'quem recebe o capital' },
+    tem025 && subscricao && { id: 'sec-subscricao', rotulo: 'Subscrição', icone: Stethoscope,
+      ok: subscricao.automatico,
+      resumo: `${subscricao.prazoDias[0]}–${subscricao.prazoDias[1]} dias` },
     tem021 && { id: 'sec-decisao', rotulo: 'Decisão', icone: Handshake,
       ok: String(plano.quem_decide ?? '').trim() !== '',
       resumo: String(plano.quem_decide ?? '').trim() || 'quem decide e até quando' },
@@ -872,25 +961,6 @@ function AbaPlanejamento({ idCliente, cliente }) {
       resumo: estudo.investimento ? `${brl(estudo.investimento.mensal)}/mês` : 'prêmio cotado' },
   ].filter(Boolean)
   const irPara = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-
-  // A leitura do estudo (perfil, recomendações e pendências). Roda a cada
-  // tecla, como o resto do formulário: é determinístico e leva milissegundos.
-  const diagnostico = diagnosticar(estudo, { cliente })
-
-  // ── As ferramentas de preço ───────────────────────────────────────────────
-  // Todas dependem da idade (o prêmio de risco é quase todo idade), e todas
-  // devolvem null sem ela — em vez de chutar um número convincente e falso.
-  // Recalculam a cada tecla como o resto: são contas determinísticas de
-  // milissegundos, sem rede e sem chave de API.
-  const premio = estimarPremio(estudo)
-  const conferencia = conferirCotacao(estudo, premio)
-  const niveis = montarNiveis(estudo, { perfil: diagnostico?.perfil })
-  // O teto do "plano que cabe" é a sobra real do cliente. Só faz sentido
-  // mostrar quando o plano cheio de fato não cabe nela: com orçamento
-  // sobrando, a ferramenta não tem o que resolver.
-  const cabe = premio && estudo.poupancaMensal > 0 && premio.mensal > estudo.poupancaMensal
-    ? planoQueCabe(estudo, estudo.poupancaMensal, { perfil: diagnostico?.perfil })
-    : null
 
   return (
     <Card className="p-5">
@@ -989,6 +1059,10 @@ function AbaPlanejamento({ idCliente, cliente }) {
           Fica logo abaixo do diagnóstico porque é a pergunta que vem em
           seguida na reunião, e porque agora ela tem resposta na hora. */}
       <PainelPreco premio={premio} niveis={niveis} cabe={cabe} conferencia={conferencia} />
+
+      {/* O que ele vai dizer, e o que responder com os números dele. Fica ao
+          lado do preço porque quase toda objeção nasce ali. */}
+      <PainelObjecoes respostas={objecoes} />
 
       {/* Roteiro: a espinha do estudo em uma linha. Um clique leva ao bloco. */}
       <div className="mb-5 flex flex-wrap gap-1.5">
@@ -1578,6 +1652,20 @@ function AbaPlanejamento({ idCliente, cliente }) {
             </div>
           )
         })}
+
+        {/* Quem recebe o capital, e o que trava no caminho (migração 025) */}
+        {tem025 && (
+          <div id="sec-beneficiarios">
+            <PainelBeneficiarios analise={beneficiarios} plano={plano} setPlano={setPlano} />
+          </div>
+        )}
+
+        {/* "Isso sai, e em quanto tempo?" — a pergunta do fim da reunião */}
+        {tem025 && subscricao && (
+          <div id="sec-subscricao">
+            <PainelSubscricao analise={subscricao} plano={plano} setPlano={setPlano} setValor={setValor} />
+          </div>
+        )}
 
         {/* ── O investimento: mensal E anual ───────────────────────────────── */}
         {tem015 && (

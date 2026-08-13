@@ -157,6 +157,10 @@ function semear() {
         capital: 120_000, custeio: 'proprio' },
     ],
     quem_decide: null, prazo_decisao: null,
+    // migração 025 — motociclista: o caso que muda a análise de risco inteira,
+    // e ainda sem beneficiário indicado (o alerta mais comum da carteira)
+    atividades_risco: ['moto'], altura_cm: 178, peso_kg: 92,
+    condicoes_declaradas: null, beneficiarios: [],
     // migração 023 — ainda sem desenho: é o estado em que toda proposta nasce
     anotacoes_proposta: {},
     token_proposta: 'demo-proposta-rodrigo', roteiro: {},
@@ -207,6 +211,16 @@ function semear() {
         capital: 300_000, custeio: 'proprio' },
     ],
     quem_decide: 'Ele e a esposa, juntos', prazo_decisao: 'Quer decidir até o fim do mês',
+    // migração 025 — o caso que a tela existe para pegar: os dois filhos são
+    // menores e estão como beneficiários de 70% do capital. A seguradora paga,
+    // e o dinheiro trava em alvará judicial justamente quando não pode travar.
+    atividades_risco: [], altura_cm: 181, peso_kg: 88,
+    condicoes_declaradas: 'Hipertensão controlada com medicação desde 2021.',
+    beneficiarios: [
+      { nome: 'Mariana Menezes', parentesco: 'Cônjuge', pct: 30, nascimento: '1988-05-12' },
+      { nome: 'Alice Menezes', parentesco: 'Filho(a)', pct: 35, nascimento: '2020-02-09' },
+      { nome: 'Lucas Menezes', parentesco: 'Filho(a)', pct: 35, nascimento: '2017-06-21' },
+    ],
     // migração 022 — a tabela de resgate colada da cotação do resgatável
     seguro_resgatavel: [
       { ano: 5, resgate: 42_000 }, { ano: 10, resgate: 138_000 },
