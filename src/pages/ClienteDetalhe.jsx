@@ -1315,7 +1315,14 @@ function AbaPlanejamento({ idCliente, cliente }) {
                   dica={estudo.itcmdOrigem === 'uf'
                     ? `${estudo.uf}: ITCMD de ${estudo.itcmd}%`
                     : 'O ITCMD é estadual e vai de 2% a 8%'}>
-                  <Select data-campo="uf" value={plano.uf ?? ''} onChange={set('uf')}>
+                  {/* Escolher o estado LIMPA o ITCMD digitado, de propósito.
+                      A coluna nasceu com `default 4`, então todo planejamento
+                      antigo tem 4% gravado — sem limpar, a consultora escolheria
+                      "RJ" e o imposto continuaria nos 4% de São Paulo, sem
+                      nenhum aviso. Ela pode digitar um override logo em seguida;
+                      o campo ao lado mostra qual alíquota está valendo. */}
+                  <Select data-campo="uf" value={plano.uf ?? ''}
+                    onChange={(e) => setPlano({ ...plano, uf: e.target.value, itcmd_pct: '' })}>
                     <option value="">Não informado (usa 4%)</option>
                     {Object.entries(ITCMD_POR_UF).sort().map(([sigla, aliquota]) => (
                       <option key={sigla} value={sigla}>{sigla} — {aliquota}%</option>
