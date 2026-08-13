@@ -4,6 +4,7 @@ import {
   CheckCircle2, Target, ArrowRight,
 } from 'lucide-react'
 import { Card, Button, Badge } from './ui'
+import { valorDoCampo } from '../lib/estudo'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // O PAINEL DO DIAGNÓSTICO — a inteligência do estudo, em três blocos.
@@ -63,7 +64,7 @@ function Recomendacao({ r, onAplicar }) {
               <Button variant="secondary" onClick={() => onAplicar(r)}
                 className="px-3 py-1.5 text-xs">
                 <Wand2 size={13} />
-                Aplicar {Number(r.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
+                Aplicar {valorDoCampo(r.campo, r.valor)}
               </Button>
             </div>
           )}

@@ -32,7 +32,7 @@ vida real o estudo raramente chega completo.
 | Aposentadoria e acúmulo | ~550 |
 | PF + PJ | ~550 |
 
-Sobre cada estudo passam **36 regras de revisão**. Cada regra é uma coisa que um
+Sobre cada estudo passam **37 regras de revisão**. Cada regra é uma coisa que um
 consultor sênior olharia e diria "isso está errado" ou "isso você deixou
 passar". Os tetos de mercado ficam **dentro do arquivo de auditoria**, e não
 importados do motor: auditor que usa as constantes do auditado não audita nada,
@@ -235,6 +235,24 @@ agravo custa mais e paga tudo. Um caso com restrição custa o combinado e não
 paga justamente no cenário de maior risco — e o cliente só descobre no sinistro,
 quando ninguém pode mais resolver. Por isso as duas saem em blocos separados na
 tela, com cores diferentes, e só uma delas é vermelha.
+
+## R37: a que veio de olhar a tela, não o código
+
+As trinta e seis primeiras nasceram lendo estudo. A R37 nasceu de **abrir o app
+e olhar** — e é a que mais mostra por que rodar não é o mesmo que testar.
+
+Os dois lugares em que o sistema oferece corrigir um número com um clique
+formatavam tudo como dinheiro, porque quase todo campo do planejamento é
+dinheiro. O resultado: a recomendação *"Estender a proteção para 18 anos"*
+vinha com o botão **"Aplicar R$ 18"**, e a conferência dizia *"corrigir para
+R$ 18"*. Nenhum teste reclamou — o valor estava certo, o campo estava certo, a
+ação estava certa. Só a leitura estava errada, e quem bate o olho entende que o
+estudo sugere dezoito reais de alguma coisa.
+
+A correção mora no motor (`valorDoCampo`), e não na tela, porque saber que
+`anos_protecao` é contagem e `capital_sugerido` é dinheiro é conhecimento do
+domínio. Quem acrescentar um campo de contagem novo escreve uma linha e as duas
+telas acertam sozinhas.
 
 ## Como estender
 

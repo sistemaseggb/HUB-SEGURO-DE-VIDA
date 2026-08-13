@@ -15,7 +15,7 @@ import { brl, brlCompacto, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib
 import {
   calcularEstudo, normalizarFilhos, IDADE_INDEPENDENCIA, MESES_VITALICIO,
   COBERTURAS, GRUPOS_COBERTURA, TIPOS_PLANEJAMENTO, FOCOS, CLASSES_PATRIMONIO,
-  porqueCobertura, ITCMD_POR_UF,
+  porqueCobertura, ITCMD_POR_UF, valorDoCampo,
 } from '../lib/estudo'
 import { BLOCOS_ROTEIRO } from '../lib/roteiro'
 import { diagnosticar } from '../lib/diagnostico'
@@ -1019,7 +1019,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
                   {inc.corrigir && (
                     <button type="button" className="ml-1.5 font-semibold text-blue-600 hover:underline"
                       onClick={() => setValor(inc.corrigir, inc.valor)}>
-                      corrigir para {brlCompacto(inc.valor)}
+                      corrigir para {valorDoCampo(inc.corrigir, inc.valor)}
                     </button>
                   )}
                 </span>

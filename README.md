@@ -326,7 +326,7 @@ gente — o CLT de 28 anos sem filhos, a médica autônoma com três crianças, 
 empresário com sócio e aval no banco, a viúva resolvendo o inventário do
 marido, o casal sem filhos, quem só quer cobrir o financiamento por 20 anos.
 Nove públicos, quinze arquétipos, com lacunas de preenchimento como acontece
-na vida real. Sobre cada estudo passam **36 regras de revisão**, cada uma
+na vida real. Sobre cada estudo passam **37 regras de revisão**, cada uma
 sendo algo que um consultor sênior apontaria: capital que nenhuma seguradora
 emite, prêmio que não cabe no bolso do cliente, proteção vendida para quem não
 precisa dela, o mesmo dinheiro contado duas vezes em dois lugares do estudo,

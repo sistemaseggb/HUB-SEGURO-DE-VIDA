@@ -64,6 +64,13 @@ try {
 
 // As ferramentas de precificação e de níveis do plano seguem a mesma regra:
 // ausentes, as regras do grupo H ficam neutras em vez de derrubar a auditoria.
+// A formatação por campo mora no motor (é conhecimento de domínio, não de
+// layout). A auditoria confere que ela não volte a chamar ano de dinheiro.
+let valorDoCampo = null
+try {
+  ({ valorDoCampo } = await import('../src/lib/estudo.js'))
+} catch { /* motor sem o helper: regra R37 neutra */ }
+
 let estimarPremio = null
 let montarNiveis = null
 let planoQueCabe = null
@@ -1163,6 +1170,33 @@ const REGRAS = [
       if (b.declarado && Math.abs(b.somaPct - 100) > 0.5
         && !b.alertas.some((x) => x.id === 'soma')) {
         return `soma ${b.somaPct}% sem alerta`
+      }
+      return null
+    },
+  },
+  {
+    id: 'R37', gravidade: 'atencao',
+    titulo: 'Correção de um clique oferecida na unidade errada',
+    porque: 'Os dois lugares em que o sistema oferece corrigir um número com um clique '
+      + 'formatavam tudo como dinheiro. "Estender a proteção para 18 anos" virava o botão '
+      + '"Aplicar R$ 18", e quem bate o olho entende que o estudo sugere dezoito reais de '
+      + 'alguma coisa. Campo de contagem tem que sair com a unidade dele.',
+    quando: (c, e, d) => {
+      if (!valorDoCampo) return null
+      const alvos = [
+        ...e.inconsistencias.filter((i) => i.corrigir).map((i) => [i.corrigir, i.valor]),
+        ...(d?.recomendacoes ?? []).filter((r) => r.campo && r.valor > 0).map((r) => [r.campo, r.valor]),
+      ]
+      const CONTAGEM = ['anos_protecao', 'dividas_prazo_anos', 'idade_aposentadoria',
+        'pj_num_socios', 'num_dependentes', 'dit_dias', 'dih_dias', 'dit_franquia_dias']
+      for (const [campo, valor] of alvos) {
+        const texto = valorDoCampo(campo, valor)
+        if (CONTAGEM.includes(campo) && /R\$/.test(texto)) {
+          return `${campo} saindo como dinheiro: "${texto}"`
+        }
+        if (!CONTAGEM.includes(campo) && !/R\$|%|cm|kg/.test(texto)) {
+          return `${campo} saindo sem unidade nenhuma: "${texto}"`
+        }
       }
       return null
     },
