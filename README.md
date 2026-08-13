@@ -30,6 +30,69 @@ e registrar os dados; o sistema cuida do resto.
 | Proposta apresentada | Cria sozinho a tarefa de **follow-up em 3 dias** |
 | Cliente com apólice ativa sem contato há X dias | Aparece em **"Clientes que precisam de atenção"** no pós-venda (retenção) |
 
+## 🧭 Navegação — três caminhos para o mesmo lugar
+
+As três situações são diferentes, e por isso os caminhos também são:
+
+| Situação | Caminho |
+|---|---|
+| Computador, com tempo | Menu lateral agrupado por seção, tudo à vista |
+| Computador, com pressa | **Ctrl+K** (ou `/`) abre a paleta · `g`+inicial vai direto |
+| Celular, em pé | Barra inferior com os 4 destinos do dia a dia + busca |
+
+- **Paleta de comandos** — um campo só que acha **cliente, tela e ação**, pelo
+  nome que a consultora usa e não pelo nome técnico: "funil" leva ao Pipeline,
+  "whatsapp" às Mensagens, "planilha" ao Importar, "dps" à aba Formulário do
+  cliente aberto. Sem digitar nada, ela já abre útil, com os últimos clientes
+  visitados. Setas e Enter navegam tudo — o mouse é opcional.
+- **A aba do cliente mora na URL** (`/clientes/<id>/apolices`). F5 no meio da
+  reunião mantém o lugar, o botão voltar devolve a aba anterior e o link colado
+  no WhatsApp abre exatamente onde ela estava.
+- **As 12 abas viraram mapa**: agrupadas pelo momento da consultoria (Reunião ·
+  Relacionamento · Pós-venda) e com uma bolinha marcando as que **já têm
+  conteúdo** — ela vê onde tem coisa sem abrir uma por uma.
+- **Trilha no topo** respondendo "onde eu estou": seção → página → aba.
+- **Atalhos**: `Ctrl K` busca, `?` a lista de atalhos, `g d` Dashboard, `g p`
+  Pipeline, `g a` Agenda, `g c` Clientes, `g v` Pós-Venda, `g m` Mensagens,
+  `g r` Relatórios, `g i` Importar, `g s` Cadastros, `g g` Guia. Nenhum deles
+  dispara enquanto se digita num campo — pode escrever à vontade.
+- **Teclado**: o primeiro `Tab` oferece pular o menu e ir direto ao conteúdo.
+
+Tudo isso nasce de um arquivo só, [`src/lib/navegacao.js`](src/lib/navegacao.js):
+menu, barra do celular, paleta e ajuda de atalhos leem do mesmo mapa, então uma
+tela nova nunca fica inalcançável por esquecimento.
+
+## 🧠 A inteligência do planejamento
+
+O motor responde **quanto**. O [diagnóstico](src/lib/diagnostico.js) responde as
+três perguntas que vêm depois:
+
+1. **Quem é este cliente?** — perfil (provedor de família, sócio/empresário,
+   patrimônio consolidado, sem dependentes, acúmulo), que define a **ordem** das
+   coberturas. Um empresário com aval no banco e um casal com filho pequeno têm
+   exposições diferentes; o estudo que trata os dois igual está errado para os dois.
+2. **O que fazer com este estudo?** — recomendações ordenadas por um peso
+   explícito: **gravidade × probabilidade × dinheiro em jogo** (relativo à
+   exposição do cliente, não em valor absoluto) **× alinhamento com o foco que
+   ele declarou**. Cada uma traz o `porque` com os números daquele cliente e uma
+   frase pronta para dizer na reunião.
+3. **O que ainda falta perguntar?** — pendências separadas das recomendações de
+   propósito: recomendação é decisão, pendência é dado que falta. Misturar as
+   duas faz a consultora apresentar um estudo achando que ele está pronto.
+
+Duas regras governam o arquivo:
+
+> **Palpite sem conta atrás é chute.** Recomendação que não sabe se justificar
+> não é gerada — silêncio é melhor que confiança inventada.
+
+> **Nada é aplicado sozinho.** Cada número entra no estudo só quando ela clicar.
+> O sistema não esteve na reunião; ela esteve.
+
+Tudo determinístico, sem rede e sem chave de API: o mesmo estudo dá sempre a
+mesma resposta, que é o mínimo que se pede de algo que vai ser citado na frente
+de um cliente. A qualidade desse conselho é medida por
+[10.000 planejamentos auditados](docs/AUDITORIA.md) a cada `npm test`.
+
 ## 🧩 Módulos
 
 - **Dashboard** — KPIs do mês, comissão da Natália, gráfico de evolução, divisão
@@ -99,7 +162,7 @@ npm run build && npm test        # lint + motor + ponta a ponta
 ```
 
 Ou em separado: os que não precisam de navegador — `npm run test:motor`,
-`npm run test:transcricao`, `npm run test:comparador`,
+`npm run test:planejamento`, `npm run test:transcricao`, `npm run test:comparador`,
 `npm run test:apresentacao` — e `npm run test:e2e`. A suíte de navegador sobe o servidor de preview sozinha
 (e reaproveita um que já esteja rodando), então basta um terminal.
 
@@ -112,6 +175,26 @@ patrimônio bruto igual à soma das classes, custo do inventário nunca maior qu
 o que trava, maior evento indenizável nunca maior que a soma das importâncias,
 porcentagens dentro de 0–100. Reproduzível: `CASOS=20000 SEMENTE=7 npm run
 test:motor`.
+
+**`test:planejamento`** — a auditoria dos **10.000 planejamentos**. O
+`test:motor` prova que o estudo não *quebra*; este prova que o conselho está
+*certo*, que é outra coisa e é mais difícil: um motor que devolvesse zero em
+tudo passaria no fuzz com louvor. Aqui as entradas não são aleatórias, são
+gente — o CLT de 28 anos sem filhos, a médica autônoma com três crianças, o
+empresário com sócio e aval no banco, a viúva resolvendo o inventário do
+marido, o casal sem filhos, quem só quer cobrir o financiamento por 20 anos.
+Nove públicos, quinze arquétipos, com lacunas de preenchimento como acontece
+na vida real. Sobre cada estudo passam **24 regras de revisão**, cada uma
+sendo algo que um consultor sênior apontaria: capital que nenhuma seguradora
+emite, prêmio que não cabe no bolso do cliente, proteção vendida para quem não
+precisa dela, o mesmo dinheiro contado duas vezes em dois lugares do estudo,
+pergunta decisiva que o sistema deixou de fazer. Os tetos de mercado ficam
+**dentro do teste**, não importados do motor — auditor que usa as constantes do
+auditado só confirma que o sistema concorda consigo mesmo. Rode
+`npm run auditoria` para o relatório completo, com o percentual e um caso
+concreto por regra; `CASOS=50000 SEMENTE=42 npm run auditoria` para outra
+bateria. **A primeira execução reprovou em 16 regras, 8 delas graves** — o que
+foi corrigido está listado em [`docs/AUDITORIA.md`](docs/AUDITORIA.md).
 
 **`test:transcricao`** — o fuzz prova que a análise não explode; isso não prova
 que ela extrai CERTO (um parser que devolve lista vazia passa em qualquer teste
@@ -129,7 +212,7 @@ colhida da própria implementação: a alíquota certa em cada faixa da regressi
 VGBL tributando só o ganho e PGBL o total, a dedução do PGBL limitada aos 12%
 da renda, e o ano do cruzamento numa conta redonda.
 
-**`test:e2e`** — quatro suítes. A **principal** navega o sistema inteiro
+**`test:e2e`** — cinco suítes. A **principal** navega o sistema inteiro
 nas duas visões — consultora (login, dashboard, pipeline, cliente 360 com o
 planejamento completo, transcrição da reunião, apólices, DPS, proposta,
 relatórios com fechamento, pós-venda, agenda, mensagens, cadastros) e cliente
@@ -138,7 +221,15 @@ caminhos que quebram sistemas:
 link inválido, formulário já concluído, obrigatórios vazios, proposta sem
 planejamento, rota inexistente, venda com comissão automática, popups de
 dossiê/DPS, pendências de classificação, busca, exclusão com confirmação,
-celular (375px) e F5. A de **planejamento** usa a aba como a consultora usa,
+celular (375px) e F5. A de **navegação** cobre a parte em que ninguém repara
+até quebrar: a aba do cliente que precisa sobreviver ao F5 e ao botão voltar, o
+link colado no WhatsApp abrindo na aba certa, o slug inválido que não pode dar
+tela branca, a paleta achando tela por sinônimo ("funil" → Pipeline, "whatsapp"
+→ Mensagens, "planilha" → Importar), os atalhos `g`+tecla — inclusive o teste
+de que digitar "gd" dentro de um campo **não** teletransporta a página —, a
+trilha respondendo "onde eu estou", e o celular a 375px com a barra inferior
+colada embaixo, sem tapar o conteúdo e sem rolagem lateral. A de
+**planejamento** usa a aba como a consultora usa,
 com o cliente na frente: valores hostis campo a campo, o estudo preenchido, a
 alteração não salva que precisa sobreviver à troca de aba, o dado que tem que
 voltar ao sair e retornar no cliente, o roteiro que leva ao bloco certo e a
@@ -201,6 +292,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 21. [`supabase/migrations/021_planejamento_inteligente.sql`](supabase/migrations/021_planejamento_inteligente.sql)
 22. [`supabase/migrations/022_comparador.sql`](supabase/migrations/022_comparador.sql)
 23. [`supabase/migrations/023_apresentacao.sql`](supabase/migrations/023_apresentacao.sql)
+24. [`supabase/migrations/024_estado_e_prazo_divida.sql`](supabase/migrations/024_estado_e_prazo_divida.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →

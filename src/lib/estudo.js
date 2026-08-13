@@ -80,6 +80,58 @@ const inteiro = (v, padrao, min, max) => {
 // Idade em que o filho deixa de depender financeiramente (fim da faculdade)
 export const IDADE_INDEPENDENCIA = 24
 
+// ─── O QUE O MERCADO EMITE DE VERDADE ────────────────────────────────────────
+// Uma sugestão que a seguradora não aceita não é uma sugestão: é um número que
+// a cotação derruba depois que o cliente já se acostumou com ele. Renda ÷ 30
+// para quem ganha R$ 150 mil dá R$ 5.000 de diária — nenhuma apólice individual
+// no Brasil emite isso, e a consultora só descobre na hora de cotar.
+//
+// Os tetos abaixo são a prática do mercado brasileiro de vida individual. Não
+// são lei: são o ponto em que o caso deixa de ser automático. O estudo limita
+// a SUGESTÃO a eles e avisa que limitou — a consultora continua livre para
+// digitar o que a seguradora aprovar.
+export const LIMITES_MERCADO = {
+  // acima disso o caso vai a resseguro facultativo: exames, entrevista e meses
+  morte: 20_000_000,
+  invalidez: 20_000_000,
+  // doenças graves é a cobertura mais cara de resseguro e a mais limitada
+  doencas_graves: 3_000_000,
+  // diárias são limitadas por dia E pelo comprometimento da renda
+  diaria_dit: 1_500,
+  diaria_dih: 1_500,
+}
+
+// Doenças graves acima do capital de morte não passa em subscrição: a
+// seguradora não cobre mais o adoecer do que o morrer.
+const DG_TETO_SOBRE_MORTE = 1
+
+// ─── ITCMD: O IMPOSTO É ESTADUAL ─────────────────────────────────────────────
+// Assumir 4% para todo mundo (a alíquota de SP) erra a verba sucessória em até
+// o dobro — e erra para MENOS, que é o pior lado: a família descobre o buraco
+// no cartório. Cada estado tem a sua lei, e vários são progressivos por faixa.
+//
+// A tabela traz a alíquota EFETIVA típica de um patrimônio de médio porte no
+// estado. Onde a lei é progressiva, é a alíquota da faixa alta — que é onde
+// caem os clientes desta carteira. É premissa declarada, não cotação: a tela
+// mostra a origem do número e a consultora pode sobrescrever.
+export const ITCMD_POR_UF = {
+  AC: 4, AL: 4, AM: 2, AP: 4, BA: 8, CE: 8, DF: 6, ES: 4, GO: 8,
+  MA: 7, MG: 5, MS: 6, MT: 8, PA: 6, PB: 8, PE: 8, PI: 6, PR: 4,
+  RJ: 8, RN: 6, RO: 4, RR: 8, RS: 6, SC: 8, SE: 8, SP: 4, TO: 8,
+}
+export const ITCMD_PADRAO = 4
+
+// ─── O QUE CUSTA SEGURAR OS BENS ENQUANTO O INVENTÁRIO CORRE ─────────────────
+// O ITCMD é o número que todo mundo cita, e é o menor deles. Enquanto o
+// processo corre — 6 meses no cartório, 18 na justiça — o imóvel travado
+// continua gerando IPTU, condomínio, seguro e manutenção; o carro, IPVA e
+// licenciamento; a empresa, contador. A família paga tudo isso sem poder vender
+// nada, e paga do próprio bolso.
+//
+// 1% ao ano sobre o valor dos bens ilíquidos é conservador para imóvel urbano
+// (só o IPTU costuma dar 0,6% a 1%, antes do condomínio).
+const CUSTO_ANUAL_MANUTENCAO_BENS = 0.01
+
 // Idade em que o mercado costuma encerrar a aceitação e a renovação de vida
 // individual. Serve para avisar quando o horizonte pedido passa do produto.
 export const IDADE_LIMITE_PRODUTO = 80
@@ -543,8 +595,21 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
   const custoVida = q(plano.custo_vida_mensal)
   const dividas = q(plano.dividas_total)
   const anos = inteiro(plano.anos_protecao, 10, 1, TETO_ANOS) || 10
-  const itcmd = pctVal(plano.itcmd_pct, 4, TETO_ITCMD)
+
+  // ITCMD: a lei é estadual. Se a consultora digitou a alíquota, é dela que
+  // vale; senão o estado do cliente decide; sem estado, o padrão nacional mais
+  // comum — e a tela diz de onde veio, porque uma premissa escondida numa
+  // apresentação é uma armadilha esperando o advogado da família.
+  const uf = typeof plano.uf === 'string' ? plano.uf.trim().toUpperCase() : ''
+  const itcmdDaUF = ITCMD_POR_UF[uf] ?? null
+  const itcmdOrigem = definido(plano.itcmd_pct) ? 'consultora'
+    : itcmdDaUF != null ? 'uf' : 'padrao'
+  const itcmd = pctVal(plano.itcmd_pct, itcmdDaUF ?? ITCMD_PADRAO, TETO_ITCMD)
   const custas = pctVal(plano.custas_pct, 8, TETO_CUSTAS)
+  // Prazo que ainda falta da dívida (financiamento imobiliário, normalmente).
+  // Sem ele não dá para saber se a proteção acaba antes do financiamento.
+  const prazoDividaAnos = definido(plano.dividas_prazo_anos)
+    ? inteiro(plano.dividas_prazo_anos, 0, 0, TETO_ANOS) : null
 
   const tipo = plano.tipo_planejamento || 'pf'
   const focos = Array.isArray(plano.focos) ? plano.focos : []
@@ -626,7 +691,18 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
   // Inventário: a base é só o que passa por ele, já descontada a meação.
   // Previdência e seguro ficam fora — esse é o ponto que a maioria dos
   // clientes nunca ouviu.
-  const custoInventario = baseInventario * (itcmd + custasEfetivas) / 100
+  const impostoECustas = baseInventario * (itcmd + custasEfetivas) / 100
+
+  // O QUE CUSTA ESPERAR. O ITCMD é só a entrada. Enquanto o processo corre, os
+  // bens travados continuam cobrando: IPTU e condomínio do imóvel que ninguém
+  // pode vender, IPVA do carro na garagem, contador da empresa parada. A
+  // família paga isso do próprio bolso, todo mês, sem acesso a nada.
+  const custoSustentacaoInventario = bensIliquidos > 0
+    ? bensIliquidos * CUSTO_ANUAL_MANUTENCAO_BENS * (prazoInventarioMeses / 12)
+    : 0
+  // A conta cheia do inventário: o que se paga para destravar E o que se paga
+  // enquanto não destrava.
+  const custoInventario = impostoECustas + custoSustentacaoInventario
   const coberturaAtual = q(plano.cobertura_atual)
 
   // ── Previdência: saldo do extrato x o que a família recebe ────────────────
@@ -643,13 +719,65 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
 
   // Recursos que a família acessa em DIAS, sem alvará e sem inventário — e é o
   // valor LÍQUIDO que paga conta, não o do extrato.
-  const liquidezImediata = previdenciaLiquida + coberturaAtual
-  const deficitLiquidez = Math.max(custoInventario - liquidezImediata, 0)
+  //
+  // UM REAL SÓ NÃO FAZ DUAS COISAS. A apólice que o cliente já tem entra no
+  // estudo abatendo o capital de morte (é dinheiro para a família viver). Se
+  // ela aparecesse INTEIRA aqui de novo, o estudo estaria prometendo o mesmo
+  // dinheiro duas vezes: sustentando a família e pagando o ITCMD. Só a sobra
+  // acima do que a família precisa para viver é que serve de liquidez
+  // sucessória — e essa conta só fecha depois que o capital de morte existe,
+  // por isso ela é refeita mais abaixo (`sucessaoFinal`).
+  const liquidezBruta = previdenciaLiquida + coberturaAtual
   const patrimonioTravado = bensInventariaveis
 
+  // ── QUEM DEPENDE DESSA RENDA ──────────────────────────────────────────────
+  // A pergunta que decide o estudo inteiro, e que o motor não fazia: existe
+  // alguém que perde o padrão de vida se essa renda parar?
+  //
+  // Se ninguém depende — solteiro sem filhos, viúvo com filhos já formados —
+  // então NÃO HÁ RENDA A SUBSTITUIR. Projetar dez anos de custo de vida nesse
+  // caso é vender proteção contra um risco que não existe: ele infla o prêmio,
+  // e o cliente que faz a conta de cabeça percebe. O que sobra de real para
+  // essas pessoas é outra coisa, e é bem concreta: a dívida que não pode virar
+  // herança, o inventário que trava os bens e o dinheiro em vida das doenças
+  // graves e da invalidez — os riscos de quem vai continuar aqui.
+  //
+  // "Depende" aqui é literal: filho até os 24, ou cônjuge, ou dependente
+  // declarado. O estado civil sozinho não basta (um casal sem filhos com duas
+  // rendas altas é outra conversa, e o aviso do estudo diz isso).
+  const filhosDependentes = filhos.filter(
+    (f) => f.idade == null || f.idade < IDADE_INDEPENDENCIA)
+  const temConjuge = ['Casado(a)', 'União estável'].includes(plano.estado_civil)
+  const outrosDependentes = inteiro(plano.num_dependentes, 0, 0, 30)
+  const temDependentes = filhosDependentes.length > 0 || temConjuge || outrosDependentes > 0
+
   // ── Capital de morte ──────────────────────────────────────────────────────
-  const capitalMorteSugerido = custoFilhosMensal > 0
-    ? custoVidaBase * 12 * anos + capitalFilhos + dividas
+  // Com dependentes: o padrão de vida da família pelos anos de proteção, mais
+  // o que cada filho ainda vai custar até se formar, mais as dívidas.
+  const capitalReposicaoRenda = custoFilhosMensal > 0
+    ? custoVidaBase * 12 * anos + capitalFilhos
+    : custoVida * 12 * anos
+  // Sem dependentes: não há padrão de vida de terceiro a manter. Sobra o que a
+  // morte dele efetivamente cria de conta para alguém: a dívida, que não morre
+  // com o devedor — vai para o espólio e come a herança antes de qualquer
+  // herdeiro receber. O inventário também custa, mas ele tem cobertura própria
+  // no estudo (verba sucessória); somá-lo aqui seria cobrar duas vezes.
+  const capitalMorteSugerido = temDependentes ? capitalReposicaoRenda + dividas : dividas
+
+  // INVALIDEZ NÃO É MORTE. O motor sugeria o mesmo capital para as duas, e para
+  // quem tem família isso está certo — a renda para igual. Mas para quem NÃO
+  // tem dependentes a diferença é enorme: se ele morre, ninguém fica sem nada;
+  // se ele fica inválido, ele mesmo precisa viver o resto da vida sem trabalhar,
+  // e ainda com o custo do tratamento. Para o solteiro, invalidez é a maior
+  // exposição que existe — e era justamente a que o estudo zerava junto.
+  // Num estudo PJ puro a renda pessoal nem foi levantada, então não há o que
+  // repor. Mas o risco de invalidez existe e é o mais esquecido da mesa: o
+  // banco executa o aval na invalidez do avalista exatamente como na morte —
+  // não espera o óbito — e a empresa perde quem a fazia girar do mesmo jeito.
+  // Deixar a invalidez fora do estudo empresarial cobre metade do risco e
+  // cobra o prêmio inteiro.
+  const capitalInvalidezSugerido = tipo === 'pj'
+    ? q(plano.pj_divida_avalizada)
     : custoVida * 12 * anos + dividas
 
   // ── Bloco empresarial ─────────────────────────────────────────────────────
@@ -658,19 +786,50 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
   const pjLucro = q(plano.pj_lucro_anual)
   const pjFaturamento = q(plano.pj_faturamento_anual)
   const pjDividaAval = q(plano.pj_divida_avalizada)
+  const pjNumSocios = inteiro(plano.pj_num_socios, 0, 0, 999)
   const pjQuota = pjValuation * pjParticipacao / 100
   // Sem lucro informado, estimamos a margem em 20% do faturamento — é a conta
   // que a consultora refaz com o contador, mas já dá o tamanho da conversa.
   const pjLucroBase = pjLucro > 0 ? pjLucro : pjFaturamento * 0.2
 
   // ── Sugestões de cada cobertura ───────────────────────────────────────────
+  // Toda sugestão passa pelo teto do que o mercado emite. Um número que a
+  // seguradora recusa não ajuda ninguém: a consultora apresenta, o cliente se
+  // acostuma, e a cotação volta menor — o pior momento possível para reduzir
+  // uma proposta. Quando o teto morde, o estudo registra em `limitados` e a
+  // tela avisa; a consultora continua livre para digitar o que for aprovado.
+  const limitados = []
+  const limitar = (id, valor, teto, nota) => {
+    if (!(valor > teto)) return valor
+    limitados.push({ id, pedido: valor, teto, nota })
+    return teto
+  }
+
+  // Doenças graves: 24 × a renda é a régua certa (dois anos de tratamento sem
+  // trabalhar), mas ela precisa caber em dois limites — o teto de emissão e o
+  // próprio capital de morte, porque nenhuma seguradora cobre mais o adoecer
+  // do que o morrer.
+  const dgPelaRenda = renda * 24
+  const tetoDG = Math.min(
+    LIMITES_MERCADO.doencas_graves,
+    capitalMorteSugerido > 0 ? capitalMorteSugerido * DG_TETO_SOBRE_MORTE : Infinity)
+  const diariaPelaRenda = renda > 0 ? Math.round(renda / 30) : 0
+
   const sugestoes = {
-    morte: capitalMorteSugerido,
-    invalidez: capitalMorteSugerido,
-    doencas_graves: renda * 24,
-    dit: renda > 0 ? Math.round(renda / 30) : 0,
-    dih: renda > 0 ? Math.round(renda / 30) : 0,
-    morte_acidental: capitalMorteSugerido,
+    morte: limitar('morte', capitalMorteSugerido, LIMITES_MERCADO.morte,
+      'acima deste valor o caso vai a resseguro facultativo'),
+    invalidez: limitar('invalidez', capitalInvalidezSugerido, LIMITES_MERCADO.invalidez,
+      'acima deste valor o caso vai a resseguro facultativo'),
+    doencas_graves: limitar('doencas_graves', dgPelaRenda, tetoDG,
+      dgPelaRenda > LIMITES_MERCADO.doencas_graves
+        ? 'teto de emissão do mercado para doenças graves'
+        : 'doenças graves não passa do capital de morte'),
+    dit: limitar('dit', diariaPelaRenda, LIMITES_MERCADO.diaria_dit,
+      'teto de diária por incapacidade praticado no mercado'),
+    dih: limitar('dih', diariaPelaRenda, LIMITES_MERCADO.diaria_dih,
+      'teto de diária de internação praticado no mercado'),
+    morte_acidental: limitar('morte_acidental', capitalMorteSugerido, LIMITES_MERCADO.morte,
+      'acima deste valor o caso vai a resseguro facultativo'),
     // fraturas indenizam por tabela: o mercado trabalha entre R$ 10 mil e
     // R$ 50 mil, então a sugestão acompanha a renda mas respeita esse teto
     fraturas: renda > 0 ? Math.min(Math.round((renda * 3) / 1000) * 1000, FRATURAS_TETO) : 0,
@@ -680,7 +839,13 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
     funeral_individual: capitalMorteSugerido > 0 || renda > 0 ? FUNERAL_INDIVIDUAL_PADRAO : 0,
     funeral_familiar: capitalMorteSugerido > 0 || renda > 0 ? FUNERAL_FAMILIAR_PADRAO : 0,
     sucessao: custoInventario,
-    socios: pjQuota,
+    // BUY-SELL PRECISA DE DOIS. O acordo de sócios funciona por apólice
+    // cruzada: cada sócio segura o outro para poder comprar a quota da família
+    // dele à vista. Sócio único não tem com quem cruzar — sugerir o capital
+    // aqui é apresentar uma cobertura que não tem contraparte, e a primeira
+    // pergunta do cliente ("quem compraria?") não tem resposta. Para ele o
+    // capital certo é homem-chave e liquidez sucessória, que o estudo já traz.
+    socios: pjNumSocios >= 2 ? pjQuota : 0,
     homem_chave: pjLucroBase * 2,
     aval: pjDividaAval,
   }
@@ -708,6 +873,14 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
     .filter(disponivel)
     .filter((c) => valores[c.id] > 0)
     .filter((c) => !c.pj || temPJ)
+    // Estudo "Empresarial (PJ)" é sobre a empresa. Trazer morte, DIT e funeral
+    // calculados sobre uma renda pessoal que a consultora nem levantou naquela
+    // reunião polui a proposta e abre uma pergunta que ela não tem como
+    // responder. Quem quer os dois lados escolhe "PF + PJ" — está lá para isso.
+    // A invalidez é a exceção: ela é o risco empresarial que ninguém lembra
+    // (o aval é executado com o sócio vivo e inválido), e por isso continua no
+    // estudo PJ, dimensionada pela dívida avalizada.
+    .filter((c) => tipo !== 'pj' || c.pj || c.id === 'invalidez')
     .map((c) => ({
       ...c,
       valor: valores[c.id],
@@ -742,20 +915,47 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
   }
   const capitalMaximoEvento = Math.max(...Object.values(cenarios))
 
+  // ── LIQUIDEZ SUCESSÓRIA: sem contar o mesmo dinheiro duas vezes ───────────
+  // A apólice que o cliente já tem é a primeira coisa que a família usa para
+  // viver — é para isso que ela existe, e é assim que o estudo a trata quando
+  // abate o gap de morte. Portanto ela NÃO está disponível para pagar o ITCMD:
+  // só a sobra acima do capital que a família precisa é que serve de liquidez
+  // sucessória. Antes desta conta, o estudo prometia o mesmo dinheiro nas duas
+  // pontas e o déficit de liquidez saía menor do que é.
+  const coberturaLivreParaSucessao = Math.max(coberturaAtual - valores.morte, 0)
+  const liquidezSucessoria = previdenciaLiquida + coberturaLivreParaSucessao
+  const deficitLiquidez = Math.max(custoInventario - liquidezSucessoria, 0)
+  // As telas de sucessão ("chega em dias", "tem disponível") mostram ESTE
+  // número, não o bruto: é o que sobra de verdade para o inventário depois de
+  // reservado o que a família precisa para viver.
+  const liquidezImediata = liquidezSucessoria
+  // Quanto da previdência o inventário consome: é ela que sobra na mesa quando
+  // não há verba sucessória, e a família não percebe que está gastando a
+  // própria reserva para destravar os bens.
+  const previdenciaConsumidaNoInventario = valores.sucessao > 0
+    ? 0 : Math.min(previdenciaLiquida, custoInventario)
+
   // ── Autonomia: a pergunta que abre os olhos ───────────────────────────────
   // Hoje, sem o plano, a família vive do que é líquido (investimentos +
   // previdência + seguro que já existe), depois começa a vender bens.
   // Previdência entra pelo LÍQUIDO: é o que a família saca de fato.
   const recursosLiquidos = investimentos + previdenciaLiquida
+  // E o inventário cobra ANTES. O imposto vence em meses, à vista, e sai
+  // justamente do dinheiro líquido — que era o mesmo que ia sustentar a casa.
+  // Descontar aqui não é pessimismo: é a ordem em que as contas chegam.
+  const custoInventarioNaoCoberto = Math.max(custoInventario - valores.sucessao, 0)
   // Sem a composição por classe não dá para separar o líquido do ilíquido:
   // devolvemos null em vez de "0 meses", que seria uma afirmação que o estudo
   // não pode sustentar. A apresentação então mostra dois cenários em vez de três.
   const mesesLiquidos = detalhado
-    ? mesesSustentados(recursosLiquidos + coberturaAtual - dividas, custoVidaBase, filhos)
+    ? mesesSustentados(
+      recursosLiquidos + coberturaAtual - dividas - custoInventarioNaoCoberto,
+      custoVidaBase, filhos)
     : null
   // Vendendo tudo que foi construído — inclusive a casa
   const mesesVendendoTudo = mesesSustentados(
-    patrimonioBruto + coberturaAtual - dividas, custoVidaBase, filhos)
+    patrimonioBruto + coberturaAtual - dividas - custoInventarioNaoCoberto,
+    custoVidaBase, filhos)
   // Com o plano: o capital do seguro chega em dias e o patrimônio fica intacto.
   // (valores.morte já embute o que a cobertura atual cobre, então ela não entra
   // de novo aqui — seria contar duas vezes.)
@@ -1018,12 +1218,6 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
       texto: 'O prêmio anual está maior que 12× o mensal — normalmente o anual tem desconto. Confira a cotação.',
     })
   }
-  if (investimento && renda > 0 && investimento.pctRenda > 30) {
-    inconsistencias.push({
-      grave: true,
-      texto: `O prêmio compromete ${String(investimento.pctRenda).replace('.', ',')}% da renda — reveja os capitais antes de apresentar.`,
-    })
-  }
   if (pjParticipacao > 100) {
     inconsistencias.push({ grave: true, texto: 'A participação societária passou de 100%.' })
   }
@@ -1116,28 +1310,159 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
     })
   }
 
+  // ── O plano cabe no bolso? ────────────────────────────────────────────────
+  // A conta que decide se a apólice sobrevive ao sexto mês. Prêmio maior que a
+  // sobra do cliente não é venda: é cancelamento com estorno de comissão.
+  if (investimento && poupancaMensal != null && investimento.mensal > 0) {
+    if (poupancaMensal <= 0) {
+      inconsistencias.push({
+        grave: true,
+        texto: `O cliente gasta tudo o que ganha (custo de vida ${custoVida.toLocaleString('pt-BR')} para uma renda de ${renda.toLocaleString('pt-BR')}) — não há sobra de onde tirar os ${Math.round(investimento.mensal).toLocaleString('pt-BR')} do prêmio. Reveja os capitais ou trate o orçamento antes de apresentar.`,
+      })
+    } else if (investimento.mensal > poupancaMensal) {
+      inconsistencias.push({
+        grave: true,
+        texto: `O prêmio de ${Math.round(investimento.mensal).toLocaleString('pt-BR')}/mês é maior que a sobra mensal do cliente (${Math.round(poupancaMensal).toLocaleString('pt-BR')}). Do jeito que está, o plano não cabe no orçamento dele.`,
+      })
+    }
+  }
+  // A régua de mercado da proteção pessoal é 5% a 10% da renda. Acima de 20%
+  // o plano vira um problema; entre 10% e 20% ainda dá para sustentar, mas a
+  // consultora precisa saber antes de abrir a proposta, não depois.
+  if (investimento && renda > 0 && investimento.pctRenda > 20) {
+    inconsistencias.push({
+      grave: true,
+      texto: `O prêmio compromete ${String(investimento.pctRenda).replace('.', ',')}% da renda — o razoável para proteção pessoal é de 5% a 10%. Reveja os capitais antes de apresentar.`,
+    })
+  } else if (investimento && renda > 0 && investimento.pctRenda > 10) {
+    inconsistencias.push({
+      grave: false,
+      texto: `O prêmio está em ${String(investimento.pctRenda).replace('.', ',')}% da renda, acima da faixa usual de 5% a 10%. Tenha pronta a versão enxuta do plano para o caso de o preço travar a conversa.`,
+    })
+  }
+
+  // ── Perguntas decisivas que faltaram ──────────────────────────────────────
+  // Casado sem regime de bens: o estudo cobra ITCMD sobre o patrimônio inteiro
+  // porque não tem como saber o que é meação. É o erro que mais superdimensiona
+  // a verba sucessória — e some com uma pergunta de dez segundos.
+  if (casado && !plano.regime_bens && custoInventario > 0) {
+    inconsistencias.push({
+      grave: true, perguntar: 'regime_bens',
+      texto: `Cliente casado(a) e sem o regime de bens informado: o estudo está cobrando ITCMD sobre os ${Math.round(bensInventariaveis).toLocaleString('pt-BR')} inteiros. Em comunhão de bens, metade já é do cônjuge (meação) e não paga imposto — a verba sucessória pode estar quase o dobro do necessário.`,
+    })
+  }
+  // ITCMD assumido sem saber o estado: 4% é a alíquota de SP, mas RJ, BA, GO,
+  // CE, PE, SC e MT chegam a 8%. Errar isso é errar a verba pela metade.
+  if (itcmdOrigem === 'padrao' && custoInventario > 0) {
+    inconsistencias.push({
+      grave: false, perguntar: 'uf',
+      texto: `O ITCMD está em ${itcmd}% (padrão) porque o estado do cliente não foi informado. O imposto é estadual e vai de 2% a 8% — em vários estados o dobro do que o estudo está mostrando.`,
+    })
+  }
+
+  // ── Coerência do desenho da apólice ───────────────────────────────────────
+  // Estudo só de morte: perde a objeção mais comum da categoria antes de ela
+  // ser feita.
+  if (ativas.length > 0 && valores.morte > 0
+    && !['invalidez', 'doencas_graves', 'dit', 'dih'].some((id) => valores[id] > 0)) {
+    inconsistencias.push({
+      grave: false,
+      texto: 'O plano só paga se o cliente morrer. Sem invalidez, doenças graves ou DIT, o "isso só serve depois que eu morro" fica sem resposta — e essas coberturas respondem por boa parte dos sinistros.',
+    })
+  }
+  // Aval é executado na invalidez também: o banco não espera o óbito.
+  if (valores.aval > 0 && cenarios.invalidez < valores.aval) {
+    inconsistencias.push({
+      grave: false,
+      texto: `A dívida avalizada (${Math.round(valores.aval).toLocaleString('pt-BR')}) está coberta na morte, mas na invalidez a apólice paga só ${Math.round(cenarios.invalidez).toLocaleString('pt-BR')}. O banco executa o aval nos dois casos — e na invalidez o cliente ainda está aqui para responder por ele.`,
+    })
+  }
+  // Buy-sell sem contraparte
+  if (temPJ && pjQuota > 0 && pjNumSocios < 2) {
+    inconsistencias.push({
+      grave: false, perguntar: 'pj_num_socios',
+      texto: pjNumSocios === 1 || pjParticipacao >= 100
+        ? 'Sócio único: não há acordo de sócios a fazer (não existe outro sócio para comprar a quota da família). O capital certo aqui é homem-chave e liquidez sucessória — o estudo não sugeriu buy-sell por isso.'
+        : 'Informe o número de sócios: o acordo de sócios funciona por apólice cruzada, e sem saber quantos são não dá para dizer quem paga o prêmio de quem.',
+    })
+  }
+  // A proteção acaba antes da dívida
+  if (prazoDividaAnos != null && prazoDividaAnos > anos && dividas > 0) {
+    inconsistencias.push({
+      grave: true, corrigir: 'anos_protecao', valor: prazoDividaAnos,
+      texto: `A dívida ainda tem ${prazoDividaAnos} anos e a proteção acaba em ${anos}. Nos ${prazoDividaAnos - anos} anos finais a família fica com o saldo devedor e sem capital nenhum — é o erro clássico do seguro temporário curto demais.`,
+    })
+  }
+  // Reposição de renda para quem já não vive dessa renda
+  if (idade != null && idade >= 60 && filhosDependentes.length === 0
+    && capitalReposicaoRenda > 0 && custoInventario > 0
+    && capitalReposicaoRenda > custoInventario * 2 && !definido(plano.capital_sugerido)) {
+    inconsistencias.push({
+      grave: false, corrigir: 'capital_sugerido', valor: Math.round(dividas + custoInventario),
+      texto: `Aos ${idade} anos e sem filhos dependentes, o estudo está projetando ${Math.round(capitalReposicaoRenda).toLocaleString('pt-BR')} de reposição de renda por ${anos} anos. Confirme até quando essa renda ainda existiria: se ele já vive de patrimônio, o capital que resolve é o do inventário (${Math.round(custoInventario).toLocaleString('pt-BR')}) e não o da renda — e o prêmio cai junto.`,
+    })
+  }
+  // Capital sem dependentes: o estudo mudou a régua, e a consultora precisa
+  // saber disso antes de o cliente perguntar por que o número é baixo.
+  if (!temDependentes && (renda > 0 || custoVida > 0)) {
+    inconsistencias.push({
+      grave: false,
+      texto: 'Ninguém depende financeiramente deste cliente (sem cônjuge e sem filhos até os 24), então o estudo NÃO projetou reposição de renda na morte — seria proteger um risco que não existe. O capital de morte cobre a dívida, e o peso do plano está onde a exposição real dele está: invalidez, doenças graves e a liquidez do inventário.',
+    })
+  }
+  // Sugestão que bateu no teto de emissão
+  for (const l of limitados) {
+    const cob = COBERTURAS.find((c) => c.id === l.id)
+    inconsistencias.push({
+      grave: false,
+      texto: `${cob?.curto ?? l.id}: a conta do estudo daria ${Math.round(l.pedido).toLocaleString('pt-BR')}, mas a sugestão foi limitada a ${Math.round(l.teto).toLocaleString('pt-BR')} — ${l.nota}. Confirme o limite com a seguradora antes de prometer o valor cheio.`,
+    })
+  }
+  // Capital acima do que sai sem resseguro facultativo
+  if (valores.morte > LIMITES_MERCADO.morte) {
+    inconsistencias.push({
+      grave: false,
+      texto: `Capital de morte de ${Math.round(valores.morte).toLocaleString('pt-BR')}: acima de ${LIMITES_MERCADO.morte.toLocaleString('pt-BR')} o caso vai a resseguro facultativo — exames, entrevista médica e prazo de semanas a meses. Combine o prazo com o cliente antes de prometer data.`,
+    })
+  }
+  // O inventário vai comer a previdência que a família achava que era dela
+  if (previdenciaConsumidaNoInventario > 0 && custoInventario > 0) {
+    inconsistencias.push({
+      grave: false,
+      texto: `Sem verba sucessória, os ${Math.round(custoInventario).toLocaleString('pt-BR')} do inventário saem da previdência — que é justamente o dinheiro que a família ia usar para viver. É o argumento mais forte da conversa de sucessão: mostre o saldo antes e depois.`,
+    })
+  }
+
   return {
     // entrada normalizada
     renda, custoVida, dividas, anos, itcmd, custas, tipo, focos, temPJ,
+    uf: uf || null, itcmdOrigem, prazoDividaAnos,
     // quem é o cliente (vem do cadastro, não do planejamento)
     idade, fumante, idadeAposentar, anosAteAposentar, janelaProtecao, custoDaEspera,
-    // filhos
-    filhos, custoFilhosMensal, capitalFilhos, custoVidaBase,
+    // filhos e quem depende dessa renda
+    filhos, filhosDependentes, temDependentes, temConjuge,
+    custoFilhosMensal, capitalFilhos, custoVidaBase,
     // patrimônio
     classes, detalhado, patrimonio: bensInventariaveis, patrimonioBruto, patrimonioLiquido,
     previdencia, investimentos, recursosLiquidos, bensIliquidos, pctIliquido,
-    bensInventariaveis, patrimonioTravado, custoInventario, liquidezImediata, deficitLiquidez,
+    bensInventariaveis, patrimonioTravado, custoInventario, liquidezImediata, liquidezBruta,
+    deficitLiquidez,
+    // a conta cheia do inventário, aberta em suas duas parcelas
+    impostoECustas, custoSustentacaoInventario, custoInventarioNaoCoberto,
+    liquidezSucessoria, coberturaLivreParaSucessao, previdenciaConsumidaNoInventario,
     // sucessão: o que muda a conta e o rito
     sucessao: {
       casado, regimeBens: plano.regime_bens || null,
       pctMeacao, meacao, meacaoPotencial, baseInventario,
       custasEfetivas, temHolding, temTestamento: plano.tem_testamento === true,
       herdeirosMenores, inventarioJudicial, prazoInventarioMeses,
+      impostoECustas, custoSustentacao: custoSustentacaoInventario,
     },
     // previdência: o extrato x o que a família saca
     previdenciaTipo, previdenciaAporte, previdenciaLiquida, irPrevidencia,
     // coberturas
-    sugestoes, valores, ativas, diarias, diariaPorId, tem014, tem019,
+    sugestoes, valores, ativas, diarias, diariaPorId, tem014, tem019, limitados,
+    capitalReposicaoRenda,
     capitalTotal, capitalPF, capitalPJ, totalDiarias, cenarios, capitalMaximoEvento,
     // empresa
     pj: {

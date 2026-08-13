@@ -206,6 +206,95 @@ console.log('\n── O que ela leva da reunião ──')
 }
 
 // ── 8. ENTRADAS QUE NÃO PODEM QUEBRAR ───────────────────────────────────────
+// ── NEGAÇÃO ─────────────────────────────────────────────────────────────────
+// A palavra existe na frase, mas com "não" na frente ela significa o contrário.
+// Era o falso positivo mais caro do extrator: um saldo de previdência que não
+// existe faz o estudo calcular liquidez sucessória em cima de nada, e a
+// consultora apresenta um déficit menor do que o real.
+console.log('\n── Quando o cliente diz que NÃO tem ──')
+{
+  const a = analisar([
+    'Natália: Você tem previdência privada?',
+    'Carlos: Não tenho previdência nenhuma. Minha renda é 30 mil por mês.',
+  ])
+  ok(valorDe(a, 'previdencia_saldo') === null,
+    '"não tenho previdência nenhuma" não cria saldo de previdência', valorDe(a, 'previdencia_saldo'))
+  ok(valorDe(a, 'renda_mensal') === 30_000,
+    'e a renda dita na MESMA frase continua sendo lida', valorDe(a, 'renda_mensal'))
+}
+{
+  const a = analisar([
+    'Carlos: Não tenho dívida nenhuma, já quitei o financiamento do apartamento.',
+    'Carlos: O apartamento vale 800 mil.',
+  ])
+  ok(valorDe(a, 'dividas_total') === null,
+    '"não tenho dívida" + "já quitei" não gera dívida', valorDe(a, 'dividas_total'))
+  ok(valorDe(a, 'patrimonio_imoveis') === 800_000,
+    'e o imóvel citado logo depois continua entrando', valorDe(a, 'patrimonio_imoveis'))
+}
+{
+  // O contrário também precisa valer: negação longe não pode apagar o dado
+  const a = analisar([
+    'Carlos: Não sei bem, mas acho que devo uns 150 mil de financiamento ainda.',
+  ])
+  ok(valorDe(a, 'dividas_total') === 150_000,
+    'negação distante ("não sei bem, mas devo…") não apaga a dívida', valorDe(a, 'dividas_total'))
+}
+
+// ── OS TRÊS DADOS QUE MUDAM CONTA NO ESTUDO ─────────────────────────────────
+console.log('\n── Estado, prazo da dívida e aposentadoria ──')
+for (const [linha, esperado] of [
+  ['Carlos: Moro em Curitiba, os imóveis estão todos aqui.', 'PR'],
+  ['Carlos: Sou de Porto Alegre.', 'RS'],
+  ['Carlos: Moro no interior de São Paulo.', null],
+  ['Carlos: Os imóveis estão em Minas Gerais.', 'MG'],
+  ['Carlos: Moro em Florianópolis desde 2010.', 'SC'],
+]) {
+  const a = analisar([linha])
+  const saiu = a?.perfil?.uf?.valor ?? null
+  ok(saiu === esperado,
+    `"${linha.replace('Carlos: ', '')}" → ${esperado ?? 'nenhuma UF (não dá para afirmar)'}`, saiu)
+}
+{
+  const a = analisar(['Carlos: Ainda faltam 22 anos de financiamento do apartamento.'])
+  ok(a?.perfil?.prazoDivida?.valor === 22,
+    'prazo do financiamento: 22 anos', a?.perfil?.prazoDivida?.valor)
+}
+{
+  const a = analisar(['Carlos: Quero me aposentar aos 60, no máximo 62.'])
+  ok(a?.perfil?.idadeAposentadoria?.valor === 60,
+    'idade de aposentadoria: 60', a?.perfil?.idadeAposentadoria?.valor)
+}
+{
+  // O estudo não pode inventar: sem a frase, o campo tem que vir vazio
+  const a = analisar(['Carlos: Ganho 20 mil por mês e tenho dois filhos.'])
+  ok(a?.perfil?.uf == null && a?.perfil?.prazoDivida == null && a?.perfil?.idadeAposentadoria == null,
+    'sem a frase, os três campos ficam vazios em vez de chutados')
+}
+{
+  // E a pergunta que falta precisa aparecer na lista da próxima conversa —
+  // ordenada por impacto, porque a lista sai cortada em oito.
+  const a = analisar([
+    'Natália: Me conta da sua vida financeira.',
+    'Carlos: Ganho 25 mil, devo 300 mil de financiamento e tenho 1,2 milhão em imóveis.',
+  ])
+  const q = perguntasQueFaltaram(a).join(' | ').toLowerCase()
+  ok(q.includes('estado'), 'com patrimônio na mesa, a lista cobra o estado dos bens', q.slice(0, 140))
+  ok(q.includes('faltam do financiamento'),
+    'e cobra o prazo do financiamento quando há dívida', q.slice(0, 140))
+}
+{
+  // Sem patrimônio nenhum não existe inventário, e perguntar a alíquota do
+  // estado só ocuparia uma das oito vagas sem mudar número nenhum.
+  const a = analisar(['Carlos: Ganho 6 mil por mês, moro de aluguel e não tenho nada guardado.'])
+  const q = perguntasQueFaltaram(a).join(' | ').toLowerCase()
+  // Cuidado com a régua: a pergunta do regime de bens TAMBÉM cita o ITCMD.
+  // A que precisa sumir é a do estado dos bens, e só ela.
+  ok(!q.includes('em qual estado'),
+    'sem patrimônio, a pergunta do estado sai da lista (não muda nada aqui)', q.slice(0, 140))
+  ok(q.length > 40, 'mas a lista continua trazendo o que importa para esse cliente')
+}
+
 console.log('\n── O que a consultora pode colar sem querer ──')
 for (const [rotulo, entrada] of [
   ['texto vazio', ''],

@@ -49,7 +49,11 @@ export default function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/pipeline" element={<Pipeline />} />
               <Route path="/clientes" element={<Clientes />} />
+              {/* A aba mora na URL: F5 no meio da reunião não joga a consultora
+                  de volta para o Planejamento, o botão voltar funciona e o link
+                  colado no WhatsApp abre exatamente onde ela estava. */}
               <Route path="/clientes/:id" element={<ClienteDetalhe />} />
+              <Route path="/clientes/:id/:aba" element={<ClienteDetalhe />} />
               <Route path="/pos-venda" element={<PosVenda />} />
               <Route path="/agenda" element={<Agenda />} />
               <Route path="/mensagens" element={<Mensagens />} />
