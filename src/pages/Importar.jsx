@@ -404,7 +404,7 @@ function ImportarPlanilhaGeral({ onVoltar }) {
     setNomeArquivo(file.name)
     try {
       const buf = await file.arrayBuffer()
-      const r = lerPlanilhaGeral(buf)
+      const r = await lerPlanilhaGeral(buf)
       if (!r.registros.length) {
         setErroLeitura(`Não encontrei apólices na aba "${r.aba ?? '—'}". Confira se subiu a planilha certa (abas: ${(r.abas ?? []).join(', ')}).`)
       } else {

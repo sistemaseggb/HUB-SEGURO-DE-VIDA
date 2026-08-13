@@ -8,7 +8,24 @@
 // comissão em fração, grafias diferentes da mesma seguradora) e devolve uma
 // lista limpa de registros — pronta para o importador criar/atualizar.
 // ─────────────────────────────────────────────────────────────────────────────
-import * as XLSX from 'xlsx'
+// A biblioteca de xlsx é o maior pacote do sistema (perto de 400 KB
+// minificados) e serve a UMA tela: a de importar planilhas, usada uma vez por
+// mês. Importada aqui de forma estática, ela viajava dentro do pacote
+// principal — a consultora baixava o leitor de Excel inteiro para abrir o
+// dashboard no celular, no meio da rua, antes de uma reunião.
+//
+// `planilhasComissao.js` já a carregava sob demanda, mas o import estático
+// daqui anulava aquilo: basta um arquivo do pacote principal apontar para o
+// módulo e ele volta para dentro dele. O próprio build avisava disso a cada
+// compilação (INEFFECTIVE_DYNAMIC_IMPORT) e o aviso passou despercebido.
+//
+// Agora as duas portas são dinâmicas, e o Excel só desce quando alguém de
+// fato vai subir uma planilha.
+let XLSX = null
+async function carregarXLSX() {
+  if (!XLSX) XLSX = await import('xlsx')
+  return XLSX
+}
 
 // Consolida grafias diferentes da MESMA seguradora (evita cadastro duplicado)
 const CANONICO_SEGURADORA = {
@@ -77,14 +94,17 @@ export function acharAbaApolices(nomes) {
     ?? nomes[0]
 }
 
-// Lê o arquivo (ArrayBuffer) e devolve os registros de apólice limpos
-export function lerPlanilhaGeral(arrayBuffer) {
-  const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: false })
+// Lê o arquivo (ArrayBuffer) e devolve os registros de apólice limpos.
+// Assíncrona porque o leitor de Excel é carregado sob demanda — quem chama já
+// estava num `await file.arrayBuffer()`, então nada muda para a tela.
+export async function lerPlanilhaGeral(arrayBuffer) {
+  const xlsx = await carregarXLSX()
+  const wb = xlsx.read(arrayBuffer, { type: 'array', cellDates: false })
   const aba = acharAbaApolices(wb.SheetNames)
   const ws = wb.Sheets[aba]
   if (!ws) return { aba: null, abas: wb.SheetNames, registros: [], ignoradas: 0 }
 
-  const linhas = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true })
+  const linhas = xlsx.utils.sheet_to_json(ws, { defval: '', raw: true })
   const registros = []
   let ignoradas = 0
 

@@ -1,24 +1,37 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import Pipeline from './pages/Pipeline'
-import Clientes from './pages/Clientes'
-import ClienteDetalhe from './pages/ClienteDetalhe'
-import PosVenda from './pages/PosVenda'
-import Cadastros from './pages/Cadastros'
-import Proposta from './pages/Proposta'
-import FormularioPublico from './pages/FormularioPublico'
-import Agenda from './pages/Agenda'
-import AssessorDetalhe from './pages/AssessorDetalhe'
-import Mensagens from './pages/Mensagens'
-import Relatorios from './pages/Relatorios'
-import Importar from './pages/Importar'
-import Guia from './pages/Guia'
 import { Spinner } from './components/ui'
 import { ToastProvider } from './components/Toast'
+
+// ─── O que desce na primeira abertura, e o que espera ────────────────────────
+// O sistema inteiro vinha num pacote só: abrir o Dashboard no celular baixava
+// também o importador de planilhas, a proposta com o quadro de desenho, os
+// relatórios e o comparador — telas que aquela sessão talvez nem visite. Isso
+// custa segundos numa reunião que começa em pé, com 4G ruim.
+//
+// Ficam no pacote principal só o Login e o Dashboard: é onde a consultora
+// entra todo dia, e uma tela de carregando ali seria pior do que o peso. O
+// resto desce quando ela navega — em milissegundos, e uma vez só por versão.
+//
+// `Layout` também fica: é a moldura de todas as rotas internas, então
+// adiá-lo só adicionaria um piscar de tela a cada navegação.
+const Pipeline = lazy(() => import('./pages/Pipeline'))
+const Clientes = lazy(() => import('./pages/Clientes'))
+const ClienteDetalhe = lazy(() => import('./pages/ClienteDetalhe'))
+const PosVenda = lazy(() => import('./pages/PosVenda'))
+const Cadastros = lazy(() => import('./pages/Cadastros'))
+const Proposta = lazy(() => import('./pages/Proposta'))
+const FormularioPublico = lazy(() => import('./pages/FormularioPublico'))
+const Agenda = lazy(() => import('./pages/Agenda'))
+const AssessorDetalhe = lazy(() => import('./pages/AssessorDetalhe'))
+const Mensagens = lazy(() => import('./pages/Mensagens'))
+const Relatorios = lazy(() => import('./pages/Relatorios'))
+const Importar = lazy(() => import('./pages/Importar'))
+const Guia = lazy(() => import('./pages/Guia'))
 
 export default function App() {
   const [sessao, setSessao] = useState(undefined) // undefined = ainda verificando
@@ -32,6 +45,9 @@ export default function App() {
   return (
     <ToastProvider>
     <BrowserRouter>
+      {/* Um Suspense só, na raiz: a tela de espera é a mesma do carregamento
+          da sessão, então a troca de rota não muda de aparência. */}
+      <Suspense fallback={<Spinner />}>
       <Routes>
         {/* Rotas PÚBLICAS: formulário e proposta do cliente, sem login */}
         <Route path="/f/:token" element={<FormularioPublico />} />
@@ -67,6 +83,7 @@ export default function App() {
           </>
         )}
       </Routes>
+      </Suspense>
     </BrowserRouter>
     </ToastProvider>
   )

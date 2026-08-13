@@ -19,9 +19,13 @@ import {
 } from '../lib/estudo'
 import { BLOCOS_ROTEIRO } from '../lib/roteiro'
 import { diagnosticar } from '../lib/diagnostico'
+import { estimarPremio, conferirCotacao } from '../lib/premio'
+import { montarNiveis, planoQueCabe } from '../lib/niveis'
 import { ABAS_CLIENTE } from '../lib/navegacao'
 import { registrarVisita } from '../lib/recentes'
 import PainelDiagnostico from '../components/PainelDiagnostico'
+import PainelPreco from '../components/PainelPreco'
+import PainelCarteira from '../components/PainelCarteira'
 import {
   Button, Card, Input, InputMoeda, Select, Textarea, Campo, Modal, Badge, Spinner, ComoFunciona,
 } from '../components/ui'
@@ -525,6 +529,7 @@ const SECAO_DO_CAMPO = {
   capital_invalidez: 'sec-coberturas', capital_doencas_graves: 'sec-coberturas',
   dit_diaria: 'sec-coberturas', verba_sucessoria: 'sec-coberturas',
   capital_sugerido: 'sec-coberturas', anos_protecao: 'sec-financeira',
+  seguros_existentes: 'sec-financeira',
 }
 
 function AbaPlanejamento({ idCliente, cliente }) {
@@ -860,6 +865,9 @@ function AbaPlanejamento({ idCliente, cliente }) {
       resumo: estudo.aposentadoria
         ? `meta ${brlCompacto(estudo.aposentadoria.capitalNecessario)}`
         : 'renda desejada e idade' },
+    tem021 && { id: 'sec-decisao', rotulo: 'Decisão', icone: Handshake,
+      ok: String(plano.quem_decide ?? '').trim() !== '',
+      resumo: String(plano.quem_decide ?? '').trim() || 'quem decide e até quando' },
     tem015 && { id: 'sec-investimento', rotulo: 'Investimento', icone: Coins, ok: !!estudo.investimento,
       resumo: estudo.investimento ? `${brl(estudo.investimento.mensal)}/mês` : 'prêmio cotado' },
   ].filter(Boolean)
@@ -868,6 +876,21 @@ function AbaPlanejamento({ idCliente, cliente }) {
   // A leitura do estudo (perfil, recomendações e pendências). Roda a cada
   // tecla, como o resto do formulário: é determinístico e leva milissegundos.
   const diagnostico = diagnosticar(estudo, { cliente })
+
+  // ── As ferramentas de preço ───────────────────────────────────────────────
+  // Todas dependem da idade (o prêmio de risco é quase todo idade), e todas
+  // devolvem null sem ela — em vez de chutar um número convincente e falso.
+  // Recalculam a cada tecla como o resto: são contas determinísticas de
+  // milissegundos, sem rede e sem chave de API.
+  const premio = estimarPremio(estudo)
+  const conferencia = conferirCotacao(estudo, premio)
+  const niveis = montarNiveis(estudo, { perfil: diagnostico?.perfil })
+  // O teto do "plano que cabe" é a sobra real do cliente. Só faz sentido
+  // mostrar quando o plano cheio de fato não cabe nela: com orçamento
+  // sobrando, a ferramenta não tem o que resolver.
+  const cabe = premio && estudo.poupancaMensal > 0 && premio.mensal > estudo.poupancaMensal
+    ? planoQueCabe(estudo, estudo.poupancaMensal, { perfil: diagnostico?.perfil })
+    : null
 
   return (
     <Card className="p-5">
@@ -961,6 +984,11 @@ function AbaPlanejamento({ idCliente, cliente }) {
           el?.focus?.()
         }}
       />
+
+      {/* O preço: a faixa por cobertura, os três níveis e o que cabe no bolso.
+          Fica logo abaixo do diagnóstico porque é a pergunta que vem em
+          seguida na reunião, e porque agora ela tem resposta na hora. */}
+      <PainelPreco premio={premio} niveis={niveis} cabe={cabe} conferencia={conferencia} />
 
       {/* Roteiro: a espinha do estudo em uma linha. Um clique leva ao bloco. */}
       <div className="mb-5 flex flex-wrap gap-1.5">
@@ -1174,6 +1202,12 @@ function AbaPlanejamento({ idCliente, cliente }) {
             </Campo>
           )}
         </div>
+
+        {/* A carteira que ele já tem, decomposta por quem paga e quem recebe.
+            Só existe a partir da migração 021 (coluna `seguros_existentes`). */}
+        {tem021 && (
+          <PainelCarteira estudo={estudo} plano={plano} setPlano={setPlano} setValor={setValor} />
+        )}
 
         {/* ── Raio-X do patrimônio ─────────────────────────────────────────── */}
         {tem019 && (
@@ -1865,6 +1899,37 @@ function AbaPlanejamento({ idCliente, cliente }) {
             <Textarea value={plano.observacoes_reuniao ?? ''} onChange={set('observacoes_reuniao')} rows={4} />
           </Campo>
         </div>
+
+        {/* ── Quem decide, e até quando ─────────────────────────────────────
+            Duas colunas que existiam no banco desde a migração 021 e nunca
+            tiveram onde ser preenchidas. São o que separa uma proposta bem
+            feita de uma proposta bem feita e apresentada para a pessoa errada:
+            a maior parte das vendas de vida é decidida por duas pessoas, e a
+            segunda quase nunca está na sala. */}
+        {tem021 && (
+          <>
+            <p id="sec-decisao" className={SECAO}><Handshake size={13} /> Quem decide, e até quando</p>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Campo label="Quem decide a contratação"
+                dica="Se não for só ele, a apresentação precisa alcançar quem falta">
+                <Input value={plano.quem_decide ?? ''} onChange={set('quem_decide')}
+                  placeholder="Ex.: ele e a esposa, juntos" />
+              </Campo>
+              <Campo label="Prazo que ele sinalizou"
+                dica="Vira o follow-up: cobrar antes irrita, cobrar depois perde a janela">
+                <Input value={plano.prazo_decisao ?? ''} onChange={set('prazo_decisao')}
+                  placeholder="Ex.: quer decidir até o fim do mês" />
+              </Campo>
+            </div>
+            {String(plano.quem_decide ?? '').trim() !== '' && (
+              <p className="mt-2 text-xs text-slate-500">
+                Decisão com mais de uma pessoa: mande o link da proposta para quem não esteve na
+                reunião <strong>antes</strong> do follow-up. Uma proposta explicada por quem ouviu o
+                estudo chega inteira; recontada de memória, chega pela metade.
+              </p>
+            )}
+          </>
+        )}
         {/* Barra de ação fixa: o formulário é longo e é preenchido durante a
             reunião — salvar e gerar a proposta ficam sempre ao alcance, sem
             precisar rolar até o fim. */}
