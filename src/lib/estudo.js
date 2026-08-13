@@ -529,6 +529,100 @@ export function porqueCobertura(id, e) {
   }
 }
 
+// ─── A CARTEIRA QUE ELE JÁ TEM ───────────────────────────────────────────────
+// "Já tenho seguro pela empresa" é a objeção mais comum da categoria, e até
+// aqui o estudo concordava com ela: `cobertura_atual` era um número só, abatido
+// inteiro do capital de morte como se todo real de apólice existente fosse
+// dinheiro portátil que chega à família. Não é — e a diferença entre os três
+// tipos decide a venda:
+//
+//   · INDIVIDUAL (custeio próprio) — é dele, acompanha-o, paga a quem ele
+//     indicou. Este sim abate o capital de morte: seria vender duas vezes a
+//     mesma proteção.
+//
+//   · DA EMPRESA (vida em grupo, custeada pelo empregador ou pela sociedade) —
+//     existe enquanto o vínculo existir. Ele sai, é demitido, vende a
+//     participação ou simplesmente adoece e é afastado: a apólice termina
+//     junto, e termina justamente na idade em que contratar de novo custa o
+//     dobro. É proteção emprestada, não patrimônio.
+//
+//   · PRESTAMISTA / CONSIGNADO (do banco, atrelada ao financiamento) — o
+//     beneficiário é o BANCO, não a família. Ela quita a dívida e devolve zero
+//     em dinheiro. Abatê-la do capital de morte é o erro mais caro dos três,
+//     porque o estudo já subtrai as dívidas em outro lugar: contar a
+//     prestamista como capital da família desconta a mesma dívida duas vezes.
+//
+// A coluna `seguros_existentes` (migração 021) guarda esse detalhe desde
+// sempre, e nada no sistema a lia. Aqui ela vira conta.
+export const ORIGENS_SEGURO = [
+  { id: 'individual', rotulo: 'Individual (dele)', portatil: true, paraFamilia: true,
+    nota: 'Apólice própria: acompanha o cliente e paga a quem ele indicou.' },
+  { id: 'empresa', rotulo: 'Da empresa (vida em grupo)', portatil: false, paraFamilia: true,
+    nota: 'Acaba junto com o vínculo — e o vínculo acaba justamente quando a saúde falha.' },
+  { id: 'banco', rotulo: 'Do banco (prestamista)', portatil: false, paraFamilia: false,
+    nota: 'O beneficiário é o banco: quita o financiamento e não entrega dinheiro à família.' },
+  { id: 'consignado', rotulo: 'Consignado', portatil: false, paraFamilia: false,
+    nota: 'Prestamista de empréstimo consignado: quita o saldo devedor, não vira capital.' },
+  { id: 'outro', rotulo: 'Outro', portatil: true, paraFamilia: true,
+    nota: 'Tratado como apólice própria — confirme quem paga e quem recebe.' },
+]
+
+const ORIGEM_POR_ID = Object.fromEntries(ORIGENS_SEGURO.map((o) => [o.id, o]))
+
+// Recebe o planejamento e o total declarado em `cobertura_atual`. Devolve a
+// carteira decomposta. Sem detalhe informado, devolve `detalhado: false` e
+// trata o total como portátil — que é exatamente o comportamento antigo, para
+// nenhum estudo já montado mudar de número sem alguém preencher nada.
+export function analisarCoberturaExistente(plano, coberturaDeclarada = 0) {
+  const brutos = Array.isArray(plano?.seguros_existentes) ? plano.seguros_existentes : []
+  const itens = brutos
+    .filter((s) => s && (String(s.descricao ?? '').trim() !== '' || q(s.capital) > 0))
+    .map((s) => {
+      const origem = ORIGEM_POR_ID[s.origem] ?? ORIGEM_POR_ID.individual
+      // Custeio manda sobre a origem: uma apólice "individual" paga pela
+      // empresa é benefício de emprego com outro nome, e some do mesmo jeito.
+      const pagaPelaEmpresa = s.custeio === 'empresa'
+      const portatil = origem.portatil && !pagaPelaEmpresa
+      return {
+        origem: origem.id,
+        origemRotulo: origem.rotulo,
+        descricao: String(s.descricao ?? '').trim(),
+        capital: q(s.capital),
+        custeio: pagaPelaEmpresa ? 'empresa' : 'proprio',
+        portatil,
+        paraFamilia: origem.paraFamilia,
+        nota: pagaPelaEmpresa && origem.portatil
+          ? 'Apólice individual custeada pela empresa: na prática acaba com o vínculo, como a vida em grupo.'
+          : origem.nota,
+      }
+    })
+
+  const soma = (f) => itens.filter(f).reduce((s, i) => s + i.capital, 0)
+  const total = soma(() => true)
+  const detalhado = itens.length > 0
+
+  // O que sobrevive a uma demissão E chega à família em dinheiro.
+  const portavel = soma((i) => i.portatil && i.paraFamilia)
+  // Existe hoje e chega à família, mas depende do vínculo continuar.
+  const condicionada = soma((i) => !i.portatil && i.paraFamilia)
+  // Existe, mas o cheque é do banco.
+  const quitaDivida = soma((i) => !i.paraFamilia)
+
+  return {
+    detalhado,
+    itens,
+    total,
+    portavel: detalhado ? portavel : q(coberturaDeclarada),
+    condicionada: detalhado ? condicionada : 0,
+    quitaDivida: detalhado ? quitaDivida : 0,
+    // o que chega à família hoje, com tudo em pé (portátil + condicionada)
+    paraFamiliaHoje: detalhado ? portavel + condicionada : q(coberturaDeclarada),
+    // o total detalhado bate com o número declarado?
+    declarado: q(coberturaDeclarada),
+    divergencia: detalhado ? Math.round(total - q(coberturaDeclarada)) : 0,
+  }
+}
+
 // ─── FILHOS ──────────────────────────────────────────────────────────────────
 // Normaliza a lista de filhos do planejamento (coluna jsonb `dependentes`,
 // formato [{nome, idade, custo_mensal}]) e calcula, por filho, quantos anos de
@@ -704,6 +798,12 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
   // enquanto não destrava.
   const custoInventario = impostoECustas + custoSustentacaoInventario
   const coberturaAtual = q(plano.cobertura_atual)
+
+  // A carteira que ele já tem, decomposta por quem paga e quem recebe. O
+  // estudo continua usando `coberturaAtual` nas contas antigas (nenhum número
+  // já apresentado muda sozinho), mas passa a saber a diferença entre o que é
+  // dele e o que é emprestado — e a dizer isso em voz alta.
+  const carteira = analisarCoberturaExistente(plano, coberturaAtual)
 
   // ── Previdência: saldo do extrato x o que a família recebe ────────────────
   // PGBL é tributado sobre o total; VGBL só sobre o rendimento. O extrato
@@ -976,6 +1076,13 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
   const gap = Math.max(valores.morte - coberturaAtual, 0)
   // Gap real: considera também o que a família já tem de liquidez própria
   const gapReal = Math.max(valores.morte - coberturaAtual - recursosLiquidos, 0)
+  // O GAP QUE SOBREVIVE A UMA DEMISSÃO. Só a apólice que é dele mesmo conta:
+  // a vida em grupo termina com o vínculo e a prestamista paga o banco. É o
+  // número honesto quando existe detalhe da carteira — e costuma ser bem maior
+  // que o `gap`, porque quase toda cobertura "que ele já tem" é emprestada.
+  const gapPortavel = Math.max(valores.morte - carteira.portavel, 0)
+  // O que ele perde de proteção no dia em que sair da empresa.
+  const capitalQueEvapora = carteira.condicionada
 
   // Horizonte sugerido pelos filhos: proteger até o mais novo completar 24.
   let anosSugeridosPorFilhos = null
@@ -1425,6 +1532,44 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
       texto: `Capital de morte de ${Math.round(valores.morte).toLocaleString('pt-BR')}: acima de ${LIMITES_MERCADO.morte.toLocaleString('pt-BR')} o caso vai a resseguro facultativo — exames, entrevista médica e prazo de semanas a meses. Combine o prazo com o cliente antes de prometer data.`,
     })
   }
+  // ── A carteira que ele já tem: o que é dele e o que é emprestado ──────────
+  // O total detalhado não bate com o declarado: um dos dois está desatualizado,
+  // e é o declarado que abate o capital de morte.
+  if (carteira.detalhado && coberturaAtual > 0 && Math.abs(carteira.divergencia) > 1) {
+    inconsistencias.push({
+      grave: false, corrigir: 'cobertura_atual', valor: Math.round(carteira.total),
+      texto: `A cobertura atual declarada (${Math.round(coberturaAtual).toLocaleString('pt-BR')}) não bate com a soma das apólices listadas (${Math.round(carteira.total).toLocaleString('pt-BR')}).`,
+    })
+  }
+  if (carteira.detalhado && coberturaAtual === 0 && carteira.total > 0) {
+    inconsistencias.push({
+      grave: false, corrigir: 'cobertura_atual', valor: Math.round(carteira.total),
+      texto: `As apólices listadas somam ${Math.round(carteira.total).toLocaleString('pt-BR')}, mas a cobertura atual está zerada — o estudo não está abatendo nada do capital de morte.`,
+    })
+  }
+  // Prestamista abatida como se fosse capital da família: a mesma dívida sai
+  // duas vezes da conta e o gap aparece menor do que é.
+  if (carteira.quitaDivida > 0 && coberturaAtual > 0) {
+    inconsistencias.push({
+      grave: true,
+      texto: `${Math.round(carteira.quitaDivida).toLocaleString('pt-BR')} da cobertura atual são prestamista de financiamento: o beneficiário é o banco, não a família. Esse valor quita a dívida (que o estudo já desconta à parte) e não entrega um real em dinheiro — abatido do capital de morte, ele some duas vezes da conta.`,
+    })
+  }
+  // Vida em grupo tratada como proteção permanente.
+  if (capitalQueEvapora > 0 && valores.morte > 0) {
+    inconsistencias.push({
+      grave: true,
+      texto: `${Math.round(capitalQueEvapora).toLocaleString('pt-BR')} da cobertura atual dependem do vínculo com a empresa. No dia em que ele sair, o gap de proteção salta de ${Math.round(gap).toLocaleString('pt-BR')} para ${Math.round(gapPortavel).toLocaleString('pt-BR')} — e ele vai recontratar mais velho${idade != null ? `, com ${idade}+ anos` : ''}, pelo preço da idade que tiver na hora.`,
+    })
+  }
+  // Ele diz que tem seguro e não se sabe de que tipo.
+  if (!carteira.detalhado && coberturaAtual > 0) {
+    inconsistencias.push({
+      grave: false, perguntar: 'seguros_existentes',
+      texto: `A cobertura atual de ${Math.round(coberturaAtual).toLocaleString('pt-BR')} está abatendo o capital de morte inteira, como se fosse apólice própria. Liste as apólices: vida em grupo da empresa acaba com o emprego e prestamista do banco nem chega à família — nos dois casos o estudo está prometendo proteção que não existe.`,
+    })
+  }
+
   // O inventário vai comer a previdência que a família achava que era dela
   if (previdenciaConsumidaNoInventario > 0 && custoInventario > 0) {
     inconsistencias.push({
@@ -1471,6 +1616,8 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
       faturamento: pjFaturamento, dividaAval: pjDividaAval,
       numSocios: inteiro(plano.pj_num_socios, 0, 0, 999),
     },
+    // a carteira que ele já tem, decomposta por quem paga e quem recebe
+    carteira, gapPortavel, capitalQueEvapora,
     // leitura do estudo
     coberturaAtual, gap, gapReal, mesesProtegidos, mesesLiquidos, mesesVendendoTudo,
     mesesComPlano, autonomiaAtualMeses, poupancaMensal, comprometimentoRenda,

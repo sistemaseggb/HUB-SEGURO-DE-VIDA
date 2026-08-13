@@ -32,7 +32,7 @@ vida real o estudo raramente chega completo.
 | Aposentadoria e acúmulo | ~550 |
 | PF + PJ | ~550 |
 
-Sobre cada estudo passam **24 regras de revisão**. Cada regra é uma coisa que um
+Sobre cada estudo passam **31 regras de revisão**. Cada regra é uma coisa que um
 consultor sênior olharia e diria "isso está errado" ou "isso você deixou
 passar". Os tetos de mercado ficam **dentro do arquivo de auditoria**, e não
 importados do motor: auditor que usa as constantes do auditado não audita nada,
@@ -163,6 +163,47 @@ de chutar:
 | R12 (UF) | 2% | O cadastro pode não ter o estado |
 | R13 (DIT do autônomo) | 2% | A profissão pode estar em branco |
 | R16 (nº de sócios) | 2% | Estudo PJ ainda em preenchimento |
+
+## Segunda rodada: R25–R31, e o que ela encontrou
+
+As sete regras novas nasceram junto com as ferramentas de preço e com a
+decomposição da carteira existente. Duas coisas mudaram no gerador para que
+elas tivessem o que auditar:
+
+- **os 10.000 clientes agora chegam com apólices** (vida em grupo da empresa,
+  prestamista do financiamento, individual antiga, consignado), em combinações
+  que às vezes **não fecham** com o total declarado — porque é assim na vida
+  real, quando ela lembra de uma apólice e esquece de somar no campo do total;
+- as ferramentas de preço e níveis entram por `import()` opcional, como o
+  diagnóstico: ausentes, as regras do grupo H ficam neutras em vez de derrubar
+  a auditoria.
+
+| Regra | O que cobra |
+|---|---|
+| 🔴 R25 | Cobertura da empresa abatida como proteção permanente, **sem aviso** |
+| 🔴 R26 | Prestamista do banco contada como capital da família (a mesma dívida saindo duas vezes da conta) |
+| 🔴 R27 | A decomposição da carteira não fecha: portátil + condicionada + prestamista ≠ total |
+| 🔴 R28 | Faixa de prêmio com número impossível, fora de ordem, ou cujos itens não somam o total |
+| 🟡 R29 | Taxa estimada fora da faixa praticável — medida **cobertura a cobertura**, não no bolo |
+| 🔴 R30 | Escada de níveis fora de ordem, ou um degrau mais caro entregando menos capital |
+| 🔴 R31 | O "plano que cabe" estourando o próprio teto, ou deixando de fora algo que ainda cabia na sobra |
+
+**A R29 reprovou na primeira execução** (4,5% dos casos), e o achado foi
+melhor do que o esperado: acima de certa idade, a estimativa disparava porque
+o mercado simplesmente **não emite** aquelas coberturas — doenças graves
+depois dos 65, DIT perto da aposentadoria. O número alto não era o defeito; a
+ausência do aviso era.
+
+A correção não foi esconder o preço nem capá-lo em silêncio, que deixaria a
+consultora montando um plano que a cotação vai recusar inteiro. O estimador
+ganhou `IDADE_MAXIMA_EMISSAO` por cobertura e passou a devolver o cálculo
+**acompanhado de um aviso escrito**, e a regra passou a cobrar exatamente
+isso: fora da idade de emissão, o que se audita é o aviso, não o valor.
+
+De quebra, a R29 expôs um erro na própria régua: medir a taxa dividindo o
+prêmio total pelo capital total mistura diária com capital de indenização
+única, e o denominador nem inclui as diárias. A regra passou a medir item a
+item, com régua separada para as diárias.
 
 ## Como estender
 

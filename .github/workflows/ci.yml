@@ -46,6 +46,13 @@ jobs:
       - name: Auditoria de 10.000 planejamentos (qualidade do conselho)
         run: npm run test:planejamento
 
+      # As ferramentas que precificam a apólice: a faixa de prêmio por
+      # cobertura, os três níveis do plano e a decomposição da carteira que o
+      # cliente já tem. São números ditos em voz alta na reunião — e o teto de
+      # orçamento é uma promessa que não pode ser quebrada por arredondamento.
+      - name: Preço, níveis do plano e carteira existente
+        run: npm run test:premio
+
       - name: Análise de transcrição, comparador e apresentação
         run: |
           npm run test:transcricao

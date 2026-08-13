@@ -93,6 +93,66 @@ mesma resposta, que é o mínimo que se pede de algo que vai ser citado na frent
 de um cliente. A qualidade desse conselho é medida por
 [10.000 planejamentos auditados](docs/AUDITORIA.md) a cada `npm test`.
 
+## 💰 As três ferramentas de preço
+
+O motor sabia **quanto proteger** e não sabia **quanto custa**. O prêmio só
+existia depois que a consultora cotava nas seguradoras e digitava o número — e
+entre a reunião e a cotação passavam dias, que é justamente quando a venda
+esfria. Pior: sem o preço de cada cobertura, ninguém respondia à segunda
+pergunta da reunião, que é a que decide — *"e se tirar essa daqui, quanto cai?"*.
+
+**1. A faixa de prêmio, por cobertura** ([`src/lib/premio.js`](src/lib/premio.js)).
+Uma tabela de taxa mensal por R$ 1.000 de capital, ajustada pela curva de idade
+com uma **elasticidade por cobertura** — morte acompanha a mortalidade inteira,
+acidente quase não varia com a idade, doenças graves sobe mais rápido que as
+duas. A saída é **sempre uma faixa, nunca um número seco**, e assimétrica para
+cima, porque agravo de análise médica só empurra o preço nessa direção. Três
+travas mantêm isso honesto: sem data de nascimento devolve `null` em vez de
+chutar uma idade; acima da idade em que o mercado emite cada cobertura, avisa
+por escrito em vez de só cobrar caro; e quando a cotação chega, **é ela que
+manda** — a estimativa vira só uma conferência ("a cotação veio 60% acima da
+faixa: houve agravo, ou entrou cobertura a mais?").
+
+**2. Os três níveis do plano** ([`src/lib/niveis.js`](src/lib/niveis.js)).
+Com uma opção só, a reunião termina numa pergunta fechada e o preço vira o
+único assunto que sobra. Com três, o cliente escolhe entre *menos* e *mais*,
+que é uma decisão que ele toma na hora. **Essencial** é o núcleo do risco
+*deste* cliente (o perfil do diagnóstico define a ordem, e dívida avalizada ou
+saldo devedor entram sempre — um "essencial" que deixa a família devendo não é
+essencial); **Recomendado** é o que a consultora desenhou; **Completo** é o
+estudo sem cortes. Cada nível carrega a lista do que **fica de fora**, com o
+risco por escrito: comparativo que só mostra o que cada coluna tem é folheto,
+não é decisão. Na proposta que o cliente vê, os valores são **ancorados na
+cotação real** — a estimativa entra só na proporção entre os níveis.
+
+**3. O plano que cabe no orçamento.** O estudo já sabia dizer "o prêmio não
+cabe na sobra do cliente" e parava aí, que é o pior lugar possível: ela sabe
+que vai cancelar e não sabe o que tirar. Cortado no chute, o primeiro a sair é
+sempre a invalidez — a cobertura mais provável de todas, porque é a que o
+cliente entende menos. A ferramenta monta o plano na **ordem do risco** dentro
+do teto, e lista o que ficou de fora com quanto faltaria para entrar.
+
+## 🛡️ "Já tenho seguro pela empresa"
+
+É a objeção mais comum da categoria, e o sistema **concordava com ela**:
+`cobertura_atual` era um número só, abatido inteiro do capital de morte como se
+todo real de apólice existente fosse dinheiro portátil que chega à família.
+
+Agora cada apólice é listada com a origem, e a origem decide tudo:
+
+| O que ele tem | O que acontece de verdade |
+|---|---|
+| **Individual, custeada por ele** | É dele, acompanha-o e paga a quem ele indicou. Esta o estudo **deve** abater — senão vende duas vezes a mesma proteção. |
+| **Vida em grupo da empresa** | Acaba no dia em que o vínculo acaba — e o vínculo raramente acaba num bom momento. Proteção emprestada, não patrimônio. |
+| **Prestamista do banco / consignado** | O beneficiário é o **banco**. Quita a dívida (que o estudo já desconta à parte) e não entrega um real. Abatida do capital, some duas vezes da conta. |
+
+O estudo passa a expor `gapPortavel` — o que falta de proteção descontando só o
+que é realmente dele — e `capitalQueEvapora`. O número que abre a conversa vira
+concreto: *"hoje faltam R$ 2 mi; no dia em que você sair da empresa, faltam
+R$ 2,85 mi — e você recontrata pelo preço da idade que tiver na hora"*. O
+custeio manda sobre a origem: uma apólice "individual" paga pela empresa é
+benefício de emprego com outro nome.
+
 ## 🧩 Módulos
 
 - **Dashboard** — KPIs do mês, comissão da Natália, gráfico de evolução, divisão
@@ -162,8 +222,9 @@ npm run build && npm test        # lint + motor + ponta a ponta
 ```
 
 Ou em separado: os que não precisam de navegador — `npm run test:motor`,
-`npm run test:planejamento`, `npm run test:transcricao`, `npm run test:comparador`,
-`npm run test:apresentacao` — e `npm run test:e2e`. A suíte de navegador sobe o servidor de preview sozinha
+`npm run test:planejamento`, `npm run test:premio`, `npm run test:transcricao`,
+`npm run test:comparador`, `npm run test:apresentacao` — e `npm run test:e2e`.
+A suíte de navegador sobe o servidor de preview sozinha
 (e reaproveita um que já esteja rodando), então basta um terminal.
 
 **`test:motor`** — `calcularEstudo()` é a única fonte dos números do
@@ -184,7 +245,7 @@ gente — o CLT de 28 anos sem filhos, a médica autônoma com três crianças, 
 empresário com sócio e aval no banco, a viúva resolvendo o inventário do
 marido, o casal sem filhos, quem só quer cobrir o financiamento por 20 anos.
 Nove públicos, quinze arquétipos, com lacunas de preenchimento como acontece
-na vida real. Sobre cada estudo passam **24 regras de revisão**, cada uma
+na vida real. Sobre cada estudo passam **31 regras de revisão**, cada uma
 sendo algo que um consultor sênior apontaria: capital que nenhuma seguradora
 emite, prêmio que não cabe no bolso do cliente, proteção vendida para quem não
 precisa dela, o mesmo dinheiro contado duas vezes em dois lugares do estudo,
@@ -195,6 +256,22 @@ auditado só confirma que o sistema concorda consigo mesmo. Rode
 concreto por regra; `CASOS=50000 SEMENTE=42 npm run auditoria` para outra
 bateria. **A primeira execução reprovou em 16 regras, 8 delas graves** — o que
 foi corrigido está listado em [`docs/AUDITORIA.md`](docs/AUDITORIA.md).
+
+**`test:premio`** — as ferramentas que **precificam** a apólice produzem números
+ditos em voz alta na reunião, e duas delas fazem promessas que não podem ser
+quebradas por arredondamento. São 58 conferências mais um fuzz de 10.000
+estudos, cobrando o que precisa valer sempre: na idade de referência o preço é
+exatamente a taxa da tabela (a âncora de tudo o mais); mais capital nunca custa
+menos e mais idade nunca custa menos, em **toda** cobertura; franquia maior
+barateia a DIT e quadruplicar as diárias **não** quadruplica o prêmio; a faixa
+sempre contém o centro e é assimétrica para cima; a escada de níveis nunca fica
+fora de ordem (nenhum degrau mais caro entregando menos capital); o plano que
+cabe **nunca estoura o teto** nem deixa de fora algo que ainda cabia na sobra;
+e a carteira existente sempre fecha — portátil + condicionada + prestamista =
+total. As regras **R25–R31** levam as mesmas cobranças para os 10.000
+planejamentos da auditoria, agora gerados também com apólices existentes
+misturadas (vida em grupo, prestamista, individual antiga), porque código novo
+que não passa pelo teste que mais protege o sistema é código não testado.
 
 **`test:transcricao`** — o fuzz prova que a análise não explode; isso não prova
 que ela extrai CERTO (um parser que devolve lista vazia passa em qualquer teste
@@ -353,6 +430,9 @@ npm run dev
 │   │   ├── constants.js          # Etapas do funil, paleta dos gráficos
 │   │   ├── format.js             # Moeda, datas, links de WhatsApp
 │   │   ├── estudo.js             # Motor do estudo: todo número da proposta
+│   │   ├── diagnostico.js        # A leitura do estudo: perfil e recomendações
+│   │   ├── premio.js             # Faixa de prêmio por cobertura (estimativa)
+│   │   ├── niveis.js             # Essencial/Recomendado/Completo + o que cabe
 │   │   ├── comparador.js         # Seguro × VGBL/PGBL, ano a ano
 │   │   ├── transcricao.js        # Análise da gravação da reunião
 │   │   ├── apresentacao.js       # Traço da caneta, borracha e simulação

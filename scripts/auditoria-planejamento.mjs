@@ -62,6 +62,18 @@ try {
   console.log('  ⚠️  src/lib/diagnostico.js ainda não existe — regras R21..R24 desligadas.\n')
 }
 
+// As ferramentas de precificação e de níveis do plano seguem a mesma regra:
+// ausentes, as regras do grupo H ficam neutras em vez de derrubar a auditoria.
+let estimarPremio = null
+let montarNiveis = null
+let planoQueCabe = null
+try {
+  ({ estimarPremio } = await import('../src/lib/premio.js'));
+  ({ montarNiveis, planoQueCabe } = await import('../src/lib/niveis.js'))
+} catch {
+  console.log('  ⚠️  premio.js/niveis.js ainda não existem — regras R25..R31 desligadas.\n')
+}
+
 const CASOS = Number(process.env.CASOS ?? 10000)
 const alvoDetalhe = (() => {
   const i = process.argv.indexOf('--detalhe')
@@ -513,6 +525,38 @@ function comLacunas(plano) {
   return p
 }
 
+// ─── A carteira que o cliente já tem ─────────────────────────────────────────
+// A maioria dos clientes chega com alguma apólice, e quase nunca é a que eles
+// pensam que é: vida em grupo da empresa, prestamista do financiamento, uma
+// individual antiga de capital pequeno. O gerador reproduz essa mistura para a
+// auditoria exercitar a decomposição da carteira nos 10.000 casos — sem isso o
+// código novo passaria batido pelo teste que mais protege o sistema.
+function carteiraAleatoria(coberturaAtual) {
+  if (!(coberturaAtual > 0) || talvez(0.45)) return undefined
+  const fatias = []
+  let resta = coberturaAtual
+  const tipos = [
+    { origem: 'empresa', descricao: 'Vida em grupo do empregador', custeio: 'empresa' },
+    { origem: 'banco', descricao: 'Prestamista do financiamento', custeio: 'proprio' },
+    { origem: 'individual', descricao: 'Apólice individual antiga', custeio: 'proprio' },
+    { origem: 'consignado', descricao: 'Consignado', custeio: 'proprio' },
+  ]
+  const quantas = inteiroEntre(1, 3)
+  for (let k = 0; k < quantas && resta > 0; k++) {
+    const ultima = k === quantas - 1
+    const capital = ultima ? resta : redondo(entre(resta * 0.2, resta * 0.8))
+    fatias.push({ ...escolher(tipos), capital })
+    resta -= capital
+  }
+  // De vez em quando o detalhe NÃO fecha com o total declarado — é o caso real
+  // em que ela lembrou de uma apólice e esqueceu de somar no campo do total.
+  if (talvez(0.15)) fatias.push({
+    origem: 'individual', descricao: 'Apólice esquecida no total',
+    capital: redondo(entre(20_000, 200_000)), custeio: 'proprio',
+  })
+  return fatias
+}
+
 function gerarCenario() {
   const base = escolher(ARQUETIPOS)()
   const hoje = new Date('2026-08-13T12:00:00Z')
@@ -521,6 +565,8 @@ function gerarCenario() {
     fumante: talvez(0.14),
     ...base.plano,
   })
+  const carteira = carteiraAleatoria(Number(plano.cobertura_atual) || 0)
+  if (carteira) plano.seguros_existentes = carteira
   return {
     ...base,
     hoje,
@@ -860,6 +906,134 @@ const REGRAS = [
       + 'priorizar nada — e todo conselho sai genérico.',
     quando: (c, e, d) => (d && !d.perfil?.id ? 'perfil nulo' : null),
   },
+
+  // ── H. A carteira que ele já tem, o preço e os níveis ─────────────────────
+  {
+    id: 'R25', gravidade: 'grave',
+    titulo: 'Cobertura da empresa contada como proteção permanente',
+    porque: 'Vida em grupo acaba no dia em que o vínculo acaba, e o vínculo costuma acabar '
+      + 'no pior momento. Abatida do capital de morte sem aviso, ela faz o estudo prometer '
+      + 'uma proteção que some — e o cliente só descobre quando for recontratar mais velho.',
+    quando: (c, e) => {
+      if (!(e.capitalQueEvapora > 0) || !(e.valores.morte > 0)) return null
+      return temAviso(e, 'dependem do vínculo')
+        ? null
+        : `${m(e.capitalQueEvapora)} de vida em grupo sem aviso nenhum`
+    },
+  },
+  {
+    id: 'R26', gravidade: 'grave',
+    titulo: 'Prestamista do banco contada como capital da família',
+    porque: 'O beneficiário do seguro do financiamento é o banco. Ele quita a dívida — que o '
+      + 'estudo já desconta à parte — e não entrega um real. Abatê-lo do capital de morte '
+      + 'desconta a mesma dívida duas vezes e encolhe o gap artificialmente.',
+    quando: (c, e) => {
+      if (!(e.carteira?.quitaDivida > 0) || !(e.coberturaAtual > 0)) return null
+      return temAviso(e, 'prestamista') ? null : `${m(e.carteira.quitaDivida)} de prestamista sem aviso`
+    },
+  },
+  {
+    id: 'R27', gravidade: 'grave',
+    titulo: 'Decomposição da carteira não fecha com o total',
+    porque: 'Portátil + condicionada + prestamista tem que dar exatamente o total das apólices '
+      + 'listadas. Se não fecha, algum caso caiu fora da classificação e o número que a '
+      + 'consultora lê na tela está errado.',
+    quando: (c, e) => {
+      const k = e.carteira
+      if (!k?.detalhado) return null
+      const soma = k.portavel + k.condicionada + k.quitaDivida
+      return Math.abs(soma - k.total) > 1
+        ? `soma ${m(soma)} contra total ${m(k.total)}` : null
+    },
+  },
+  {
+    id: 'R28', gravidade: 'grave',
+    titulo: 'Estimativa de prêmio com número impossível',
+    porque: 'A faixa estimada é lida em voz alta na reunião. NaN, negativo ou um mínimo maior '
+      + 'que o máximo ali é pior do que não ter estimativa nenhuma.',
+    quando: (c, e) => {
+      if (!estimarPremio) return null
+      const p = estimarPremio(e)
+      if (!p) return null
+      if (![p.mensal, p.min, p.max].every((v) => Number.isFinite(v) && v >= 0)) {
+        return `faixa inválida: ${p.min}–${p.max} (central ${p.mensal})`
+      }
+      if (p.min > p.mensal || p.mensal > p.max) return `faixa fora de ordem: ${p.min} / ${p.mensal} / ${p.max}`
+      const somaItens = p.itens.reduce((s, i) => s + i.mensal, 0)
+      return Math.abs(somaItens - p.mensal) > 1.5
+        ? `itens somam ${somaItens.toFixed(2)} e o total diz ${p.mensal}` : null
+    },
+  },
+  {
+    id: 'R29', gravidade: 'atencao',
+    titulo: 'Taxa estimada fora da faixa praticável do mercado',
+    porque: 'Medida cobertura a cobertura (e não no bolo, que mistura diária com capital), '
+      + 'a taxa mensal por R$ 1.000 tem uma faixa conhecida no vida individual brasileiro. '
+      + 'Fora dela a estimativa desmoraliza a ferramenta na primeira vez que for usada. '
+      + 'Idade acima da emissão é caso à parte: ali o preço alto é a informação, e o '
+      + 'estimador tem que estar AVISANDO em vez de só cobrar caro.',
+    quando: (c, e) => {
+      if (!estimarPremio) return null
+      const p = estimarPremio(e)
+      if (!p) return null
+      for (const item of p.itens) {
+        // acima da idade de emissão o número é grande de propósito; o que a
+        // auditoria cobra aqui é o aviso, não o valor
+        if (item.foraDaIdadeDeEmissao) {
+          if (!p.avisos.some((a) => a.id === item.id)) return `${item.rotulo} fora da idade de emissão e sem aviso`
+          continue
+        }
+        // diárias são cotadas por R$ 1 de diária, régua diferente
+        const porDiaria = item.id === 'dit' || item.id === 'dih'
+        const taxa = porDiaria ? item.mensal / item.valor : (item.mensal / item.valor) * 1000
+        const teto = porDiaria ? 1.2 : 8
+        const piso = porDiaria ? 0.01 : 0.01
+        if (taxa > teto) return `${item.rotulo}: R$ ${taxa.toFixed(2)} por ${porDiaria ? 'real de diária' : 'mil'} — caro demais para ser crível`
+        if (taxa < piso) return `${item.rotulo}: R$ ${taxa.toFixed(3)} por ${porDiaria ? 'real de diária' : 'mil'} — barato demais para ser crível`
+      }
+      return null
+    },
+  },
+  {
+    id: 'R30', gravidade: 'grave',
+    titulo: 'Níveis do plano fora de ordem ou repetidos',
+    porque: 'A escada só ajuda a decidir se cada degrau custar mais e entregar mais que o de '
+      + 'baixo. Dois níveis com o mesmo preço, ou um "completo" mais barato que o "essencial", '
+      + 'transformam a escolha em confusão na frente do cliente.',
+    quando: (c, e, d) => {
+      if (!montarNiveis) return null
+      const n = montarNiveis(e, { perfil: d?.perfil })
+      if (!n) return null
+      for (let k = 1; k < n.niveis.length; k++) {
+        if (n.niveis[k].mensal <= n.niveis[k - 1].mensal) {
+          return `${n.niveis[k].id} (${m(n.niveis[k].mensal)}) não é mais caro que ${n.niveis[k - 1].id} (${m(n.niveis[k - 1].mensal)})`
+        }
+        if (n.niveis[k].capital < n.niveis[k - 1].capital) {
+          return `${n.niveis[k].id} custa mais e entrega menos capital que ${n.niveis[k - 1].id}`
+        }
+      }
+      return null
+    },
+  },
+  {
+    id: 'R31', gravidade: 'grave',
+    titulo: 'Plano que cabe no orçamento estoura o próprio teto',
+    porque: 'A ferramenta existe para caber. Se o conjunto escolhido custa mais que o teto '
+      + 'informado, ela entrega justamente o problema que veio resolver.',
+    quando: (c, e, d) => {
+      if (!planoQueCabe || !(e.poupancaMensal > 0)) return null
+      const p = planoQueCabe(e, e.poupancaMensal, { perfil: d?.perfil })
+      if (!p) return null
+      if (p.mensal > p.teto) return `escolheu ${m(p.mensal)} para um teto de ${m(p.teto)}`
+      if (p.sobra < 0) return `sobra negativa (${m(p.sobra)})`
+      // o que ficou de fora tem que ser, de fato, o que não cabia
+      const menorFora = Math.min(...p.fora.map((f) => f.mensal), Infinity)
+      if (p.fora.length > 0 && p.mensal + menorFora <= p.teto) {
+        return `deixou de fora um item de ${m(menorFora)} que ainda cabia na sobra de ${m(p.sobra)}`
+      }
+      return null
+    },
+  },
 ]
 
 // ─── Execução ────────────────────────────────────────────────────────────────
@@ -933,7 +1107,7 @@ if (erros.length > 0) {
 }
 
 if (lista.length === 0) {
-  console.log('  ✅ Nenhuma das regras de revisão encontrou problema nos 10.000 planejamentos.\n')
+  console.log(`  ✅ Nenhuma das regras de revisão encontrou problema nos ${CASOS.toLocaleString('pt-BR')} planejamentos.\n`)
 } else {
   for (const a of lista) {
     const sigla = a.regra.gravidade === 'grave' ? '🔴 GRAVE  ' : '🟡 ATENÇÃO'

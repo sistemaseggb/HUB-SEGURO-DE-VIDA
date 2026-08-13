@@ -31,6 +31,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { IDADE_INDEPENDENCIA, LIMITES_MERCADO, COBERTURAS, focoRotulo } from './estudo.js'
+import { planoQueCabe } from './niveis.js'
 
 const m = (v) => `R$ ${Math.round(v).toLocaleString('pt-BR')}`
 const pct = (v) => `${String(Math.round(v * 10) / 10).replace('.', ',')}%`
@@ -237,6 +238,40 @@ export function diagnosticar(e, { cliente = {} } = {}) {
     })
   }
 
+  // ── A cobertura que ele acha que tem ──────────────────────────────────────
+  // "Já tenho seguro pela empresa" é a objeção mais comum da categoria, e é a
+  // única que se desmonta com o documento na mão em vez de com argumento.
+  if (e.capitalQueEvapora > 0 && e.valores.morte > 0) {
+    add({
+      id: 'cobertura-emprestada', tipo: 'corrige',
+      titulo: `${m(e.capitalQueEvapora)} de proteção que acabam com o emprego`,
+      porque: `Da cobertura que ele já tem, ${m(e.capitalQueEvapora)} são vida em grupo custeada `
+        + 'pela empresa: a apólice termina no dia em que o vínculo termina. E o vínculo raramente '
+        + 'termina em um bom momento — demissão, venda da participação ou um afastamento por doença. '
+        + `Sem ela, o que falta de proteção salta de ${m(e.gap)} para ${m(e.gapPortavel)}`
+        + (e.idade != null
+          ? `, e a recontratação sai pelo preço da idade que ele tiver na hora, não pela de hoje.`
+          : '.'),
+      emJogo: e.capitalQueEvapora,
+      dizerAssim: 'O seguro da empresa é ótimo enquanto você estiver lá. A pergunta é: em que '
+        + 'idade e com que saúde você vai estar quando ele acabar?',
+    })
+  }
+  if (e.carteira?.quitaDivida > 0) {
+    add({
+      id: 'prestamista-nao-chega', tipo: 'corrige', campo: 'cobertura_atual',
+      valor: Math.round(e.carteira.paraFamiliaHoje), foco: 'dividas',
+      titulo: `${m(e.carteira.quitaDivida)} de prestamista não chegam à família`,
+      porque: `O seguro do financiamento tem o banco como beneficiário: ele quita o saldo devedor `
+        + 'e não entrega um real em dinheiro para a família. Como o estudo já desconta as dívidas '
+        + `em separado, contar esses ${m(e.carteira.quitaDivida)} como capital abate a mesma dívida `
+        + 'duas vezes e faz o gap parecer menor do que é.',
+      emJogo: e.carteira.quitaDivida,
+      dizerAssim: 'Esse seguro do financiamento não é seu: é do banco. Ele apaga a dívida e '
+        + 'a sua família não recebe nada por ele.',
+    })
+  }
+
   // Horizonte curto demais para os filhos.
   if (e.janelaProtecao?.curto && e.anosSugeridosPorFilhos != null
     && e.anos < e.anosSugeridosPorFilhos) {
@@ -273,13 +308,21 @@ export function diagnosticar(e, { cliente = {} } = {}) {
   if (e.investimento && e.poupancaMensal != null && e.investimento.mensal > 0
     && e.investimento.mensal > e.poupancaMensal) {
     const cabe = Math.max(e.poupancaMensal, 0)
+    // Não basta dizer que não cabe: cortado no chute, o primeiro a sair é
+    // sempre a invalidez — a cobertura mais provável de todas, porque é a que
+    // o cliente entende menos. O plano que cabe corta pela ordem do risco.
+    const alternativa = planoQueCabe(e, cabe, { perfil })
+    const desenho = alternativa && !alternativa.vazio && !alternativa.completo
+      ? ` Dentro dos ${m(cabe)} cabe um plano com ${alternativa.dentro.map((i) => rotulo(i.id)).join(', ')} `
+        + `— ${m(alternativa.capital)} de capital, cortando pela ordem do risco e não pelo que for mais fácil de tirar.`
+      : ''
     add({
       id: 'premio-nao-cabe', tipo: 'bloqueia',
       titulo: 'O prêmio não cabe no orçamento do cliente',
       porque: `O plano pede ${m(e.investimento.mensal)}/mês e a sobra do cliente é `
         + `${m(cabe)}/mês (renda ${m(e.renda)} menos custo de vida ${m(e.custoVida)}). `
         + 'Apólice que não cabe cancela em poucos meses — e cancelamento devolve a '
-        + 'comissão. Melhor apresentar um plano menor que ele mantém a vida inteira.',
+        + `comissão. Melhor apresentar um plano menor que ele mantém a vida inteira.${desenho}`,
       emJogo: 0,
       dizerAssim: 'Prefiro te entregar um plano que você mantém para sempre a um plano '
         + 'perfeito que você cancela em seis meses.',
@@ -467,6 +510,15 @@ export function diagnosticar(e, { cliente = {} } = {}) {
     pergunta('cobertura-atual', 'cobertura_atual',
       'Sem saber o que ele já tem, o estudo pode estar propondo capital que já existe — ou ignorando que a apólice atual é do empregador e acaba junto com o emprego.',
       'Você já tem algum seguro de vida hoje, pela empresa, pelo banco ou individual?', false)
+  }
+  // Ele tem cobertura e não se sabe de que tipo. É a pendência que mais muda
+  // número no estudo inteiro: um total abatido como apólice própria pode ser,
+  // na verdade, vida em grupo que acaba com o emprego e prestamista que nem
+  // chega à família.
+  if (e.coberturaAtual > 0 && !e.carteira?.detalhado) {
+    pergunta('carteira', 'seguros_existentes',
+      `Os ${m(e.coberturaAtual)} de cobertura atual estão abatendo o capital de morte inteiros, como se fossem apólice própria e permanente. Liste cada apólice com a origem: o que é da empresa acaba com o vínculo e o que é do banco paga o banco.`,
+      'Esse seguro que você tem é individual, da empresa ou do financiamento?', false)
   }
   if (e.dividas > 0 && e.prazoDividaAnos == null) {
     pergunta('prazo-divida', 'dividas_prazo_anos',

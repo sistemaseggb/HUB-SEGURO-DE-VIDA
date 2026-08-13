@@ -13,6 +13,8 @@ import {
   calcularEstudo, IDADE_INDEPENDENCIA, MESES_VITALICIO, GRUPOS_COBERTURA, focoRotulo,
 } from '../lib/estudo'
 import { compararSeguroComInvestimento, DIMENSOES_COMPARACAO } from '../lib/comparador.js'
+import { montarNiveis, ancorarNaCotacao } from '../lib/niveis.js'
+import { diagnosticar } from '../lib/diagnostico.js'
 import {
   TINTAS, agora, anotacoesIguais, aplicarSimulacao, comTracos, contarTracos,
   descreverSimulacao, desfazerHist, novoHistorico, podeDesfazer, podeRefazer,
@@ -115,12 +117,14 @@ function Slide({ nome, className = '', children }) {
 //   capa → diagnóstico → reenquadramento → autonomia → o número →
 //   futuro dos filhos → raio-X do patrimônio → sucessão → linha do tempo do
 //   inventário → empresa (PJ) → aposentadoria → gap de cobertura → o plano
-//   completo → investimento → investir ou proteger → o custo da espera →
-//   passos → fechamento
+//   completo → investimento → as três formas de fazer → investir ou proteger →
+//   o custo da espera → passos → fechamento
 //
 // Capítulos entram e saem conforme o perfil: o de empresa só com PJ, o de
 // aposentadoria só para quem marcou esse foco, o do custo da espera só com a
-// data de nascimento no cadastro. E os três cartões do reenquadramento são
+// data de nascimento no cadastro, e o das três formas só com prêmio cotado —
+// os valores dos outros níveis são proporcionais à cotação real, e sem ela
+// seriam estimativa impressa ao lado do nome do cliente. E os três cartões do reenquadramento são
 // escolhidos pelos FOCOS do cliente — quem veio por sucessão não ouve primeiro
 // sobre a educação dos filhos.
 //
@@ -143,7 +147,8 @@ const TITULO_SLIDE = {
   patrimonio: 'Raio-X do patrimônio', sucessao: 'Sucessão',
   'linha-inventario': 'Linha do inventário', empresa: 'A empresa',
   aposentadoria: 'Aposentadoria', gap: 'O que falta', plano: 'O plano completo',
-  investimento: 'O investimento', 'se-acontecer': 'Se acontecer amanhã',
+  investimento: 'O investimento', niveis: 'Três formas de fazer',
+  'se-acontecer': 'Se acontecer amanhã',
   'investir-ou-proteger': 'Investir ou proteger', cruzamento: 'O cruzamento',
   dimensoes: 'Cada coisa serve para uma coisa', 'custo-espera': 'O custo da espera',
   passos: 'Próximos passos', fechamento: 'Fechamento',
@@ -496,6 +501,16 @@ export default function Proposta({ publica = false }) {
     premioTemporarioMensal: plano.premio_temporario_mensal,
   })
   const anoUm = comp?.serie?.[0] ?? null
+
+  // ── As três formas de fazer isso ──────────────────────────────────────────
+  // O capítulo que muda a pergunta do fim da reunião de "aceita?" para "qual
+  // dos três?". Só entra ANCORADO na cotação de verdade: sem prêmio cotado,
+  // os valores seriam estimativa por idade, e estimativa impressa ao lado do
+  // nome do cliente é lida como preço. A proporção entre os níveis vem do
+  // estimador; o valor absoluto, da seguradora.
+  const escada = ancorarNaCotacao(
+    montarNiveis(e, { perfil: diagnosticar(e, { cliente })?.perfil }), e,
+  )
 
   // Coberturas agrupadas — o quadro da apólice, na ordem do catálogo
   const grupos = GRUPOS_COBERTURA
@@ -1295,6 +1310,84 @@ export default function Proposta({ publica = false }) {
           )}
           <p className="mt-6 max-w-lg text-center text-sm text-slate-400">
             Valores de referência cotados nas seguradoras para o plano completo — sujeitos à análise da proposta.
+          </p>
+        </Slide>
+      )}
+
+      {/* 12b · AS TRÊS FORMAS — a escolha que substitui o sim-ou-não.
+          Só existe com cotação na mão: os valores dos outros níveis são
+          proporcionais ao que a seguradora cotou, e isso está escrito no
+          rodapé do slide. Um preço estimado impresso ao lado do nome do
+          cliente seria lido como preço — e um preço que a apólice não cumpre
+          é a pior forma de começar uma relação de vinte anos. */}
+      {escada && escada.niveis.length >= 2 && (
+        <Slide nome="niveis" className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>Como começar</p>
+          <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            {escada.niveis.length === 2 ? 'Duas formas' : 'Três formas'} de fazer isso
+          </h2>
+          <p className="mt-4 max-w-2xl text-center text-slate-500">
+            Não é uma escolha entre proteger e não proteger. É entre começar por tudo ou começar
+            pelo que mais pesa — e subir depois, quando fizer sentido.
+          </p>
+
+          <Revelar className={`mt-10 grid w-full gap-5 ${
+            escada.niveis.length === 2 ? 'max-w-3xl md:grid-cols-2' : 'max-w-6xl lg:grid-cols-3'}`}>
+            {escada.niveis.map((n) => {
+              const defendido = n.id === escada.recomendadoId
+              return (
+                <div key={n.id}
+                  className={`flex flex-col rounded-3xl border p-6 shadow-card ${defendido
+                    ? 'border-laranja-300 bg-white ring-2 ring-laranja-300'
+                    : 'border-slate-200/70 bg-white'}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-lg font-semibold text-slate-900">{n.rotulo}</p>
+                    {defendido && (
+                      <span className="rounded-full bg-laranja-600 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+                        recomendado
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1.5 text-sm leading-relaxed text-slate-500">{n.tese}</p>
+
+                  <p className="mt-5 font-display text-4xl font-semibold tabular text-slate-900">
+                    {brl(n.mensal)}<span className="text-base font-medium text-slate-400">/mês</span>
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-laranja-700">
+                    {brlCompacto(n.capital)} de proteção
+                  </p>
+
+                  <div className="mt-5 space-y-1.5 border-t border-slate-200/70 pt-4">
+                    {n.itens.map((i) => (
+                      <p key={i.id} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="flex min-w-0 items-center gap-2 text-slate-700">
+                          <Check size={14} className="shrink-0 text-emerald-600" />
+                          <span className="truncate">{i.rotulo}</span>
+                        </span>
+                        <span className="shrink-0 tabular text-slate-400">{brlCompacto(i.valor)}</span>
+                      </p>
+                    ))}
+                  </div>
+
+                  {n.descoberto.length > 0 && (
+                    <div className="mt-4 rounded-2xl bg-slate-50 p-3.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Fica de fora
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                        {n.descoberto.map((x) => x.rotulo).join(' · ')}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </Revelar>
+
+          <p className="mt-8 max-w-2xl text-center text-sm text-slate-400">
+            O plano {escada.niveis.find((n) => n.id === escada.recomendadoId)?.rotulo.toLowerCase()} está
+            cotado nas seguradoras. Os demais são proporcionais a ele, para dimensionar a escolha —
+            a cotação final de cada desenho sai em minutos.
           </p>
         </Slide>
       )}
