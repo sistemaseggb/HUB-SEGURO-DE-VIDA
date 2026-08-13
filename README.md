@@ -43,8 +43,7 @@ As três situações são diferentes, e por isso os caminhos também são:
 - **Paleta de comandos** — um campo só que acha **cliente, tela e ação**, pelo
   nome que a consultora usa e não pelo nome técnico: "funil" leva ao Pipeline,
   "whatsapp" às Mensagens, "planilha" ao Importar, "dps" à aba Formulário do
-  cliente aberto. Sem digitar nada, ela já abre útil, com os últimos clientes
-  visitados. Setas e Enter navegam tudo — o mouse é opcional.
+  cliente aberto. Setas e Enter navegam tudo — o mouse é opcional.
 - **A aba do cliente mora na URL** (`/clientes/<id>/apolices`). F5 no meio da
   reunião mantém o lugar, o botão voltar devolve a aba anterior e o link colado
   no WhatsApp abre exatamente onde ela estava.
@@ -57,6 +56,18 @@ As três situações são diferentes, e por isso os caminhos também são:
   `g r` Relatórios, `g i` Importar, `g s` Cadastros, `g g` Guia. Nenhum deles
   dispara enquanto se digita num campo — pode escrever à vontade.
 - **Teclado**: o primeiro `Tab` oferece pular o menu e ir direto ao conteúdo.
+- **A paleta abre com o trabalho do dia, não com o histórico.** Sem digitar
+  nada, o primeiro grupo é **"Precisam de você hoje"**: os cinco clientes de
+  maior score, cada um com a próxima ação escrita ao lado. O banco já pontuava
+  isso (`vw_prioridades_classificadas`) e o resultado só existia no Dashboard,
+  atrás de uma navegação. Quem ela visitou por último é história; quem está
+  esperando é trabalho — e agora `Ctrl K` responde "por onde eu começo?".
+- **A busca alcança o INTERIOR do planejamento.** A aba mais longa do sistema
+  tem quase cem campos, e achar a aba deixou de ser o problema: o problema é
+  achar o bloco certo rolando com o polegar no meio da reunião. Digitar
+  "benefici" com um cliente aberto leva direto a
+  `/clientes/<id>/planejamento#sec-beneficiarios` — a âncora mora na URL, o
+  botão voltar funciona e o link colado no WhatsApp abre no bloco exato.
 
 Tudo isso nasce de um arquivo só, [`src/lib/navegacao.js`](src/lib/navegacao.js):
 menu, barra do celular, paleta e ajuda de atalhos leem do mesmo mapa, então uma
@@ -153,6 +164,75 @@ R$ 2,85 mi — e você recontrata pelo preço da idade que tiver na hora"*. O
 custeio manda sobre a origem: uma apólice "individual" paga pela empresa é
 benefício de emprego com outro nome.
 
+## 🩺 "Isso sai, e em quanto tempo?"
+
+A pergunta que vem depois do aperto de mão, e que mata venda **já ganha**. A
+consultora dizia "uns dez dias", o caso ia para exame e perfil financeiro,
+voltava em 45 dias com um agravo que ninguém avisou, e o cliente — que já tinha
+decidido comprar — desistia. Não porque o produto piorou: porque a promessa
+quebrou. Cliente perdoa preço; não perdoa surpresa.
+
+[`src/lib/subscricao.js`](src/lib/subscricao.js) é o que um subscritor
+experiente sabe de cabeça, escrito para ela saber **antes de prometer**:
+
+- **o que a seguradora vai exigir** neste capital e nesta idade — de DPS simples
+  a exames, perfil financeiro e resseguro facultativo;
+- **quanto tempo isso leva**, com o prazo crescendo por capital *e* por idade
+  (acima dos 60 a análise é mais criteriosa mesmo quando o exame já era exigido);
+- **o que encarece** (profissão, fumante, IMC, atividades de risco) — com o
+  aviso de que seguradora soma pontos de mortalidade, não multiplica agravos;
+- **o que pode NÃO estar coberto**, que é coisa diferente e muito pior: agravo é
+  preço, restrição é o cliente se achar coberto justamente na hora de maior risco;
+- **o que separar ainda na reunião** — o processo quase nunca trava por decisão
+  do cliente, trava por um PDF que ele tinha no celular no dia em que disse sim.
+
+## 🗣️ O que ele vai dizer, e o que responder
+
+A transcrição já detectava objeção **depois** da reunião, com a resposta certa
+em abstrato. [`src/lib/objecoes.js`](src/lib/objecoes.js) faz as duas coisas que
+faltavam.
+
+**Prever.** O estudo já sabia quais objeções este cliente vai levantar e nunca
+disse. Prêmio em 14% da renda? "Está caro" vai aparecer — e é dada como *certa*,
+não como possibilidade. Vida em grupo na carteira? "Já tenho seguro pela
+empresa". Jovem sem dependentes? "Não é prioridade agora". A probabilidade sai
+de condições explícitas sobre os números do estudo, não de um ranking fixo.
+
+**Responder com número.** "Sai por R$ 4,20 por dia" derruba "está caro" de um
+jeito que "mas é a segurança da sua família" nunca derrubou. Todo argumento
+carrega números do estudo, e a objeção some quando o número que a sustenta não
+existe — meia resposta é dita com a mesma confiança da inteira.
+
+E cada uma traz o **`naoDiga`**: a parte que nenhum material de treinamento
+escreve e que mais decide a conversa. A resposta errada para "vou pensar" não é
+uma resposta fraca — é uma que fecha a porta. Os `id` batem com os da
+transcrição, então o que foi **detectado na gravação** encontra a resposta já
+calculada para aquele cliente e vira munição de follow-up.
+
+## ⚖️ Quem recebe o capital
+
+A proposta inteira se apoia em *"o seguro não passa por inventário, chega em
+dias"*. É verdade e tem base legal — e o sistema nunca guardou uma linha sobre a
+**indicação de beneficiário**, que é exatamente onde a promessa se cumpre ou se
+quebra.
+
+| O que a lei diz | Referência |
+|---|---|
+| O capital segurado **não é herança**: fora do inventário, fora do ITCMD, fora do alcance dos credores | CC, art. 794 |
+| Sem indicação válida, metade vai ao cônjuge e o resto aos herdeiros legais | CC, art. 792 |
+| Companheiro(a) pode ser beneficiário, nas condições do artigo | CC, art. 793 |
+| O beneficiário **não paga IR** sobre o capital recebido | Lei 7.713/88, art. 6º, XIII |
+
+E o alerta que justifica o arquivo: **beneficiário menor**. A seguradora paga,
+mas o dinheiro fica sob representação legal e o uso costuma depender de
+autorização judicial — meses de espera pelo capital contratado precisamente para
+não haver espera. Acontece com o cliente que fez tudo certo: o pai que indicou
+os filhos. A correção leva dez segundos na proposta de contratação, e o sistema
+passa a cobrá-la antes da assinatura em vez de a família descobrir depois.
+[`src/lib/beneficiarios.js`](src/lib/beneficiarios.js) confere ainda a soma dos
+percentuais, a data de nascimento que falta e o cônjuge ausente da lista — que
+pode ser deliberado, e por isso é pergunta e não acusação.
+
 ## 🧩 Módulos
 
 - **Dashboard** — KPIs do mês, comissão da Natália, gráfico de evolução, divisão
@@ -222,8 +302,9 @@ npm run build && npm test        # lint + motor + ponta a ponta
 ```
 
 Ou em separado: os que não precisam de navegador — `npm run test:motor`,
-`npm run test:planejamento`, `npm run test:premio`, `npm run test:transcricao`,
-`npm run test:comparador`, `npm run test:apresentacao` — e `npm run test:e2e`.
+`npm run test:planejamento`, `npm run test:premio`, `npm run test:conhecimento`,
+`npm run test:transcricao`, `npm run test:comparador`, `npm run test:apresentacao`
+— e `npm run test:e2e`.
 A suíte de navegador sobe o servidor de preview sozinha
 (e reaproveita um que já esteja rodando), então basta um terminal.
 
@@ -245,7 +326,7 @@ gente — o CLT de 28 anos sem filhos, a médica autônoma com três crianças, 
 empresário com sócio e aval no banco, a viúva resolvendo o inventário do
 marido, o casal sem filhos, quem só quer cobrir o financiamento por 20 anos.
 Nove públicos, quinze arquétipos, com lacunas de preenchimento como acontece
-na vida real. Sobre cada estudo passam **31 regras de revisão**, cada uma
+na vida real. Sobre cada estudo passam **37 regras de revisão**, cada uma
 sendo algo que um consultor sênior apontaria: capital que nenhuma seguradora
 emite, prêmio que não cabe no bolso do cliente, proteção vendida para quem não
 precisa dela, o mesmo dinheiro contado duas vezes em dois lugares do estudo,
@@ -272,6 +353,19 @@ total. As regras **R25–R31** levam as mesmas cobranças para os 10.000
 planejamentos da auditoria, agora gerados também com apólices existentes
 misturadas (vida em grupo, prestamista, individual antiga), porque código novo
 que não passa pelo teste que mais protege o sistema é código não testado.
+
+**`test:conhecimento`** — as três camadas que produzem **texto lido em voz alta**
+na reunião, e afirmações que o cliente pode conferir com o advogado dele. O que
+se cobra aqui é diferente do que se cobra de um motor de cálculo: que a
+subscrição nunca seja otimista por engano (prazo que só cresce com capital e
+idade, restrição sempre dita, agravo nunca escondido); que nenhuma objeção saia
+pela metade, porque meia resposta é dita com a mesma confiança da inteira; e que
+**beneficiário menor SEMPRE dispare o alerta**, que é a promessa que não pode
+falhar nunca. São 65 conferências mais um fuzz de 10.000 estudos, e as regras
+**R32–R36** levam as mesmas cobranças para os 10.000 planejamentos da auditoria.
+A primeira execução reprovou numa: aos 64 anos o prazo saía igual ao de um
+cliente de 30 sempre que o capital já exigia exame — e o modelo estava errado,
+não o teste.
 
 **`test:transcricao`** — o fuzz prova que a análise não explode; isso não prova
 que ela extrai CERTO (um parser que devolve lista vazia passa em qualquer teste
@@ -370,6 +464,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 22. [`supabase/migrations/022_comparador.sql`](supabase/migrations/022_comparador.sql)
 23. [`supabase/migrations/023_apresentacao.sql`](supabase/migrations/023_apresentacao.sql)
 24. [`supabase/migrations/024_estado_e_prazo_divida.sql`](supabase/migrations/024_estado_e_prazo_divida.sql)
+25. [`supabase/migrations/025_subscricao_e_beneficiarios.sql`](supabase/migrations/025_subscricao_e_beneficiarios.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -433,6 +528,9 @@ npm run dev
 │   │   ├── diagnostico.js        # A leitura do estudo: perfil e recomendações
 │   │   ├── premio.js             # Faixa de prêmio por cobertura (estimativa)
 │   │   ├── niveis.js             # Essencial/Recomendado/Completo + o que cabe
+│   │   ├── subscricao.js         # "Isso sai?": exigências, prazo, agravo e restrições
+│   │   ├── objecoes.js           # O que ele vai dizer, respondido com os números dele
+│   │   ├── beneficiarios.js      # Quem recebe — e o que trava (CC 792/793/794)
 │   │   ├── comparador.js         # Seguro × VGBL/PGBL, ano a ano
 │   │   ├── transcricao.js        # Análise da gravação da reunião
 │   │   ├── apresentacao.js       # Traço da caneta, borracha e simulação

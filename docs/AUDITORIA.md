@@ -32,7 +32,7 @@ vida real o estudo raramente chega completo.
 | Aposentadoria e acúmulo | ~550 |
 | PF + PJ | ~550 |
 
-Sobre cada estudo passam **31 regras de revisão**. Cada regra é uma coisa que um
+Sobre cada estudo passam **37 regras de revisão**. Cada regra é uma coisa que um
 consultor sênior olharia e diria "isso está errado" ou "isso você deixou
 passar". Os tetos de mercado ficam **dentro do arquivo de auditoria**, e não
 importados do motor: auditor que usa as constantes do auditado não audita nada,
@@ -204,6 +204,55 @@ De quebra, a R29 expôs um erro na própria régua: medir a taxa dividindo o
 prêmio total pelo capital total mistura diária com capital de indenização
 única, e o denominador nem inclui as diárias. A regra passou a medir item a
 item, com régua separada para as diárias.
+
+## Terceira rodada: R32–R36, as camadas de conhecimento
+
+As cinco regras novas cobrem o que o sistema passou a AFIRMAR, e não apenas a
+calcular: prazo de emissão, restrição de cobertura, resposta a objeção e
+indicação de beneficiário. O gerador ganhou atividades de risco, IMC e
+indicações de beneficiário — em 45% delas com pelo menos um menor, que é o caso
+que a camada existe para pegar.
+
+| Regra | O que cobra |
+|---|---|
+| 🔴 R32 | Prazo de emissão sem sustentação: faixa invertida, prazo zero, ou sem a frase pronta para dizer ao cliente |
+| 🔴 R33 | Atividade que exclui a cobertura de acidente sem virar **restrição escrita** |
+| 🔴 R34 | Objeção respondida pela metade (sem argumento, sem o "não diga" ou sem a pergunta que faz avançar) |
+| 🟡 R35 | Objeção óbvia não prevista — vida em grupo na carteira e "já tenho seguro" fora das esperadas |
+| 🔴 R36 | Beneficiário menor sem alerta grave, ou soma de percentuais fora de 100% sem aviso |
+
+**A R32 reprovou no teste dedicado antes mesmo de chegar à auditoria**, e o
+erro era do modelo: um cliente de 64 anos recebia o mesmo prazo de um de 30
+sempre que o capital já exigia exame por conta própria. A primeira versão só
+somava dias quando a idade CRIAVA a exigência. Está errado — acima dos 60 a
+análise é mais criteriosa independentemente do capital, a bateria ganha itens
+cardiológicos e o subscritor pede segunda opinião com mais frequência. Agora a
+idade soma prazo sempre, e é a exigência que muda de texto.
+
+A distinção que a R33 protege merece registro, porque é a mais fácil de perder
+de vista na pressa: **agravo é preço, restrição é cobertura**. Um caso com
+agravo custa mais e paga tudo. Um caso com restrição custa o combinado e não
+paga justamente no cenário de maior risco — e o cliente só descobre no sinistro,
+quando ninguém pode mais resolver. Por isso as duas saem em blocos separados na
+tela, com cores diferentes, e só uma delas é vermelha.
+
+## R37: a que veio de olhar a tela, não o código
+
+As trinta e seis primeiras nasceram lendo estudo. A R37 nasceu de **abrir o app
+e olhar** — e é a que mais mostra por que rodar não é o mesmo que testar.
+
+Os dois lugares em que o sistema oferece corrigir um número com um clique
+formatavam tudo como dinheiro, porque quase todo campo do planejamento é
+dinheiro. O resultado: a recomendação *"Estender a proteção para 18 anos"*
+vinha com o botão **"Aplicar R$ 18"**, e a conferência dizia *"corrigir para
+R$ 18"*. Nenhum teste reclamou — o valor estava certo, o campo estava certo, a
+ação estava certa. Só a leitura estava errada, e quem bate o olho entende que o
+estudo sugere dezoito reais de alguma coisa.
+
+A correção mora no motor (`valorDoCampo`), e não na tela, porque saber que
+`anos_protecao` é contagem e `capital_sugerido` é dinheiro é conhecimento do
+domínio. Quem acrescentar um campo de contagem novo escreve uma linha e as duas
+telas acertam sozinhas.
 
 ## Como estender
 

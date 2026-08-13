@@ -107,7 +107,8 @@ export const ABAS_CLIENTE = [
   {
     slug: 'planejamento', nome: 'Planejamento', icone: ChartPie, grupo: 'Reunião',
     descricao: 'O estudo: renda, patrimônio, coberturas e o prêmio',
-    termos: ['estudo', 'capital', 'coberturas', 'calculo', 'numeros', 'apolice sugerida'],
+    termos: ['estudo', 'capital', 'coberturas', 'calculo', 'numeros', 'apolice sugerida',
+      'preco', 'premio', 'niveis', 'objecoes', 'beneficiarios', 'subscricao'],
   },
   {
     slug: 'comparador', nome: 'Comparador', icone: Scale, grupo: 'Reunião',
@@ -164,6 +165,54 @@ export const ABAS_CLIENTE = [
     descricao: 'A linha do tempo do funil, gravada automaticamente',
     termos: ['linha do tempo', 'mudancas', 'etapas', 'auditoria'],
   },
+]
+
+// ─── Seções dentro do Planejamento ───────────────────────────────────────────
+// A aba de planejamento tem quase cem campos e virou a tela mais longa do
+// sistema. Achá-la não é mais o problema: o problema é achar o BLOCO certo
+// dentro dela no meio de uma reunião, rolando com o polegar.
+//
+// Cada seção aqui é um destino de verdade — a paleta oferece, o link leva
+// direto (`/clientes/<id>/planejamento#sec-beneficiarios`) e o navegador
+// devolve com o botão voltar. A âncora é a mesma que os atalhos do roteiro já
+// usavam no topo do formulário; ela só passou a ter nome e endereço.
+export const SECOES_PLANEJAMENTO = [
+  { id: 'sec-tipo', rotulo: 'Tipo e focos',
+    descricao: 'Que planejamento estamos construindo e o que ele veio resolver',
+    termos: ['foco', 'pf', 'pj', 'empresarial', 'objetivo do estudo'] },
+  { id: 'sec-familia', rotulo: 'Família e perfil',
+    descricao: 'Profissão, estado civil, regime de bens e filhos',
+    termos: ['filhos', 'conjuge', 'dependentes', 'casado', 'regime', 'profissao'] },
+  { id: 'sec-financeira', rotulo: 'Vida financeira',
+    descricao: 'Renda, custo de vida, dívidas e o que ele já tem de seguro',
+    termos: ['renda', 'custo de vida', 'dividas', 'cobertura atual', 'seguro que ja tem'] },
+  { id: 'sec-patrimonio', rotulo: 'Patrimônio',
+    descricao: 'O raio-X por classe de bem e a previdência',
+    termos: ['imoveis', 'investimentos', 'previdencia', 'vgbl', 'pgbl', 'bens'] },
+  { id: 'sec-empresa', rotulo: 'Empresa',
+    descricao: 'Valuation, sócios, homem-chave e dívidas avalizadas',
+    termos: ['pj', 'socios', 'valuation', 'aval', 'homem chave', 'buy sell'] },
+  { id: 'sec-sucessao', rotulo: 'Sucessão',
+    descricao: 'ITCMD, custas, holding e o rito do inventário',
+    termos: ['itcmd', 'inventario', 'holding', 'testamento', 'imposto', 'uf'] },
+  { id: 'sec-coberturas', rotulo: 'Coberturas da apólice',
+    descricao: 'Cada cobertura com o valor sugerido e o porquê',
+    termos: ['morte', 'invalidez', 'doencas graves', 'dit', 'dih', 'funeral', 'capital'] },
+  { id: 'sec-beneficiarios', rotulo: 'Beneficiários',
+    descricao: 'Quem recebe o capital — e o que trava no caminho',
+    termos: ['quem recebe', 'beneficiario', 'menor', 'alvara', 'rateio', 'esposa', 'filhos'] },
+  { id: 'sec-subscricao', rotulo: 'Subscrição',
+    descricao: 'O que a seguradora vai exigir, o prazo e o que pode ter agravo',
+    termos: ['exame', 'dps', 'prazo', 'agravo', 'imc', 'risco', 'aceitacao', 'emissao'] },
+  { id: 'sec-aposentadoria', rotulo: 'Aposentadoria',
+    descricao: 'A meta, o que a previdência entrega e a lacuna',
+    termos: ['acumulo', 'renda futura', 'aposentar', 'reserva'] },
+  { id: 'sec-decisao', rotulo: 'Decisão',
+    descricao: 'Quem decide a contratação e até quando',
+    termos: ['quem decide', 'prazo', 'esposa', 'socio', 'follow up'] },
+  { id: 'sec-investimento', rotulo: 'Investimento',
+    descricao: 'O prêmio mensal, o anual e a forma de pagamento',
+    termos: ['premio', 'preco', 'mensal', 'anual', 'quanto custa', 'cotacao', 'desconto'] },
 ]
 
 export const abaPorSlug = (slug) =>

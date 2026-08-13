@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   Search, User, UserCog, CornerDownLeft, ArrowUp, ArrowDown, Command,
-  Presentation, Plus, LogOut, Clock3,
+  Presentation, Plus, LogOut, Clock3, Flame, ChartPie,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { etapaLabel } from '../lib/constants'
-import { DESTINOS, ABAS_CLIENTE, pontuar } from '../lib/navegacao'
+import { DESTINOS, ABAS_CLIENTE, SECOES_PLANEJAMENTO, pontuar } from '../lib/navegacao'
 import { lerRecentes } from '../lib/recentes'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,6 +69,26 @@ export default function PaletaComandos({ aberta, onFechar }) {
 
   const recentes = useMemo(() => (aberta ? lerRecentes() : []), [aberta])
 
+  // ── A fila de quem precisa dela hoje ──────────────────────────────────────
+  // A paleta abria com os últimos clientes VISITADOS — útil para retomar, inútil
+  // para começar. Quem ela visitou por último é história; quem está esperando é
+  // trabalho. O banco já pontua isso (vw_prioridades_classificadas) e o
+  // resultado só existia no Dashboard, atrás de uma navegação.
+  //
+  // Agora Ctrl+K sem digitar nada responde "por onde eu começo?" — com a
+  // próxima ação de cada um escrita ao lado, para ela não precisar abrir o
+  // cliente só para lembrar o que ficou pendente.
+  const [fila, setFila] = useState([])
+  useEffect(() => {
+    if (!aberta) return
+    let vivo = true
+    supabase.from('vw_prioridades_classificadas')
+      .select('id, nome, codigo, proxima_acao, temperatura, score')
+      .limit(5)
+      .then(({ data }) => { if (vivo) setFila(data ?? []) }, () => {})
+    return () => { vivo = false }
+  }, [aberta])
+
   // ── A lista, montada por grupos e já ordenada ──
   const grupos = useMemo(() => {
     const q = termo.trim()
@@ -88,7 +108,22 @@ export default function PaletaComandos({ aberta, onFechar }) {
       })
     }
 
-    // Sem nada digitado, a paleta abre útil: os últimos clientes visitados.
+    // Sem nada digitado, a primeira coisa é o trabalho do dia — não o histórico.
+    if (!q && fila.length > 0) {
+      out.push({
+        titulo: 'Precisam de você hoje',
+        itens: fila.map((c) => ({
+          chaveItem: `fila-${c.id}`,
+          icone: Flame,
+          rotulo: c.nome,
+          detalhe: `${c.proxima_acao}${c.codigo ? ` · ${c.codigo}` : ''}`,
+          atalho: c.temperatura === 'quente' ? 'QUENTE' : undefined,
+          ir: () => navigate(`/clientes/${c.id}`),
+        })),
+      })
+    }
+
+    // Depois, os últimos clientes visitados: serve para retomar de onde parou.
     if (!q && recentes.length > 0) {
       out.push({
         titulo: 'Vistos recentemente',
@@ -139,6 +174,27 @@ export default function PaletaComandos({ aberta, onFechar }) {
       }
     }
 
+    // Seções DENTRO do planejamento do cliente aberto. É o pulo mais frequente
+    // do meio da reunião — "cadê os beneficiários?" — e até aqui só existia
+    // rolando a tela mais longa do sistema com o polegar.
+    if (clienteAberto && q) {
+      const secoes = SECOES_PLANEJAMENTO
+        .map((x) => ({ x, p: pontuar(q, x) })).filter((r) => r.p > 0)
+        .sort((a, b) => b.p - a.p).slice(0, 5).map((r) => r.x)
+      if (secoes.length > 0) {
+        out.push({
+          titulo: 'No planejamento deste cliente',
+          itens: secoes.map((x) => ({
+            chaveItem: `sec-${x.id}`,
+            icone: ChartPie,
+            rotulo: x.rotulo,
+            detalhe: x.descricao,
+            ir: () => navigate(`/clientes/${clienteAberto}/planejamento#${x.id}`),
+          })),
+        })
+      }
+    }
+
     const acoes = [
       {
         chaveItem: 'acao-novo-cliente', icone: Plus, rotulo: 'Cadastrar novo cliente',
@@ -162,7 +218,7 @@ export default function PaletaComandos({ aberta, onFechar }) {
     if (acoes.length > 0) out.push({ titulo: 'Ações', itens: acoes })
 
     return out
-  }, [termo, clientes, recentes, clienteAberto, navigate])
+  }, [termo, clientes, recentes, fila, clienteAberto, navigate])
 
   const planos = useMemo(() => grupos.flatMap((g) => g.itens), [grupos])
 

@@ -529,6 +529,45 @@ export function porqueCobertura(id, e) {
   }
 }
 
+// ─── NEM TODO CAMPO É DINHEIRO ───────────────────────────────────────────────
+// A maior parte do planejamento é valor em reais, e as telas passaram a
+// formatar tudo como moeda por padrão. O resultado aparecia nos dois lugares em
+// que o sistema oferece corrigir um número com um clique: "Estender a proteção
+// para 18 anos" virava o botão **"Aplicar R$ 18"**, e a conferência dizia
+// "corrigir para R$ 18". Um erro pequeno na tela e grande na leitura — quem bate
+// o olho entende que o estudo está sugerindo dezoito reais de alguma coisa.
+//
+// A lista de exceções mora aqui, junto do catálogo de campos, porque é
+// conhecimento do domínio e não de layout: quem adicionar um campo de contagem
+// novo acrescenta uma linha e as duas telas acertam sozinhas.
+const CAMPOS_CONTAGEM = {
+  anos_protecao: (v) => `${v} ano${v === 1 ? '' : 's'}`,
+  dividas_prazo_anos: (v) => `${v} ano${v === 1 ? '' : 's'}`,
+  idade_aposentadoria: (v) => `${v} anos`,
+  pj_num_socios: (v) => `${v} sócio${v === 1 ? '' : 's'}`,
+  num_dependentes: (v) => `${v} dependente${v === 1 ? '' : 's'}`,
+  dit_dias: (v) => `${v} diárias`,
+  dih_dias: (v) => `${v} diárias`,
+  dit_franquia_dias: (v) => `${v} dias de franquia`,
+  pj_participacao_pct: (v) => `${String(v).replace('.', ',')}%`,
+  itcmd_pct: (v) => `${String(v).replace('.', ',')}%`,
+  custas_pct: (v) => `${String(v).replace('.', ',')}%`,
+  altura_cm: (v) => `${v} cm`,
+  peso_kg: (v) => `${String(v).replace('.', ',')} kg`,
+}
+
+// Como escrever o valor sugerido para um campo do planejamento. Dinheiro é o
+// padrão porque é o caso comum; a exceção é declarada acima.
+export function valorDoCampo(campo, valor) {
+  const v = Number(valor)
+  if (!Number.isFinite(v)) return '—'
+  const contagem = CAMPOS_CONTAGEM[campo]
+  if (contagem) return contagem(v)
+  return v.toLocaleString('pt-BR', {
+    style: 'currency', currency: 'BRL', maximumFractionDigits: 0,
+  })
+}
+
 // ─── A CARTEIRA QUE ELE JÁ TEM ───────────────────────────────────────────────
 // "Já tenho seguro pela empresa" é a objeção mais comum da categoria, e até
 // aqui o estudo concordava com ela: `cobertura_atual` era um número só, abatido

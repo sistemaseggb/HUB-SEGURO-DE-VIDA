@@ -53,6 +53,13 @@ jobs:
       - name: Preço, níveis do plano e carteira existente
         run: npm run test:premio
 
+      # As camadas que produzem TEXTO dito em voz alta na reunião, e afirmações
+      # que o cliente pode conferir com o advogado dele. Duas promessas aqui não
+      # podem falhar nunca: restrição de cobertura sempre dita, e beneficiário
+      # menor sempre avisado.
+      - name: Subscrição, objeções e beneficiários
+        run: npm run test:conhecimento
+
       - name: Análise de transcrição, comparador e apresentação
         run: |
           npm run test:transcricao

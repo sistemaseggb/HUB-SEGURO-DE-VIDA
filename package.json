@@ -10,10 +10,11 @@
     "preview": "vite preview",
     "test:e2e": "mkdir -p e2e-shots && node scripts/e2e-demo.mjs && node scripts/e2e-erros.mjs && node scripts/e2e-navegacao.mjs && node scripts/e2e-planejamento.mjs && node scripts/e2e-apresentacao.mjs && node scripts/e2e-varredura.mjs",
     "test:motor": "node scripts/teste-motor.mjs",
-    "test": "npm run lint && npm run test:motor && npm run test:planejamento && npm run test:premio && npm run test:transcricao && npm run test:comparador && npm run test:apresentacao && npm run test:e2e",
+    "test": "npm run lint && npm run test:motor && npm run test:planejamento && npm run test:premio && npm run test:conhecimento && npm run test:transcricao && npm run test:comparador && npm run test:apresentacao && npm run test:e2e",
     "test:planejamento": "node scripts/auditoria-planejamento.mjs --travar",
     "auditoria": "node scripts/auditoria-planejamento.mjs",
     "test:premio": "node scripts/teste-premio.mjs",
+    "test:conhecimento": "node scripts/teste-conhecimento.mjs",
     "test:transcricao": "node scripts/teste-transcricao.mjs",
     "test:comparador": "node scripts/teste-comparador.mjs",
     "test:apresentacao": "node scripts/teste-apresentacao.mjs"
