@@ -102,7 +102,8 @@ npm run build && npm test        # lint + motor + ponta a ponta
 Ou em separado: os que não precisam de navegador — `npm run test:motor`,
 `npm run test:transcricao`, `npm run test:comparador`,
 `npm run test:apresentacao`, `npm run test:formato`, `npm run test:vigia`,
-`npm run test:propostas` — e `npm run test:e2e`. A suíte de navegador sobe o servidor de preview sozinha
+`npm run test:propostas`, `npm run test:publica` — e `npm run test:e2e`
+(que inclui a varredura de acessibilidade em todas as rotas). A suíte de navegador sobe o servidor de preview sozinha
 (e reaproveita um que já esteja rodando), então basta um terminal.
 
 **`test:motor`** — `calcularEstudo()` é a única fonte dos números do
@@ -204,6 +205,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 22. [`supabase/migrations/022_comparador.sql`](supabase/migrations/022_comparador.sql)
 23. [`supabase/migrations/023_apresentacao.sql`](supabase/migrations/023_apresentacao.sql)
 24. [`supabase/migrations/024_propostas_em_analise.sql`](supabase/migrations/024_propostas_em_analise.sql)
+25. [`supabase/migrations/025_proposta_publica_sem_notas.sql`](supabase/migrations/025_proposta_publica_sem_notas.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -400,6 +402,28 @@ npm run dev
       - O sistema **não dispara cobrança sozinho**: mostra o que está parado e
         há quantos dias. Uma mensagem automática para quem está esperando o
         resultado de um exame seria a pior coisa que ele poderia mandar.
+- [x] **O cliente não lê as anotações da consultora** (migração 025) — a
+      proposta pública abre sem login, e a RPC devolvia o planejamento inteiro.
+      Junto iam as **notas da reunião**, o **roteiro** com as observações de
+      cada bloco, a leitura sobre **quem decide** e o **prazo de decisão** — a
+      urgência do cliente escrita nas palavras dela, ou seja, uma posição de
+      negociação entregue para o outro lado da mesa. A tela nunca mostrou nada
+      disso, mas bastava abrir o inspetor. Agora esses campos não saem, e o
+      teste `teste-proposta-publica.mjs` **fixa o conjunto exato de chaves**
+      entregues: qualquer coluna nova quebra o teste e obriga uma decisão
+      consciente sobre de que lado ela fica.
+- [x] **Contraste de leitura em todo o sistema** — o cinza secundário
+      (`slate-400`) carregava metade do texto de apoio a **2,4:1**, quase metade
+      do mínimo da WCAG AA. Não é preciosismo: a proposta é apresentada com a
+      tela compartilhada no Meet, muitas vezes projetada, e lida por um cliente
+      de 45 a 60 anos — texto que some é argumento que não chega. Foram
+      refeitos os dois tons de cinza, os botões coloridos com texto branco
+      (emerald-600 e laranja-500 davam 3,8:1 e 3,6:1), o texto semântico
+      (vermelho, âmbar, verde) e os rótulos dentro das barras dos gráficos, que
+      passaram para **fora** da barra — nenhuma cor de texto servia às três
+      séries ao mesmo tempo. Tudo medido por `e2e-acessibilidade.mjs`, que
+      varre as 10 rotas, as abas do Cliente 360 e a proposta cobrando contraste,
+      rótulo em cada campo, nome em cada botão e foco visível no teclado.
 - [x] **Nenhuma falha de banco passa despercebida** — as 161 consultas do
       sistema quase todas ignoravam o `error` e mostravam **lista vazia** quando
       a consulta falhava. Num CRM de seguros isso é abrir o cliente na frente

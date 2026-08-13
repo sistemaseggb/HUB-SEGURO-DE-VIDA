@@ -59,12 +59,32 @@ export function falhaEsperada(erro) {
   return /does not exist|no rows|not found/i.test(erro.message ?? '')
 }
 
+// Uma falha de banco tem três causas com CONSERTOS DIFERENTES, e mandar a
+// mensagem errada faz a pessoa caçar o problema errado. Dizer "verifique a
+// conexão" para quem só precisa entrar de novo é pior do que não dizer nada.
+export function tipoDaFalha(erro) {
+  const codigo = String(erro?.code ?? '')
+  const msg = String(erro?.message ?? '')
+  if (codigo === 'PGRST301' || /jwt|token|expired|not authenticated/i.test(msg)) return 'sessao'
+  if (codigo === '42501' || /permission denied|row-level security|violates row/i.test(msg)) return 'permissao'
+  if (/failed to fetch|networkerror|load failed|timeout|aborted/i.test(msg)) return 'rede'
+  return 'banco'
+}
+
+export const MENSAGEM_FALHA = {
+  sessao: 'Sua sessão expirou. Entre de novo para continuar — o que estava na tela pode estar desatualizado.',
+  permissao: 'Sem permissão para ler estes dados. A tela pode estar mostrando menos do que existe.',
+  rede: 'Sem conexão com o servidor. O que está na tela pode estar incompleto.',
+  banco: 'O servidor recusou a consulta. O que está na tela pode estar incompleto.',
+}
+
 function avisar(contexto, erro) {
   if (falhaEsperada(erro)) return
   // O console guarda o detalhe técnico; a tela recebe só o que dá para agir.
   console.error(`[Hub] falha em ${contexto}:`, erro)
+  const tipo = tipoDaFalha(erro)
   for (const fn of ouvintes) {
-    try { fn({ contexto, erro }) } catch { /* um ouvinte torto não derruba o resto */ }
+    try { fn({ contexto, erro, tipo, mensagem: MENSAGEM_FALHA[tipo] }) } catch { /* um ouvinte torto não derruba o resto */ }
   }
 }
 

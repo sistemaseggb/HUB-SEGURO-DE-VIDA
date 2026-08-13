@@ -929,9 +929,21 @@ export function criarSupabaseDemo() {
         const p = db.planejamentos.find((x) => x.token_proposta === args.p_token)
         if (!p) return { data: { erro: 'proposta_nao_encontrada' }, error: null }
         const c = db.clientes.find((x) => x.id === p.id_cliente)
+        // Espelha a migração 025: o que a CONSULTORA anotou para si nunca
+        // chega ao navegador do cliente. A demonstração precisa ter o mesmo
+        // recorte, senão o teste passa aqui e vaza em produção.
         const plano = { ...p }
-        delete plano.id; delete plano.id_cliente; delete plano.token_proposta
-        return { data: { cliente_nome: c?.nome ?? '', plano }, error: null }
+        for (const k of ['id', 'id_cliente', 'token_proposta', 'created_at', 'updated_at',
+          'observacoes_reuniao', 'roteiro', 'quem_decide', 'prazo_decisao']) delete plano[k]
+        return {
+          data: {
+            cliente_nome: c?.nome ?? '',
+            cliente_idade: c?.data_nascimento
+              ? Math.floor((Date.now() - new Date(c.data_nascimento)) / 31557600000) : null,
+            plano,
+          },
+          error: null,
+        }
       }
       if (fn === 'fn_gerar_fila_diaria') return { data: 0, error: null }
       if (fn === 'fn_vincular_evento') return { data: true, error: null }

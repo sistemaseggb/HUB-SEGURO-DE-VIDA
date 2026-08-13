@@ -71,13 +71,13 @@ export default function PosVenda() {
       {/* Saúde da carteira */}
       <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatTile rotulo="Receita mensal recorrente" valor={brl(carteira.receita_mensal_recorrente ?? 0)}
-          detalhe={`${carteira.apolices_ativas ?? 0} apólices ativas`} icone={Wallet} corIcone="text-emerald-600 bg-emerald-50" />
+          detalhe={`${carteira.apolices_ativas ?? 0} apólices ativas`} icone={Wallet} corIcone="text-emerald-700 bg-emerald-50" />
         <StatTile rotulo="Receita anualizada" valor={brlCompacto(carteira.receita_anualizada ?? 0)}
           icone={TrendingUp} corIcone="text-blue-600 bg-blue-50" />
         <StatTile rotulo="Capital total protegido" valor={brlCompacto(carteira.capital_total ?? 0)}
           icone={ShieldCheck} corIcone="text-laranja-600 bg-laranja-50" />
         <StatTile rotulo="Ticket médio" valor={brl(carteira.ticket_medio ?? 0)}
-          detalhe="prêmio mensal por apólice" icone={TrendingUp} corIcone="text-amber-600 bg-amber-50" />
+          detalhe="prêmio mensal por apólice" icone={TrendingUp} corIcone="text-amber-700 bg-amber-50" />
       </div>
 
       {/* Distribuição por seguradora + clientes esquecidos */}
@@ -91,11 +91,10 @@ export default function PosVenda() {
                 {porSeg.map((s) => (
                   <div key={s.nome} className="flex items-center gap-3">
                     <span className="w-40 shrink-0 truncate text-right text-xs text-slate-500" title={s.nome}>{s.nome}</span>
-                    <div className="h-6 flex-1 rounded-r-md bg-slate-50">
-                      <div className="flex h-6 items-center justify-end rounded-r-md pr-2"
-                        style={{ width: `${Math.max((Number(s.premio_mensal) / maxSeg) * 100, 12)}%`, background: CHART.serie1 }}>
-                        <span className="text-xs font-semibold text-white">{brlCompacto(s.premio_mensal)}</span>
-                      </div>
+                    <div className="flex h-6 flex-1 items-center gap-2 rounded-r-md bg-slate-50">
+                      <div className="h-6 rounded-r-md"
+                        style={{ width: `${Math.max((Number(s.premio_mensal) / maxSeg) * 100, 12)}%`, background: CHART.serie1 }} />
+                      <span className="shrink-0 text-xs font-semibold tabular text-slate-700">{brlCompacto(s.premio_mensal)}</span>
                     </div>
                     <span className="w-10 shrink-0 text-xs text-slate-400">{s.apolices}</span>
                   </div>
@@ -106,7 +105,7 @@ export default function PosVenda() {
 
         <Card className="p-5">
           <h2 className="mb-1 flex items-center gap-2 font-semibold text-slate-900">
-            <AlertCircle size={17} className="text-amber-500" /> Clientes que precisam de atenção
+            <AlertCircle size={17} className="text-amber-700" /> Clientes que precisam de atenção
           </h2>
           <p className="mb-4 text-xs text-slate-400">Com apólice ativa e sem contato há muito tempo (retenção)</p>
           {semContato.length === 0
@@ -125,7 +124,7 @@ export default function PosVenda() {
                     </div>
                     {whatsapp(c.telefone) && (
                       <a href={whatsapp(c.telefone, `Olá ${c.nome.split(' ')[0]}! Tudo bem? Passando para saber como você está e se está tudo certo com sua proteção. Abraço, Natália.`)}
-                        target="_blank" rel="noreferrer" className="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50" title="WhatsApp">
+                        target="_blank" rel="noreferrer" className="rounded-lg p-2 text-emerald-700 hover:bg-emerald-50" title="WhatsApp">
                         <MessageCircle size={16} />
                       </a>
                     )}
@@ -140,7 +139,7 @@ export default function PosVenda() {
         {/* Régua de relacionamento */}
         <Card className="p-5">
           <h2 className="mb-4 flex flex-wrap items-center gap-2 font-semibold text-slate-900">
-            <Cake size={18} className="text-amber-500" /> Régua de Relacionamento
+            <Cake size={18} className="text-amber-700" /> Régua de Relacionamento
             <span className="text-xs font-normal text-slate-400">próximos 45 dias</span>
           </h2>
           {regua.length === 0
@@ -174,7 +173,7 @@ export default function PosVenda() {
                           e.tipo_evento === 'aniversario_cliente'
                             ? `Olá ${e.nome_cliente.split(' ')[0]}! Passando para te desejar um feliz aniversário! 🎉 Que seja um ano incrível. Um abraço, Natália.`
                             : `Olá ${e.nome_cliente.split(' ')[0]}! Sua apólice está completando mais um ano 🎉 Que tal marcarmos uma conversa rápida para revisar se a proteção continua ideal para o seu momento?`)}
-                        className="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50" title="Mensagem pronta no WhatsApp">
+                        className="rounded-lg p-2 text-emerald-700 hover:bg-emerald-50" title="Mensagem pronta no WhatsApp">
                         <MessageCircle size={17} />
                       </a>
                     )}
@@ -199,7 +198,7 @@ export default function PosVenda() {
                     className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-laranja-400 focus:outline-none sm:w-56" />
                 </div>
                 {nomesSeg.length > 1 && (
-                  <Select value={filtroSeg} onChange={(e) => setFiltroSeg(e.target.value)} style={{ width: 'auto' }}>
+                  <Select aria-label="Filtrar por seguradora" value={filtroSeg} onChange={(e) => setFiltroSeg(e.target.value)} style={{ width: 'auto' }}>
                     <option value="">Todas as seguradoras</option>
                     {nomesSeg.map((n) => <option key={n} value={n}>{n}</option>)}
                   </Select>

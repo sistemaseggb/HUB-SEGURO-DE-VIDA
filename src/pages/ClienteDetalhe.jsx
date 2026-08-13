@@ -173,6 +173,7 @@ export default function ClienteDetalhe() {
               num visor de 375 e empurrava a página inteira para o lado */}
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <Select
+              aria-label="Etapa do funil"
               value={cliente.status_funil}
               onChange={async (e) => {
                 await supabase.from('clientes').update({ status_funil: e.target.value }).eq('id', id)
@@ -279,7 +280,7 @@ export default function ClienteDetalhe() {
             <Campo label="Perfil / necessidade">
               <Textarea value={formEdit.perfil_necessidade} onChange={(e) => setFormEdit({ ...formEdit, perfil_necessidade: e.target.value })} />
             </Campo>
-            {erroEdit && <p className="text-sm text-red-600">{erroEdit}</p>}
+            {erroEdit && <p className="text-sm text-red-700">{erroEdit}</p>}
             <div className="flex items-center justify-between gap-2">
               <Button type="button" variant="danger" onClick={excluirCliente}>
                 <Trash2 size={15} /> Excluir cliente
@@ -436,7 +437,7 @@ function CampoCobertura({ cob, estudo, plano, setPlano }) {
           </strong>
         </span>
         {sugestao > 0 && String(valorForm ?? '') === '' && (
-          <span className="text-slate-300">em branco = usa a sugestão</span>
+          <span className="text-slate-400">em branco = usa a sugestão</span>
         )}
         {sugestao > 0 && String(valorForm ?? '') !== '' && Number(valorForm) !== sugestaoArredondada && (
           <button type="button" className="font-semibold text-blue-600 hover:underline"
@@ -843,7 +844,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
           <ul className="mt-3 space-y-1.5 border-t border-slate-200/70 pt-3">
             {estudo.inconsistencias.map((inc, i) => (
               <li key={i} className={`flex items-start gap-2 text-xs ${inc.grave ? 'text-red-700' : 'text-amber-800'}`}>
-                <AlertTriangle size={13} className={`mt-0.5 shrink-0 ${inc.grave ? 'text-red-500' : 'text-amber-500'}`} />
+                <AlertTriangle size={13} className={`mt-0.5 shrink-0 ${inc.grave ? 'text-red-700' : 'text-amber-700'}`} />
                 <span>
                   {inc.texto}
                   {inc.corrigir && (
@@ -861,7 +862,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
           <ul className="mt-3 space-y-1.5 border-t border-slate-200/70 pt-3">
             {pendencias.map((a, i) => (
               <li key={i} className="flex items-start gap-2 text-xs text-slate-500">
-                <span className="mt-0.5 text-amber-500">▹</span> {a}
+                <span className="mt-0.5 text-amber-700">▹</span> {a}
               </li>
             ))}
           </ul>
@@ -879,9 +880,9 @@ function AbaPlanejamento({ idCliente, cliente }) {
                 s.ok
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300'
                   : 'border-slate-200 bg-white text-slate-500 hover:border-laranja-300 hover:text-laranja-700'}`}>
-              <Icone size={13} className={s.ok ? 'text-emerald-600' : 'text-slate-400'} />
+              <Icone size={13} className={s.ok ? 'text-emerald-700' : 'text-slate-400'} />
               <span className="font-medium">{s.rotulo}</span>
-              <span className={s.ok ? 'text-emerald-600/80' : 'text-slate-400'}>· {s.resumo}</span>
+              <span className={s.ok ? 'text-emerald-700/80' : 'text-slate-400'}>· {s.resumo}</span>
             </button>
           )
         })}
@@ -1019,11 +1020,11 @@ function AbaPlanejamento({ idCliente, cliente }) {
                     {info && info.idade != null
                       ? info.anosRestantes > 0
                         ? <>faltam <strong className="text-slate-600">{info.anosRestantes} anos</strong> até os {IDADE_INDEPENDENCIA}{info.capitalAte24 > 0 && <> · {brlCompacto(info.capitalAte24)}</>}</>
-                        : <span className="text-emerald-600">já independente ✓</span>
+                        : <span className="text-emerald-700">já independente ✓</span>
                       : 'informe a idade'}
                   </span>
                   <button type="button" onClick={() => removerFilho(i)}
-                    className="rounded p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-600" title="Remover filho">
+                    className="rounded p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-700" title="Remover filho">
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -1272,7 +1273,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
                 )}
                 {estudo.sucessao.meacaoPotencial > 0 && (
                   <p className="flex items-start gap-2">
-                    <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-500" />
+                    <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-700" />
                     <span>
                       Até <strong>{brlCompacto(estudo.sucessao.meacaoPotencial)}</strong> podem ser meação —
                       mas só o que foi adquirido durante o casamento. O estudo está calculando o imposto
@@ -1483,7 +1484,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
             {estudo.custoDaEspera && (
               <div className="mt-4 rounded-xl border border-amber-200/70 bg-amber-50/50 p-4">
                 <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-800">
-                  <Clock3 size={15} className="text-amber-600" />
+                  <Clock3 size={15} className="text-amber-700" />
                   O preço de deixar para depois
                   <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
                     estimativa
@@ -1536,7 +1537,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
             <div className="rounded-lg bg-slate-50 p-3">
               <p className="text-[11px] uppercase tracking-wide text-slate-400">Autonomia com o que é líquido</p>
               <p className={`font-display text-lg font-semibold tabular-nums ${
-                estudo.mesesLiquidos != null && estudo.mesesLiquidos < 24 ? 'text-red-600' : 'text-slate-900'}`}>
+                estudo.mesesLiquidos != null && estudo.mesesLiquidos < 24 ? 'text-red-700' : 'text-slate-900'}`}>
                 {fmtMeses(estudo.mesesLiquidos)}
               </p>
               <p className="text-xs text-slate-400">
@@ -1554,7 +1555,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
             </div>
             <div className="rounded-lg bg-slate-50 p-3">
               <p className="text-[11px] uppercase tracking-wide text-slate-400">Com o plano</p>
-              <p className="font-display text-lg font-semibold tabular-nums text-emerald-600">
+              <p className="font-display text-lg font-semibold tabular-nums text-emerald-700">
                 {fmtMeses(estudo.mesesComPlano)}
               </p>
               <p className="text-xs text-slate-400">e o patrimônio fica intacto</p>
@@ -1562,7 +1563,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
             <div className="rounded-lg bg-slate-50 p-3">
               <p className="text-[11px] uppercase tracking-wide text-slate-400">Fôlego mensal</p>
               <p className={`font-display text-lg font-semibold tabular-nums ${
-                (estudo.poupancaMensal ?? 0) < 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                (estudo.poupancaMensal ?? 0) < 0 ? 'text-red-700' : 'text-slate-900'}`}>
                 {estudo.poupancaMensal == null ? '—' : brl(estudo.poupancaMensal)}
               </p>
               <p className="text-xs text-slate-400">
@@ -1615,7 +1616,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
             <div className="rounded-lg bg-slate-50 p-3">
               <p className="text-[11px] uppercase tracking-wide text-slate-400">Gap de proteção</p>
               <p className={`font-display text-lg font-semibold tabular-nums ${
-                estudo.gap > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                estudo.gap > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
                 {estudo.gap > 0 ? brlCompacto(estudo.gap) : 'Coberto ✓'}
               </p>
               <p className="text-xs text-slate-400">
@@ -1714,7 +1715,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
                     }}
                     className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
                       jaTem
-                        ? 'cursor-default border-emerald-200 bg-emerald-50 text-emerald-600'
+                        ? 'cursor-default border-emerald-200 bg-emerald-50 text-emerald-700'
                         : 'border-slate-200 bg-white text-slate-600 hover:border-laranja-300 hover:text-laranja-700'}`}>
                     {jaTem ? '✓ ' : '+ '}{o}
                   </button>
@@ -1751,7 +1752,7 @@ function EstadoSalvamento({ estado, sujo, em }) {
     : null
   if (estado === 'erro') {
     return (
-      <span className="flex items-center gap-1 text-sm text-red-600">
+      <span className="flex items-center gap-1 text-sm text-red-700">
         <AlertTriangle size={15} /> Não consegui salvar — clique em salvar para tentar de novo
       </span>
     )
@@ -1772,7 +1773,7 @@ function EstadoSalvamento({ estado, sujo, em }) {
   }
   if (estado === 'salvo') {
     return (
-      <span className="flex items-center gap-1 text-sm text-emerald-600">
+      <span className="flex items-center gap-1 text-sm text-emerald-700">
         <Check size={15} /> Salvo{hora ? ` às ${hora}` : ''}
       </span>
     )
@@ -1787,7 +1788,7 @@ function EstadoSalvamento({ estado, sujo, em }) {
 
 // Cartão de leitura do estudo: um número com o contexto que o explica.
 function Metrica({ rotulo, valor, detalhe, tom = 'neutro' }) {
-  const cor = tom === 'bom' ? 'text-emerald-600' : tom === 'ruim' ? 'text-red-600' : 'text-slate-900'
+  const cor = tom === 'bom' ? 'text-emerald-700' : tom === 'ruim' ? 'text-red-700' : 'text-slate-900'
   return (
     <div className="rounded-xl border border-slate-200/70 bg-slate-50/60 p-3">
       <p className="text-[11px] uppercase tracking-wide text-slate-400">{rotulo}</p>
@@ -2040,7 +2041,7 @@ function AbaInteracoes({ idCliente, onMudanca }) {
       <form onSubmit={registrar} className="mb-5 flex flex-wrap items-end gap-2">
         <div className="w-40">
           <Campo label="Tipo de contato">
-            <Select value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            <Select aria-label="Tipo de contato" value={tipo} onChange={(e) => setTipo(e.target.value)}>
               {TIPO_INTERACAO.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
             </Select>
           </Campo>
@@ -2068,7 +2069,7 @@ function AbaInteracoes({ idCliente, onMudanca }) {
                     <p className="text-sm text-slate-800"><span className="font-medium">{label(i.tipo)}</span> — {i.descricao}</p>
                     <p className="text-xs text-slate-400">{dataHoraBR(i.data)}</p>
                   </div>
-                  <button onClick={() => excluir(i)} className="rounded p-1 text-slate-300 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100" title="Excluir">
+                  <button onClick={() => excluir(i)} className="rounded p-1 text-slate-300 opacity-0 hover:bg-red-50 hover:text-red-700 group-hover:opacity-100" title="Excluir">
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -2141,7 +2142,7 @@ function AbaReunioes({ idCliente, onMudanca }) {
                   {STATUS_REUNIAO.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                 </Select>
                 <span className="min-w-0 flex-1 truncate text-sm text-slate-500">{r.notas}</span>
-                <button onClick={() => excluir(r)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir reunião">
+                <button onClick={() => excluir(r)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700" title="Excluir reunião">
                   <Trash2 size={15} />
                 </button>
               </li>
@@ -2228,7 +2229,7 @@ function TabelaApolices({ apolices, preSistema = false, onEditar, onExcluir }) {
                   <button onClick={() => onEditar(a)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600" title="Editar">
                     <Pencil size={15} />
                   </button>
-                  <button onClick={() => onExcluir(a)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir">
+                  <button onClick={() => onExcluir(a)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700" title="Excluir">
                     <Trash2 size={15} />
                   </button>
                 </div>
@@ -2527,7 +2528,7 @@ function AbaDocumentos({ idCliente }) {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <p className="text-sm text-slate-500">Guarde aqui a apólice, documentos do cliente e propostas.</p>
         <div className="ml-auto flex items-center gap-2">
-          <Select value={categoria} onChange={(e) => setCategoria(e.target.value)} style={{ width: 'auto' }}>
+          <Select aria-label="Categoria do documento" value={categoria} onChange={(e) => setCategoria(e.target.value)} style={{ width: 'auto' }}>
             {CATEGORIAS_DOC.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
           </Select>
           <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white ${enviando ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'}`}>
@@ -2537,7 +2538,7 @@ function AbaDocumentos({ idCliente }) {
         </div>
       </div>
 
-      {erro && <p className="mb-3 text-sm text-red-600">{erro}</p>}
+      {erro && <p className="mb-3 text-sm text-red-700">{erro}</p>}
 
       {docs.length === 0
         ? <p className="py-6 text-center text-sm text-slate-400">Nenhum documento anexado ainda.</p>
@@ -2556,7 +2557,7 @@ function AbaDocumentos({ idCliente }) {
                 <button onClick={() => baixar(d)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600" title="Baixar">
                   <Download size={16} />
                 </button>
-                <button onClick={() => excluir(d)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir">
+                <button onClick={() => excluir(d)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700" title="Excluir">
                   <Trash2 size={16} />
                 </button>
               </li>
@@ -2810,7 +2811,7 @@ function AbaFormulario({ idCliente, cliente }) {
                   {Object.entries(f.respostas ?? {}).map(([k, v]) => (
                     <p key={k} className="truncate" title={ROTULOS_FORM[k] ?? k}>
                       <span className="text-slate-400">{ROTULOS_FORM[k] ?? k.replaceAll('_', ' ')}: </span>
-                      <span className={v === 'sim' ? 'font-semibold text-red-600' : 'text-slate-700'}>
+                      <span className={v === 'sim' ? 'font-semibold text-red-700' : 'text-slate-700'}>
                         {typeof v === 'object' ? JSON.stringify(v) : v === 'sim' ? 'SIM' : v === 'nao' ? 'Não' : String(v)}
                       </span>
                     </p>
@@ -2907,7 +2908,7 @@ function AbaTarefas({ idCliente }) {
                     vence {dataBR(t.data_vencimento)} {t.automatica && '· criada automaticamente'}
                   </p>
                 </div>
-                <button onClick={() => excluir(t)} className="rounded p-1.5 text-slate-300 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100" title="Excluir">
+                <button onClick={() => excluir(t)} className="rounded p-1.5 text-slate-300 opacity-0 hover:bg-red-50 hover:text-red-700 group-hover:opacity-100" title="Excluir">
                   <Trash2 size={14} />
                 </button>
               </li>
@@ -2993,7 +2994,7 @@ function AbaComissoes({ idCliente, cliente }) {
                 <td className="py-2.5 font-medium capitalize text-slate-800">{mesBRLocal(m)}</td>
                 <td className="py-2.5 text-slate-500">{[...acc.seguradoras].join(', ')}</td>
                 <td className="py-2.5 text-right text-slate-500">{acc.n}</td>
-                <td className={`py-2.5 text-right font-semibold ${acc.total < 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                <td className={`py-2.5 text-right font-semibold ${acc.total < 0 ? 'text-red-700' : 'text-slate-900'}`}>
                   {brl(acc.total)}
                 </td>
               </tr>

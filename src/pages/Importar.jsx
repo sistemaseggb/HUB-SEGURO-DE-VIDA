@@ -193,7 +193,7 @@ export default function Importar() {
             </div>
 
             {analise.faltando.length > 0 ? (
-              <p className="flex items-center gap-2 text-sm text-red-600">
+              <p className="flex items-center gap-2 text-sm text-red-700">
                 <AlertTriangle size={15} />
                 Colunas obrigatórias não encontradas: {analise.faltando.join(', ')}.
                 Renomeie o cabeçalho da planilha e cole de novo.
@@ -239,7 +239,7 @@ export default function Importar() {
         {resultado && (
           <div className="mt-5 rounded-lg border border-slate-100 bg-slate-50 p-4">
             <p className="flex items-center gap-2 font-medium text-slate-800">
-              <CheckCircle2 size={17} className="text-emerald-600" />
+              <CheckCircle2 size={17} className="text-emerald-700" />
               {resultado.ok} importado(s) com sucesso
               {resultado.criados?.length > 0 && ` · criados automaticamente: ${resultado.criados.join(', ')}`}
             </p>
@@ -480,7 +480,7 @@ function ImportarPlanilhaGeral({ onVoltar }) {
                 <p className="font-display text-xl font-semibold text-slate-900">{resumo.total}</p>
               </div>
               <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
-                <p className="text-xs text-emerald-600">Ativas</p>
+                <p className="text-xs text-emerald-700">Ativas</p>
                 <p className="font-display text-xl font-semibold text-emerald-700">{resumo.ativas}</p>
               </div>
               <div className="rounded-xl border border-slate-200/70 bg-white p-3">
@@ -532,7 +532,7 @@ function ImportarPlanilhaGeral({ onVoltar }) {
         {resultado && (
           <div className="mt-5 rounded-lg border border-slate-100 bg-slate-50 p-4">
             <p className="flex flex-wrap items-center gap-2 font-medium text-slate-800">
-              <CheckCircle2 size={17} className="text-emerald-600" />
+              <CheckCircle2 size={17} className="text-emerald-700" />
               {resultado.ok} apólice(s) nova(s) · {resultado.atualizados} atualizada(s)
               {resultado.criados?.length > 0 && ` · criados: ${resultado.criados.join(', ')}`}
             </p>
@@ -703,10 +703,10 @@ function ImportarComissoes({ onVoltar }) {
                   a.erro ? 'border-red-200 bg-red-50/50' : a.pronto ? 'border-emerald-200 bg-emerald-50/30' : 'border-amber-200 bg-amber-50/40'}`}>
                   <div className="flex flex-wrap items-center gap-2">
                     {a.erro
-                      ? <AlertTriangle size={16} className="shrink-0 text-red-500" />
+                      ? <AlertTriangle size={16} className="shrink-0 text-red-700" />
                       : a.pronto
-                        ? <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
-                        : <AlertTriangle size={16} className="shrink-0 text-amber-500" />}
+                        ? <CheckCircle2 size={16} className="shrink-0 text-emerald-700" />
+                        : <AlertTriangle size={16} className="shrink-0 text-amber-700" />}
                     <span className="max-w-[280px] truncate text-sm font-medium text-slate-800" title={a.nome}>{a.nome}</span>
                     {a.deteccao && <Badge tom="green">{a.deteccao.perfil.rotulo}</Badge>}
                     {a.registros.length > 0 && (
@@ -719,12 +719,12 @@ function ImportarComissoes({ onVoltar }) {
                       </>
                     )}
                     <button onClick={() => setArquivos((arr) => arr.filter((x) => x.id !== a.id))}
-                      className="ml-auto rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-red-600" title="Remover">
+                      className="ml-auto rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-red-700" title="Remover">
                       <X size={16} />
                     </button>
                   </div>
 
-                  {a.erro && <p className="mt-2 text-xs text-red-600">{a.erro}</p>}
+                  {a.erro && <p className="mt-2 text-xs text-red-700">{a.erro}</p>}
 
                   {a.deteccao && !a.porLinha && (
                     <div className="mt-3 flex flex-wrap items-end gap-3">
@@ -795,7 +795,7 @@ function ImportarComissoes({ onVoltar }) {
         {resultado && (
           <div className="mt-5 rounded-lg border border-slate-100 bg-slate-50 p-4">
             <p className="flex items-center gap-2 font-medium text-slate-800">
-              <CheckCircle2 size={17} className="text-emerald-600" />
+              <CheckCircle2 size={17} className="text-emerald-700" />
               {resultado.ok} lançamento(s) importado(s)
               {resultado.substituidos > 0 && ` · ${resultado.substituidos} antigo(s) do mesmo mês substituído(s)`}
             </p>
@@ -803,7 +803,7 @@ function ImportarComissoes({ onVoltar }) {
               Confira em <strong>Relatórios → Fechamento para o financeiro</strong> — a faixa verde confirma que os totais batem.
             </p>
             {resultado.erros.length > 0 && (
-              <ul className="mt-2 list-inside list-disc text-xs text-red-600">
+              <ul className="mt-2 list-inside list-disc text-xs text-red-700">
                 {resultado.erros.map((e, i) => <li key={i}>{e}</li>)}
               </ul>
             )}

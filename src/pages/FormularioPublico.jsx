@@ -170,7 +170,7 @@ export default function FormularioPublico() {
             {etapa === ETAPAS_FORM.length - 1 ? 'Enviar tudo 🎉' : 'Continuar'} <ArrowRight size={18} />
           </button>
         </div>
-        {erroCampo && <p className="mt-3 text-right text-sm text-red-600">Preencha os campos destacados para continuar.</p>}
+        {erroCampo && <p className="mt-3 text-right text-sm text-red-700">Preencha os campos destacados para continuar.</p>}
       </div>
     </div>
   )
@@ -197,7 +197,7 @@ function CampoWizard({ campo, respostas, onChange, erro }) {
   if (campo.tipo === 'simnao') {
     return (
       <div>
-        <p className={`mb-2 font-medium ${erro ? 'text-red-600' : 'text-slate-700'}`}>
+        <p className={`mb-2 font-medium ${erro ? 'text-red-700' : 'text-slate-700'}`}>
           {campo.rotulo} {campo.obrigatorio && '*'}
         </p>
         <div className="flex gap-3">
@@ -216,7 +216,7 @@ function CampoWizard({ campo, respostas, onChange, erro }) {
   if (campo.tipo === 'select') {
     return (
       <label className="block">
-        <span className={`mb-2 block font-medium ${erro ? 'text-red-600' : 'text-slate-700'}`}>
+        <span className={`mb-2 block font-medium ${erro ? 'text-red-700' : 'text-slate-700'}`}>
           {campo.rotulo} {campo.obrigatorio && '*'}
         </span>
         <select className={inputWizard(erro)} value={valor} onChange={(e) => onChange(e.target.value)}>
@@ -230,7 +230,7 @@ function CampoWizard({ campo, respostas, onChange, erro }) {
   if (campo.tipo === 'textarea') {
     return (
       <label className="block">
-        <span className={`mb-2 block font-medium ${erro ? 'text-red-600' : 'text-slate-700'}`}>
+        <span className={`mb-2 block font-medium ${erro ? 'text-red-700' : 'text-slate-700'}`}>
           {campo.rotulo} {campo.obrigatorio && '*'}
         </span>
         <textarea rows={3} className={inputWizard(erro)} value={valor}
@@ -252,7 +252,7 @@ function CampoWizard({ campo, respostas, onChange, erro }) {
             <div className="mb-2 flex items-center justify-between">
               <p className="text-sm font-semibold text-slate-500">Beneficiário {i + 1}</p>
               <button type="button" onClick={() => onChange(lista.filter((_, j) => j !== i))}
-                className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500">
+                className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-700">
                 <Trash2 size={16} />
               </button>
             </div>
@@ -278,7 +278,7 @@ function CampoWizard({ campo, respostas, onChange, erro }) {
 
   return (
     <label className="block">
-      <span className={`mb-2 block font-medium ${erro ? 'text-red-600' : 'text-slate-700'}`}>
+      <span className={`mb-2 block font-medium ${erro ? 'text-red-700' : 'text-slate-700'}`}>
         {campo.rotulo} {campo.obrigatorio && '*'}
       </span>
       <input type={campo.tipo} className={inputWizard(erro)} value={valor}

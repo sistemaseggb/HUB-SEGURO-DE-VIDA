@@ -505,7 +505,9 @@ export default function Proposta({ publica = false }) {
   const denso = e.ativas.length > 8
   const temTresCenarios = e.mesesLiquidos != null
 
-  const rotuloSecao = 'text-sm font-medium uppercase tracking-[0.3em] text-gold-500'
+  // gold-500 sobre o branco do slide dava 3,6:1; o -600 passa em 4,6:1 e
+  // continua sendo o laranja da marca no olho de quem lê de longe
+  const rotuloSecao = 'text-sm font-medium uppercase tracking-[0.3em] text-gold-700'
 
   // O slide de reenquadramento fala do que ELE veio resolver. Os três cartões
   // são escolhidos pelos focos marcados no planejamento — quem veio por
@@ -555,7 +557,7 @@ export default function Proposta({ publica = false }) {
           </Link>
         )}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="hidden text-xs text-slate-400 lg:block">
+          <span className="hidden text-xs text-slate-300 lg:block">
             slide {slideAtual + 1} de {totalSlides} · use as setas ← →
           </span>
           {!publica && (
@@ -888,8 +890,8 @@ export default function Proposta({ publica = false }) {
           </h2>
           <Revelar className="mt-10 grid w-full max-w-4xl gap-5 md:grid-cols-2">
             <div className="rounded-2xl border border-red-100 bg-red-50/60 p-7">
-              <p className="text-xs font-semibold uppercase tracking-wide text-red-500">A família precisa pagar</p>
-              <p className="mt-3 font-display text-4xl font-semibold text-red-600 tabular">{brlCompacto(e.custoInventario)}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-red-700">A família precisa pagar</p>
+              <p className="mt-3 font-display text-4xl font-semibold text-red-700 tabular">{brlCompacto(e.custoInventario)}</p>
               <p className="mt-1 text-sm font-semibold text-red-700">e espera de meses a anos pelos bens</p>
               <p className="mt-2 text-sm text-red-800/80">
                 ITCMD ({e.itcmd.toFixed(1).replace('.', ',')}%) + custas e honorários
@@ -900,8 +902,8 @@ export default function Proposta({ publica = false }) {
               </p>
             </div>
             <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-7">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">O seguro entrega</p>
-              <p className="mt-3 font-display text-4xl font-semibold text-emerald-600 tabular">{brlCompacto(e.valores.sucessao)}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">O seguro entrega</p>
+              <p className="mt-3 font-display text-4xl font-semibold text-emerald-700 tabular">{brlCompacto(e.valores.sucessao)}</p>
               <p className="mt-1 text-sm font-semibold text-emerald-700">em dias, direto aos beneficiários</p>
               <p className="mt-2 text-sm text-emerald-900/80">
                 O capital do seguro <strong>não entra em inventário</strong> e é livre de ITCMD na maioria
@@ -1104,7 +1106,7 @@ export default function Proposta({ publica = false }) {
           {e.gap > 0 && (
             <>
               <p className="mt-12 text-xl text-slate-600">
-                Gap de proteção: <strong className="font-display text-3xl font-semibold text-red-600 tabular">{brlCompacto(e.gap)}</strong>
+                Gap de proteção: <strong className="font-display text-3xl font-semibold text-red-700 tabular">{brlCompacto(e.gap)}</strong>
               </p>
               {e.recursosLiquidos > 0 && (
                 <p className="mt-3 max-w-lg text-center text-sm text-slate-400">
@@ -1369,11 +1371,11 @@ export default function Proposta({ publica = false }) {
               </p>
             </div>
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-7 shadow-card">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Com o plano</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Com o plano</p>
               <p className="mt-2 font-display text-2xl font-semibold text-emerald-700 tabular">
-                {brl(e.acumularEmVezDeSegurar.aporteMensal)}<span className="text-base font-normal text-emerald-600/70">/mês</span>
+                {brl(e.acumularEmVezDeSegurar.aporteMensal)}<span className="text-base font-normal text-emerald-700/70">/mês</span>
               </p>
-              <p className="mt-4 font-display text-5xl font-semibold text-emerald-600 tabular">1</p>
+              <p className="mt-4 font-display text-5xl font-semibold text-emerald-700 tabular">1</p>
               <p className="mt-1 text-lg font-semibold text-emerald-700">mês até valer o capital inteiro</p>
               <p className="mt-3 text-sm text-emerald-900/80">
                 Da primeira parcela paga, os {brlCompacto(e.acumularEmVezDeSegurar.alvo)} já estão
@@ -1470,10 +1472,10 @@ export default function Proposta({ publica = false }) {
           </p>
           <div className={`mt-10 grid w-full gap-5 ${e.custoDaEspera.cenarios.length > 2 ? 'max-w-5xl md:grid-cols-4' : 'max-w-3xl md:grid-cols-3'}`}>
             <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50/50 p-6 text-center">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
                 Hoje · {e.custoDaEspera.idade} anos
               </p>
-              <p className="mt-2 font-display text-3xl font-semibold text-emerald-600 tabular">
+              <p className="mt-2 font-display text-3xl font-semibold text-emerald-700 tabular">
                 {brl(e.custoDaEspera.mensalHoje)}
               </p>
               <p className="mt-1 text-sm text-emerald-700">por mês</p>
@@ -1486,7 +1488,7 @@ export default function Proposta({ publica = false }) {
                 <p className="mt-2 font-display text-3xl font-semibold text-slate-900 tabular">
                   {brl(c.mensal)}
                 </p>
-                <p className="mt-1 text-sm text-red-600">
+                <p className="mt-1 text-sm text-red-700">
                   +{String(c.aMaisPct).replace('.', ',')}% · {brl(c.aMaisPorAno)} a mais por ano
                 </p>
               </div>
@@ -1587,9 +1589,9 @@ function Cartao({ icone: Icone, titulo, children }) {
 
 // Coluna do slide de autonomia: um número grande com o cenário que o explica
 const TOM_CENARIO = {
-  ruim: { caixa: 'border-red-100 bg-red-50/60', etiqueta: 'text-red-500', numero: 'text-red-600', texto: 'text-red-900/70', icone: 'text-red-400' },
-  alerta: { caixa: 'border-amber-100 bg-amber-50/60', etiqueta: 'text-amber-600', numero: 'text-amber-600', texto: 'text-amber-900/70', icone: 'text-amber-500' },
-  bom: { caixa: 'border-emerald-100 bg-emerald-50/60', etiqueta: 'text-emerald-600', numero: 'text-emerald-600', texto: 'text-emerald-900/70', icone: 'text-emerald-500' },
+  ruim: { caixa: 'border-red-100 bg-red-50/60', etiqueta: 'text-red-700', numero: 'text-red-700', texto: 'text-red-900/70', icone: 'text-red-400' },
+  alerta: { caixa: 'border-amber-100 bg-amber-50/60', etiqueta: 'text-amber-700', numero: 'text-amber-700', texto: 'text-amber-900/70', icone: 'text-amber-700' },
+  bom: { caixa: 'border-emerald-100 bg-emerald-50/60', etiqueta: 'text-emerald-700', numero: 'text-emerald-700', texto: 'text-emerald-900/70', icone: 'text-emerald-500' },
 }
 
 function Cenario({ tom, icone: Icone, etiqueta, numero, unidade, rodape, children }) {
@@ -1638,8 +1640,8 @@ function Etapa({ marco, titulo, texto, tom = 'neutro' }) {
   const cor = tom === 'ruim' ? 'border-red-200 bg-red-50/50'
     : tom === 'alerta' ? 'border-amber-200 bg-amber-50/50'
       : tom === 'bom' ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200/70 bg-white'
-  const marca = tom === 'ruim' ? 'text-red-600'
-    : tom === 'alerta' ? 'text-amber-700' : tom === 'bom' ? 'text-emerald-600' : 'text-slate-400'
+  const marca = tom === 'ruim' ? 'text-red-700'
+    : tom === 'alerta' ? 'text-amber-700' : tom === 'bom' ? 'text-emerald-700' : 'text-slate-400'
   return (
     <li className={`flex flex-col gap-1 rounded-2xl border p-5 sm:flex-row sm:gap-5 ${cor}`}>
       <p className={`shrink-0 text-xs font-semibold uppercase tracking-wide sm:w-32 ${marca}`}>{marco}</p>
@@ -1654,7 +1656,7 @@ function Etapa({ marco, titulo, texto, tom = 'neutro' }) {
 function Conta({ rotulo, valor, sinal, destaque, ok }) {
   const caixa = destaque ? 'border-red-200 bg-red-50/60'
     : ok ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200/70 bg-slate-50/60'
-  const tinta = destaque ? 'text-red-600' : ok ? 'text-emerald-600' : 'text-slate-900'
+  const tinta = destaque ? 'text-red-700' : ok ? 'text-emerald-700' : 'text-slate-900'
   return (
     <div className={`rounded-xl border p-4 ${caixa}`}>
       <p className="text-xs uppercase tracking-wide text-slate-400">
@@ -1672,7 +1674,7 @@ function Opcao({ titulo, valor, unidade, linhas, selo, escolhida, destaque }) {
       escolhida ? 'border-laranja-300 bg-laranja-50/40 ring-2 ring-laranja-200'
         : destaque ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200/70 bg-white'}`}>
       {escolhida && (
-        <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-laranja-500 px-3 py-0.5 text-xs font-semibold text-white">
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-laranja-600 px-3 py-0.5 text-xs font-semibold text-white">
           sua escolha
         </span>
       )}

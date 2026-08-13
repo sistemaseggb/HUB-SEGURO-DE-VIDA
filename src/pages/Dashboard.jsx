@@ -160,7 +160,7 @@ function BarraMeta({ rotulo, atual, meta, formato = (v) => v }) {
     <div>
       <div className="mb-1 flex items-baseline justify-between">
         <span className="text-sm text-slate-600">{rotulo}</span>
-        <span className={`text-sm font-semibold ${bateu ? 'text-emerald-600' : 'text-slate-800'}`}>
+        <span className={`text-sm font-semibold ${bateu ? 'text-emerald-700' : 'text-slate-800'}`}>
           {formato(atual)} / {formato(meta)} {bateu && '🎯'}
         </span>
       </div>
@@ -433,11 +433,11 @@ export default function Dashboard() {
         <StatTile rotulo="Reuniões realizadas no mês" valor={mesAtual.dash.reunioes_realizadas ?? 0}
           icone={CalendarCheck} />
         <StatTile rotulo="Apólices vendidas no mês" valor={mesAtual.dash.apolices_vendidas ?? 0}
-          icone={FileSignature} corIcone="text-emerald-600 bg-emerald-50" />
+          icone={FileSignature} corIcone="text-emerald-700 bg-emerald-50" />
         <StatTile rotulo="Prêmio mensal vendido" valor={brlCompacto(mesAtual.dash.premio_mensal_vendido ?? 0)}
           icone={TrendingUp} corIcone="text-laranja-600 bg-laranja-50" />
         <StatTile rotulo="Sua comissão do mês" valor={brl(mesAtual.com.comissao_natalia ?? 0)}
-          detalhe="parte da Natália na divisão" icone={Wallet} corIcone="text-amber-600 bg-amber-50" />
+          detalhe="parte da Natália na divisão" icone={Wallet} corIcone="text-amber-700 bg-amber-50" />
       </div>
 
       {/* KPIs históricos */}
@@ -445,11 +445,11 @@ export default function Dashboard() {
         <StatTile rotulo="Taxa de conversão geral" valor={`${kpis.taxa_conversao_pct ?? 0}%`}
           detalhe="fechados ÷ (fechados + perdidos)" icone={Percent} corIcone="text-blue-600 bg-blue-50" />
         <StatTile rotulo="Ticket médio (prêmio mensal)" valor={brl(kpis.ticket_medio_premio ?? 0)}
-          icone={TrendingUp} corIcone="text-emerald-600 bg-emerald-50" />
+          icone={TrendingUp} corIcone="text-emerald-700 bg-emerald-50" />
         <StatTile rotulo="Dias médios até fechar" valor={kpis.dias_medios_ate_fechar ?? '—'}
           detalhe="do cadastro do lead à venda" icone={Timer} corIcone="text-laranja-600 bg-laranja-50" />
         <StatTile rotulo="Capital total da carteira" valor={brlCompacto(kpis.capital_total_carteira ?? 0)}
-          detalhe="soma das apólices ativas" icone={ShieldCheck} corIcone="text-amber-600 bg-amber-50" />
+          detalhe="soma das apólices ativas" icone={ShieldCheck} corIcone="text-amber-700 bg-amber-50" />
       </div>
 
       {/* Metas do mês */}
@@ -510,7 +510,7 @@ export default function Dashboard() {
                   {c.dias_na_etapa > 0 && <span>· {c.dias_na_etapa}d parado</span>}
                   {whatsapp(c.telefone) && (
                     <a href={whatsapp(c.telefone)} target="_blank" rel="noreferrer"
-                      className="ml-auto rounded p-1 text-emerald-600 hover:bg-emerald-50" title="WhatsApp">
+                      className="ml-auto rounded p-1 text-emerald-700 hover:bg-emerald-50" title="WhatsApp">
                       <MessageCircle size={15} />
                     </a>
                   )}
@@ -532,7 +532,7 @@ export default function Dashboard() {
         <Card className="mb-6 p-5">
           <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-              <Cake size={18} className="text-laranja-500" /> Aniversários e renovações
+              <Cake size={18} className="text-laranja-600" /> Aniversários e renovações
               <span className="rounded-full bg-laranja-50 px-2 py-0.5 text-xs font-semibold text-laranja-700">{regua.length}</span>
             </h2>
             <Link to="/pos-venda" className="text-xs font-semibold text-laranja-700 hover:underline">ver tudo no Pós-Venda →</Link>
@@ -564,7 +564,7 @@ export default function Dashboard() {
                       e.tipo_evento === 'aniversario_cliente'
                         ? `Olá ${e.nome_cliente.split(' ')[0]}! Passando para te desejar um feliz aniversário! 🎉 Que seja um ano incrível. Um abraço, Natália.`
                         : `Olá ${e.nome_cliente.split(' ')[0]}! Sua apólice está completando mais um ano 🎉 Que tal marcarmos uma conversa rápida para revisar se a proteção continua ideal para o seu momento?`)}
-                    className="shrink-0 rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50" title="Mensagem pronta no WhatsApp">
+                    className="shrink-0 rounded-lg p-1.5 text-emerald-700 hover:bg-emerald-50" title="Mensagem pronta no WhatsApp">
                     <MessageCircle size={16} />
                   </a>
                 )}
@@ -632,14 +632,14 @@ export default function Dashboard() {
             ))}
             {aniversarios.map((a) => (
               <li key={`${a.id_item}-${a.titulo}`} className="flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50/60 p-2.5">
-                <Cake size={16} className="mt-0.5 shrink-0 text-amber-500" />
+                <Cake size={16} className="mt-0.5 shrink-0 text-amber-700" />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-slate-800">{a.titulo}</p>
                   <p className="text-xs text-slate-400">{dataBR(a.data_ref)}</p>
                 </div>
                 {whatsapp(a.telefone) && (
                   <a href={whatsapp(a.telefone, `Olá ${a.nome_cliente?.split(' ')[0]}! 🎉`)} target="_blank" rel="noreferrer"
-                    className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50" title="Enviar WhatsApp">
+                    className="rounded-lg p-1.5 text-emerald-700 hover:bg-emerald-50" title="Enviar WhatsApp">
                     <MessageCircle size={16} />
                   </a>
                 )}
@@ -706,7 +706,7 @@ export default function Dashboard() {
         {/* Ranking */}
         <Card className="p-5">
           <h2 className="mb-4 flex items-center gap-2 font-semibold text-slate-900">
-            <Trophy size={18} className="text-amber-500" /> Top 5 Assessores
+            <Trophy size={18} className="text-amber-700" /> Top 5 Assessores
           </h2>
           {ranking.filter((r) => r.total_vendas > 0).length === 0
             ? <p className="text-sm text-slate-400">Ainda sem vendas convertidas.</p>
@@ -738,14 +738,13 @@ export default function Dashboard() {
             {funil.map((f, i) => (
               <Link key={f.status_funil} to="/pipeline" className="group flex items-center gap-3">
                 <span className="w-44 shrink-0 text-right text-xs text-slate-500">{etapaLabel(f.status_funil)}</span>
-                <div className="h-6 flex-1 rounded-r-md bg-slate-50">
-                  <div className="flex h-6 items-center rounded-r-md pl-2 group-hover:opacity-80"
+                <div className="flex h-6 flex-1 items-center gap-2 rounded-r-md bg-slate-50">
+                  <div className="h-6 rounded-r-md group-hover:opacity-80"
                     style={{
                       width: `${Math.max((f.total / maxFunil) * 100, 6)}%`,
                       background: CHART.sequencial[Math.min(i + 1, CHART.sequencial.length - 1)],
-                    }}>
-                    <span className="text-xs font-semibold text-white">{f.total}</span>
-                  </div>
+                    }} />
+                  <span className="shrink-0 text-xs font-semibold tabular text-slate-700">{f.total}</span>
                 </div>
               </Link>
             ))}
@@ -807,7 +806,7 @@ function PropostasEmAnalise({ lista }) {
       <p className="mb-4 text-xs text-slate-400">
         {r.travadas.length > 0 ? (
           <>
-            <strong className="text-red-600">{brl(r.premioEmRisco)}/mês</strong> de prêmio parado em{' '}
+            <strong className="text-red-700">{brl(r.premioEmRisco)}/mês</strong> de prêmio parado em{' '}
             {r.travadas.length} {r.travadas.length === 1 ? 'proposta travada' : 'propostas travadas'} —
             o cliente já disse sim, falta destravar.
           </>
@@ -823,7 +822,7 @@ function PropostasEmAnalise({ lista }) {
             <Link key={d.id} to={`/clientes/${d.id_cliente}`}
               className="flex items-start gap-3 rounded-xl border border-slate-100 p-3 transition-colors hover:border-slate-200 hover:bg-slate-50">
               <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                d.travada ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'}`}>
+                d.travada ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-500'}`}>
                 {dono ? <dono.Icone size={15} /> : <Hourglass size={15} />}
               </span>
               <div className="min-w-0 flex-1">
@@ -832,7 +831,7 @@ function PropostasEmAnalise({ lista }) {
                   <Badge tom={d.info.tom}>{d.info.rotulo}</Badge>
                   {d.seguradora_nome && <span className="text-xs text-slate-400">{d.seguradora_nome}</span>}
                 </div>
-                <p className={`mt-0.5 text-xs ${d.travada ? 'text-red-600' : 'text-slate-500'}`}>
+                <p className={`mt-0.5 text-xs ${d.travada ? 'text-red-700' : 'text-slate-500'}`}>
                   {d.proximaAcao.texto}
                 </p>
               </div>

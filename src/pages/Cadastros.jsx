@@ -106,7 +106,7 @@ function PainelAssessores() {
             <button onClick={() => abrirEdicao(a)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600" title="Editar">
               <Pencil size={15} />
             </button>
-            <button onClick={() => excluir(a)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir">
+            <button onClick={() => excluir(a)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700" title="Excluir">
               <Trash2 size={15} />
             </button>
           </li>
@@ -134,7 +134,7 @@ function PainelAssessores() {
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </Campo>
           </div>
-          {erro && <p className="text-sm text-red-600">{erro}</p>}
+          {erro && <p className="text-sm text-red-700">{erro}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
             <Button type="submit">Salvar</Button>
@@ -203,7 +203,7 @@ function PainelSeguradoras() {
             <button onClick={() => abrirEdicao(s)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600" title="Editar">
               <Pencil size={15} />
             </button>
-            <button onClick={() => excluir(s)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir">
+            <button onClick={() => excluir(s)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700" title="Excluir">
               <Trash2 size={15} />
             </button>
           </li>
@@ -226,7 +226,7 @@ function PainelSeguradoras() {
               value={form.comissao_padrao_percentual}
               onChange={(e) => setForm({ ...form, comissao_padrao_percentual: e.target.value })} />
           </Campo>
-          {erro && <p className="text-sm text-red-600">{erro}</p>}
+          {erro && <p className="text-sm text-red-700">{erro}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
             <Button type="submit">Salvar</Button>
@@ -317,7 +317,7 @@ function PainelSplit() {
           </Campo>
         </div>
         {soma !== 100 && (
-          <p className="text-sm text-amber-600">A soma precisa dar 100% (atual: {soma}%).</p>
+          <p className="text-sm text-amber-700">A soma precisa dar 100% (atual: {soma}%).</p>
         )}
         {cfg.imposto_pct !== undefined && (
           <div className="grid grid-cols-3 gap-3">

@@ -470,7 +470,7 @@ export default function AbaTranscricao({ idCliente, cliente }) {
                   <RefreshCw size={12} className="mr-1 inline" /> Abrir e reanalisar
                 </button>
                 <button onClick={() => excluir(t.id)} title="Excluir"
-                  className="rounded p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-600">
+                  className="rounded p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-700">
                   <Trash2 size={14} />
                 </button>
               </li>
@@ -531,7 +531,7 @@ function PainelPerfil({ a }) {
               <div key={it.rotulo}
                 className={`rounded-xl border p-3 ${it.alerta ? 'border-amber-200 bg-amber-50/50' : 'border-slate-200/70 bg-white'}`}>
                 <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-slate-400">
-                  <Icone size={12} className={it.alerta ? 'text-amber-600' : 'text-slate-400'} /> {it.rotulo}
+                  <Icone size={12} className={it.alerta ? 'text-amber-700' : 'text-slate-400'} /> {it.rotulo}
                 </p>
                 <p className="mt-0.5 text-sm font-medium text-slate-800">{it.valor}</p>
                 {it.nota && <p className="mt-1 text-xs text-amber-800">{it.nota}</p>}
@@ -571,7 +571,7 @@ function PainelPerfil({ a }) {
           <ul className="space-y-1">
             {faltam.map((q) => (
               <li key={q} className="flex items-start gap-2 text-xs text-slate-600">
-                <span className="mt-0.5 text-laranja-500">▹</span> {q}
+                <span className="mt-0.5 text-laranja-600">▹</span> {q}
               </li>
             ))}
           </ul>
@@ -641,7 +641,7 @@ function PainelLeitura({ a }) {
           <div key={rotulo} className="rounded-lg bg-slate-50 p-3">
             <p className="text-[11px] uppercase tracking-wide text-slate-400">{rotulo}</p>
             <p className={`font-display text-lg font-semibold tabular-nums ${
-              valor >= max * 0.75 ? 'text-emerald-600' : valor >= max * 0.4 ? 'text-slate-900' : 'text-red-600'}`}>
+              valor >= max * 0.75 ? 'text-emerald-700' : valor >= max * 0.4 ? 'text-slate-900' : 'text-red-700'}`}>
               {valor}<span className="text-sm font-normal text-slate-400">/{max}</span>
             </p>
           </div>
@@ -664,7 +664,7 @@ function PainelLeitura({ a }) {
         <ul className="mt-4 space-y-1.5 border-t border-slate-100 pt-3">
           {a.recomendacoes.map((r, i) => (
             <li key={i} className="flex items-start gap-2 text-xs text-slate-600">
-              <span className="mt-0.5 text-laranja-500">▹</span> {r}
+              <span className="mt-0.5 text-laranja-600">▹</span> {r}
             </li>
           ))}
         </ul>
@@ -750,7 +750,7 @@ function PainelExtracao({ a, plano, aceitos, setAceitos, tem019, aoAplicar }) {
               {/* "hoje: X → X" é ruído: quando o valor bate, o que importa é
                   saber que a conversa confirmou o que já estava lá */}
               {l.atual === l.novo ? (
-                <span className="text-xs text-emerald-600">✓ confirma o planejamento</span>
+                <span className="text-xs text-emerald-700">✓ confirma o planejamento</span>
               ) : l.atual ? (
                 <span className="text-xs text-slate-400">
                   hoje: <span className="tabular">{l.atual}</span> →
@@ -867,13 +867,13 @@ function PainelAvancado({ a }) {
 
         {bloco('Riscos', a.riscos, (r, i) => (
           <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
-            <ShieldAlert size={14} className="mt-0.5 shrink-0 text-amber-500" /> {r}
+            <ShieldAlert size={14} className="mt-0.5 shrink-0 text-amber-700" /> {r}
           </li>
         ))}
 
         {bloco('Para usar na proposta', a.argumentos_para_proposta, (x, i) => (
           <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
-            <span className="mt-0.5 text-laranja-500">▹</span> {x}
+            <span className="mt-0.5 text-laranja-600">▹</span> {x}
           </li>
         ))}
 
@@ -946,7 +946,7 @@ function PainelConversa({ a, aoCriarTarefa }) {
         )}
         {a.sinais.length > 0 && (
           <div className="mt-4 border-t border-slate-100 pt-3">
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-600">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-700">
               Sinais de compra
             </p>
             <div className="flex flex-wrap gap-1.5">

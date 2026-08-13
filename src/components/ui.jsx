@@ -58,8 +58,11 @@ export function Button({ children, variant = 'primary', className = '', ...props
     secondary: 'border border-slate-300/90 bg-white text-slate-700 shadow-sm hover:border-slate-400 hover:bg-slate-50',
     ghost: 'text-slate-600 hover:bg-slate-100',
     danger: 'bg-red-600 text-white shadow-sm hover:bg-red-700',
-    success: 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700',
-    gold: 'bg-laranja-500 text-white shadow-sm hover:bg-laranja-600',
+    // emerald-600 e laranja-500 com texto branco davam 3,8:1 e 3,6:1 — abaixo
+    // do mínimo de 4,5:1. Um tom mais escuro resolve sem mudar a identidade,
+    // e o botão continua sendo o verde do WhatsApp e o laranja da marca.
+    success: 'bg-emerald-700 text-white shadow-sm hover:bg-emerald-800',
+    gold: 'bg-laranja-600 text-white shadow-sm hover:bg-laranja-700',
   }
   return (
     <button
@@ -75,7 +78,7 @@ export function Campo({ label, children, obrigatorio, dica }) {
   return (
     <label className="block">
       <span className="mb-1.5 block text-sm font-medium text-slate-700">
-        {label} {obrigatorio && <span className="text-red-500">*</span>}
+        {label} {obrigatorio && <span className="text-red-700">*</span>}
       </span>
       {children}
       {dica && <span className="mt-1 block text-xs text-slate-400">{dica}</span>}

@@ -51,7 +51,7 @@ function Cronometro({ desde }) {
   const mm = String(Math.floor(seg / 60)).padStart(2, '0')
   const ss = String(seg % 60).padStart(2, '0')
   return (
-    <span className="inline-flex items-center gap-1.5 px-2 text-xs tabular text-slate-400"
+    <span className="inline-flex items-center gap-1.5 px-2 text-xs tabular text-slate-300"
       title="Tempo desde o início da apresentação">
       <Timer size={14} /> {mm}:{ss}
     </span>
@@ -107,7 +107,7 @@ export default function BarraApresentacao({
           onClick={() => setIndice(false)}>
           <div className="mb-24 max-h-[70vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-slate-900 p-3 shadow-2xl"
             onClick={(ev) => ev.stopPropagation()}>
-            <p className="px-2 pb-2 text-xs text-slate-400">
+            <p className="px-2 pb-2 text-xs text-slate-300">
               Toque para ir ao capítulo. No olho, você tira um capítulo desta reunião —
               nada é apagado do estudo, ele só deixa de aparecer ao avançar.
             </p>
@@ -278,7 +278,7 @@ export function PainelSimulacao({ plano, simulacao, mudar, limpar, fechar }) {
             <RotateCcw size={14} /> Voltar ao planejamento
           </button>
           <button type="button" onClick={fechar} aria-label="Fechar a simulação"
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-white">
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white">
             <X size={18} />
           </button>
         </div>
@@ -296,7 +296,7 @@ export function PainelSimulacao({ plano, simulacao, mudar, limpar, fechar }) {
               <button type="button" onClick={() => passo(-1)} aria-label={`Diminuir ${a.rotulo}`}
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white/10 text-lg text-white hover:bg-white/20">−</button>
               <div className="min-w-0 flex-1 text-center">
-                <p className="truncate text-[10px] uppercase tracking-wide text-slate-400">{a.curto ?? a.rotulo}</p>
+                <p className="truncate text-[10px] uppercase tracking-wide text-slate-300">{a.curto ?? a.rotulo}</p>
                 <p className="truncate font-display text-base font-semibold tabular text-white">
                   {a.prefixo ? brl(v) : `${v} ${a.sufixo ?? ''}`.trim()}
                 </p>

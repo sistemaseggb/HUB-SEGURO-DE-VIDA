@@ -51,10 +51,33 @@
   --color-gold-400: #e28442;
   --color-gold-500: #d96527;
   --color-gold-600: #c2531d;
+  /* gold-700 existe para TEXTO sobre o canvas: o -600 fica em 4,3:1 ali,
+     logo abaixo do mínimo de 4,5:1. Sobre branco puro o -600 passa. */
+  --color-gold-700: #a1431a;
 
   /* Superfícies */
   --color-canvas: #f6f6f4;
   --color-surface: #ffffff;
+
+  /* ── O cinza secundário, refeito para ser LEGÍVEL ──────────────────────────
+     `text-slate-400` carrega metade do texto de apoio do sistema: datas,
+     códigos, contagens, dicas de campo, os rodapés dos cartões da proposta.
+     No tom de fábrica (#94a3b8) ele dá 2,56:1 sobre branco e 2,37:1 sobre o
+     canvas — quase a METADE do mínimo de 4,5:1 da WCAG AA.
+
+     Isso não é preciosismo: a proposta é apresentada com a tela compartilhada
+     no Meet, muitas vezes projetada, e lida por um cliente de 45 a 60 anos.
+     Texto que some é argumento que não chega.
+
+     Os valores novos passam sobre branco E sobre o canvas, mantendo a mesma
+     família de cinza-azulado — continuam lendo como "secundário", só que
+     visíveis. Medido pela suíte `e2e-acessibilidade.mjs`, que agora entende
+     `oklch` (o Tailwind v4 não emite mais `rgb`).
+
+     Só há 6 usos não-textuais de slate-400 no projeto (3 bordas, 3 fundos) e
+     nenhum de slate-500, então mexer no token não desenha nada torto. */
+  --color-slate-400: #69707d;  /* era #94a3b8 — 2,56:1 → 4,98:1 sobre branco */
+  --color-slate-500: #616b7d;  /* era #64748b — 4,40:1 no canvas → 4,97:1 */
 }
 
 @layer base {

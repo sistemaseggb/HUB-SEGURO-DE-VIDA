@@ -86,9 +86,9 @@ export default function AssessorDetalhe() {
         <StatTile rotulo="Leads trazidos" valor={resumo.total_leads} detalhe={`${resumo.em_andamento} em andamento`}
           icone={Users} />
         <StatTile rotulo="Taxa de conversão" valor={`${resumo.taxa_conversao_pct}%`}
-          detalhe={`${resumo.fechados} fechados · ${resumo.perdidos} perdidos`} icone={Trophy} corIcone="text-amber-600 bg-amber-50" />
+          detalhe={`${resumo.fechados} fechados · ${resumo.perdidos} perdidos`} icone={Trophy} corIcone="text-amber-700 bg-amber-50" />
         <StatTile rotulo="Apólices geradas" valor={resumo.apolices}
-          detalhe={`${brl(resumo.premio_mensal_total)}/mês`} icone={FileSignature} corIcone="text-emerald-600 bg-emerald-50" />
+          detalhe={`${brl(resumo.premio_mensal_total)}/mês`} icone={FileSignature} corIcone="text-emerald-700 bg-emerald-50" />
         <StatTile rotulo="Comissão do assessor" valor={brlCompacto(resumo.comissao_assessor_total)}
           detalhe="total gerado (histórico)" icone={Wallet} corIcone="text-laranja-600 bg-laranja-50" />
       </div>

@@ -16,7 +16,7 @@
 //
 // Roda com `node scripts/teste-vigia.mjs` (e junto em `npm test`).
 // ─────────────────────────────────────────────────────────────────────────────
-import { vigiar, aoFalharConsulta, falhaEsperada } from '../src/lib/vigia.js'
+import { vigiar, aoFalharConsulta, falhaEsperada, tipoDaFalha, MENSAGEM_FALHA } from '../src/lib/vigia.js'
 import { criarSupabaseDemo } from '../src/lib/demoDb.js'
 
 const falhas = []
@@ -154,6 +154,42 @@ console.log('\n── O motivo de existir ──')
 }
 
 // ── 5. REJEIÇÃO DE VERDADE ──────────────────────────────────────────────────
+// ── 5. CADA CAUSA PEDE UM CONSERTO DIFERENTE ────────────────────────────────
+console.log('\n── Mandar a mensagem errada faz caçar o problema errado ──')
+{
+  ok(tipoDaFalha({ code: 'PGRST301', message: 'JWT expired' }) === 'sessao',
+    'sessão expirada é reconhecida', tipoDaFalha({ code: 'PGRST301' }))
+  ok(tipoDaFalha({ message: 'JWSError: token is expired' }) === 'sessao',
+    'e também pela mensagem, sem o código')
+  ok(tipoDaFalha({ code: '42501', message: 'permission denied for table apolices' }) === 'permissao',
+    'permissão negada é outra coisa')
+  ok(tipoDaFalha({ message: 'new row violates row-level security policy' }) === 'permissao',
+    'RLS barrando escrita também')
+  ok(tipoDaFalha({ message: 'TypeError: Failed to fetch' }) === 'rede', 'rede caindo é rede')
+  ok(tipoDaFalha({ message: 'Load failed' }) === 'rede', 'e o jeito que o Safari escreve isso também')
+  ok(tipoDaFalha({ code: '22P02', message: 'invalid input syntax' }) === 'banco',
+    'o resto cai em "banco"')
+
+  ok(MENSAGEM_FALHA.sessao !== MENSAGEM_FALHA.rede,
+    'a mensagem de sessão NÃO é a de rede — mandar "verifique a conexão" para quem só precisa entrar de novo é pior que não dizer nada')
+  ok(/entre de novo|entrar de novo/i.test(MENSAGEM_FALHA.sessao),
+    'a de sessão diz o que fazer', MENSAGEM_FALHA.sessao)
+  ok(Object.values(MENSAGEM_FALHA).every((m) => m.length > 20 && !/erro|falha técnica/i.test(m.slice(0, 8))),
+    'nenhuma mensagem começa com "Erro" — ela precisa saber o que fazer, não que houve erro')
+
+  // o aviso que chega ao ouvinte já vem classificado e pronto para a tela
+  const recebidos = []
+  const parar2 = aoFalharConsulta((a) => recebidos.push(a))
+  const cli = {
+    from: () => ({ select() { return this },
+      then: (aoOk) => Promise.resolve({ data: null, error: { code: 'PGRST301', message: 'JWT expired' } }).then(aoOk) }),
+  }
+  await vigiar(cli).from('clientes').select('*')
+  ok(recebidos[0]?.tipo === 'sessao' && recebidos[0]?.mensagem === MENSAGEM_FALHA.sessao,
+    'o ouvinte recebe o tipo e a mensagem prontos', JSON.stringify(recebidos[0]?.tipo))
+  parar2()
+}
+
 console.log('\n── Quando a promessa rejeita em vez de devolver erro ──')
 {
   const clienteQueExplode = {

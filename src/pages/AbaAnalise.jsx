@@ -224,7 +224,7 @@ export default function AbaAnalise({ idCliente, cliente, onMudanca }) {
             <Textarea rows={2} value={form.observacoes}
               onChange={(e) => setForm({ ...form, observacoes: e.target.value })} />
           </Campo>
-          {erro && <p className="text-sm text-red-600">{erro}</p>}
+          {erro && <p className="text-sm text-red-700">{erro}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
             <Button type="submit">Salvar</Button>
@@ -289,7 +289,7 @@ function CartaoProposta({ d, cliente, aoEditar, aoExcluir, aoMudarSituacao, aoGr
           <button onClick={aoEditar} title="Editar proposta"
             className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-blue-600"><FileSignature size={16} /></button>
           <button onClick={aoExcluir} title="Excluir proposta"
-            className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={16} /></button>
+            className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-700"><Trash2 size={16} /></button>
         </div>
       </div>
 
@@ -374,7 +374,7 @@ function CartaoProposta({ d, cliente, aoEditar, aoExcluir, aoMudarSituacao, aoGr
                     <Dono size={12} />
                     {DE_QUEM.find((x) => x.id === e.de_quem)?.rotulo ?? 'Do cliente'}
                     {e.aberta && e.diasParada != null && (
-                      <span className={e.atrasada ? 'font-medium text-red-600' : ''}>
+                      <span className={e.atrasada ? 'font-medium text-red-700' : ''}>
                         · parada há {e.diasParada} {e.diasParada === 1 ? 'dia' : 'dias'}
                         {e.atrasada && ` (prazo ${e.limite})`}
                       </span>
@@ -383,7 +383,7 @@ function CartaoProposta({ d, cliente, aoEditar, aoExcluir, aoMudarSituacao, aoGr
                   </p>
                 </div>
                 <button onClick={() => remover(i)} aria-label={`Remover "${e.o_que}"`}
-                  className="rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-600">
+                  className="rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-700">
                   <Trash2 size={14} />
                 </button>
               </li>

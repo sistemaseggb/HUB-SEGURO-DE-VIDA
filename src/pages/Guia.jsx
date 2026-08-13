@@ -47,7 +47,7 @@ const JORNADA = [
     acoes: ['Abra a aba Roteiro e marque cada bloco conforme avança', 'Ao fim, "Levar anotações para as Notas da reunião"'],
   },
   {
-    n: 4, icone: ChartPie, cor: 'text-emerald-600 bg-emerald-50',
+    n: 4, icone: ChartPie, cor: 'text-emerald-700 bg-emerald-50',
     titulo: 'Monte o planejamento financeiro',
     onde: 'Cliente · aba Planejamento',
     para: '/clientes',
@@ -65,7 +65,7 @@ const JORNADA = [
     acoes: ['Gerar proposta → navegue com as setas', 'Copiar link do cliente ou Enviar ao cliente (WhatsApp)'],
   },
   {
-    n: 6, icone: FileSignature, cor: 'text-amber-600 bg-amber-50',
+    n: 6, icone: FileSignature, cor: 'text-amber-700 bg-amber-50',
     titulo: 'Feche a venda e a DPS',
     onde: 'Cliente · abas Formulário e Apólices',
     para: '/clientes',
@@ -232,7 +232,7 @@ export default function Guia() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     {e.acoes.map((a, i) => (
                       <span key={i} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600">
-                        <ArrowRight size={12} className="text-laranja-500" /> {a}
+                        <ArrowRight size={12} className="text-laranja-600" /> {a}
                       </span>
                     ))}
                   </div>
@@ -283,7 +283,7 @@ export default function Guia() {
       {/* Dicas de ouro */}
       <Card className="mb-2 p-6">
         <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-semibold text-slate-900">
-          <Lightbulb size={20} className="text-laranja-500" /> Dicas de ouro
+          <Lightbulb size={20} className="text-laranja-600" /> Dicas de ouro
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {DICAS.map((d, i) => (

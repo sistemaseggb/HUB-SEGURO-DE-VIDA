@@ -163,13 +163,13 @@ export default function AbaComparador({ idCliente, cliente }) {
               <p className="mt-2 text-xs text-slate-500">
                 {tabelaLida.length > 0 ? (
                   <>
-                    <Check size={13} className="mr-1 inline text-emerald-600" />
+                    <Check size={13} className="mr-1 inline text-emerald-700" />
                     Entendi <strong>{tabelaLida.length}</strong> ponto(s):{' '}
                     {tabelaLida.map((p) => `ano ${p.ano} = ${brlCompacto(p.resgate)}`).join(' · ')}
                   </>
                 ) : (
                   <>
-                    <AlertTriangle size={13} className="mr-1 inline text-amber-600" />
+                    <AlertTriangle size={13} className="mr-1 inline text-amber-700" />
                     Não achei nenhum par ano/valor. Cada linha precisa de dois números — o ano e o
                     valor de resgate.
                   </>
@@ -217,7 +217,7 @@ export default function AbaComparador({ idCliente, cliente }) {
           <ul className="mt-4 space-y-1.5 border-t border-slate-100 pt-3">
             {avisos.map((a, i) => (
               <li key={i} className={`flex items-start gap-2 text-xs ${a.grave ? 'text-red-700' : 'text-amber-800'}`}>
-                <AlertTriangle size={13} className={`mt-0.5 shrink-0 ${a.grave ? 'text-red-500' : 'text-amber-500'}`} />
+                <AlertTriangle size={13} className={`mt-0.5 shrink-0 ${a.grave ? 'text-red-700' : 'text-amber-700'}`} />
                 {a.texto}
               </li>
             ))}
@@ -346,7 +346,7 @@ export default function AbaComparador({ idCliente, cliente }) {
 }
 
 function Numero({ rotulo, valor, detalhe, tom = 'neutro' }) {
-  const cor = tom === 'bom' ? 'text-emerald-600' : tom === 'ruim' ? 'text-red-600' : 'text-slate-900'
+  const cor = tom === 'bom' ? 'text-emerald-700' : tom === 'ruim' ? 'text-red-700' : 'text-slate-900'
   return (
     <div className="rounded-xl border border-slate-200/70 bg-slate-50/60 p-3">
       <p className="text-[11px] uppercase tracking-wide text-slate-400">{rotulo}</p>

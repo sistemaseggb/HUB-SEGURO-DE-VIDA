@@ -114,7 +114,7 @@ export default function Agenda() {
       {pendentes.length > 0 && (
         <Card className="mb-6 border-amber-200 bg-amber-50/40 p-5">
           <h2 className="mb-1 flex items-center gap-2 font-semibold text-slate-900">
-            <Mail size={18} className="text-amber-500" /> Reuniões do Outlook a vincular
+            <Mail size={18} className="text-amber-700" /> Reuniões do Outlook a vincular
             <Badge tom="yellow">{pendentes.length}</Badge>
           </h2>
           <p className="mb-4 text-xs text-slate-500">
@@ -128,7 +128,7 @@ export default function Agenda() {
                   <p className="truncate text-sm font-medium text-slate-800">{ev.assunto || '(sem assunto)'}</p>
                   <p className="text-xs text-slate-400">{dataHoraBR(ev.inicio)}{ev.organizador && ` · ${ev.organizador}`}</p>
                 </div>
-                <Select defaultValue="" onChange={(e) => vincular(ev, e.target.value)} style={{ width: 'auto' }}>
+                <Select aria-label="Vincular este evento a um cliente" defaultValue="" onChange={(e) => vincular(ev, e.target.value)} style={{ width: 'auto' }}>
                   <option value="">Vincular ao cliente…</option>
                   {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
                 </Select>
@@ -152,7 +152,7 @@ export default function Agenda() {
         {grupos.map(([chave, itens]) => (
           <div key={chave}>
             <h2 className={`mb-2 text-sm font-semibold uppercase tracking-wide ${
-              chave === 'ATRASADAS' ? 'text-red-600' : 'text-slate-400'}`}>
+              chave === 'ATRASADAS' ? 'text-red-700' : 'text-slate-400'}`}>
               {rotuloDia(chave)}
             </h2>
             <Card>
@@ -172,14 +172,14 @@ export default function Agenda() {
                         {r.notas && ` · ${r.notas}`}
                       </p>
                     </div>
-                    <Select value={r.status} onChange={(e) => mudarStatus(r, e.target.value)} style={{ width: 'auto' }}>
+                    <Select aria-label="Situação da reunião" value={r.status} onChange={(e) => mudarStatus(r, e.target.value)} style={{ width: 'auto' }}>
                       {STATUS_REUNIAO.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                     </Select>
                     {whatsapp(r.telefone) && (
                       <a target="_blank" rel="noreferrer"
                         href={whatsapp(r.telefone,
                           `Olá ${r.nome_cliente.split(' ')[0]}! Confirmando nossa reunião de ${new Date(r.data_hora).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}. Até lá! — Natália`)}
-                        className="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50"
+                        className="rounded-lg p-2 text-emerald-700 hover:bg-emerald-50"
                         title="Confirmar por WhatsApp">
                         <MessageCircle size={17} />
                       </a>

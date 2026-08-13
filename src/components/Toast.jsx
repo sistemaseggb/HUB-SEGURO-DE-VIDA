@@ -3,8 +3,8 @@ import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react'
 import { ToastContext } from './toastContexto'
 
 const ICONE = {
-  ok: { Icone: CheckCircle2, cor: 'text-emerald-600', anel: 'ring-emerald-100' },
-  erro: { Icone: AlertTriangle, cor: 'text-red-600', anel: 'ring-red-100' },
+  ok: { Icone: CheckCircle2, cor: 'text-emerald-700', anel: 'ring-emerald-100' },
+  erro: { Icone: AlertTriangle, cor: 'text-red-700', anel: 'ring-red-100' },
   info: { Icone: Info, cor: 'text-brand-600', anel: 'ring-brand-100' },
 }
 

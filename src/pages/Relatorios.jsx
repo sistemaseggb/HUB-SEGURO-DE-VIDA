@@ -7,12 +7,12 @@ import {
 // Badge de variação percentual vs mês anterior (▲ verde / ▼ vermelho)
 function VariacaoBadge({ atual, anterior, rotulo, grande }) {
   if (!anterior) return rotulo ? <span className="text-xs text-slate-400">{rotulo}: novo</span>
-    : <span className="text-xs text-slate-300">novo</span>
+    : <span className="text-xs text-slate-400">novo</span>
   const pct = Math.round(((atual - anterior) / Math.abs(anterior)) * 100)
   const sobe = pct >= 0
   return (
     <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-semibold ${
-      grande ? 'text-sm' : 'text-xs'} ${sobe ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+      grande ? 'text-sm' : 'text-xs'} ${sobe ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
       {sobe ? <ArrowUpRight size={grande ? 15 : 12} /> : <ArrowDownRight size={grande ? 15 : 12} />}
       {sobe ? '+' : ''}{pct}%{rotulo ? ` ${rotulo}` : ''}
     </span>
@@ -33,7 +33,7 @@ function FragmentoAssessor({ a }) {
         <td className="py-2.5 text-xs text-slate-500">{[...a.producoes].join(' / ') || '—'}</td>
         <td className="py-2.5 text-right text-slate-500">{a.clientes}</td>
         <td className="py-2.5 text-right text-slate-500">{a.lancamentos}</td>
-        <td className={`py-2.5 text-right ${a.estornos < 0 ? 'text-red-600' : 'text-slate-300'}`}>
+        <td className={`py-2.5 text-right ${a.estornos < 0 ? 'text-red-700' : 'text-slate-400'}`}>
           {a.estornos < 0 ? brl(a.estornos) : '—'}
         </td>
         <td className="py-2.5 text-right font-semibold text-slate-900">{brl(a.split.bruto)}</td>
@@ -47,7 +47,7 @@ function FragmentoAssessor({ a }) {
           <td className="py-2 text-slate-400">{[...s.producoes].join(' / ') || '—'}</td>
           <td className="py-2 text-right text-slate-400">{s.clientes}</td>
           <td className="py-2 text-right text-slate-400">{s.lancamentos}</td>
-          <td className={`py-2 text-right ${s.estornos < 0 ? 'text-red-500' : 'text-slate-300'}`}>
+          <td className={`py-2 text-right ${s.estornos < 0 ? 'text-red-700' : 'text-slate-400'}`}>
             {s.estornos < 0 ? brl(s.estornos) : '—'}
           </td>
           <td className="py-2 text-right tabular-nums text-slate-700">{brl(s.split.bruto)}</td>
@@ -730,7 +730,7 @@ export default function Relatorios() {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
             <div>
               <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-                <Landmark size={17} className="text-emerald-600" /> Comissões recebidas das seguradoras — {mesBR(mes + '-01')}
+                <Landmark size={17} className="text-emerald-700" /> Comissões recebidas das seguradoras — {mesBR(mes + '-01')}
               </h2>
               <p className="text-xs text-slate-400">
                 Extrato real importado das planilhas (Azos, Icatu, MAG, Omint...) em Importar → Comissões
@@ -1031,7 +1031,7 @@ export default function Relatorios() {
                             <span className="font-medium text-slate-800">{cliente}</span>
                             <span className="text-xs text-slate-500">{c.n} lançamento(s) · {brl(c.total)}</span>
                             <div className="ml-auto w-60">
-                              <Select defaultValue="" onChange={(e) => e.target.value && vincularAssessor(cliente, e.target.value)}>
+                              <Select aria-label="Vincular a um assessor" defaultValue="" onChange={(e) => e.target.value && vincularAssessor(cliente, e.target.value)}>
                                 <option value="">Vincular assessor...</option>
                                 {assessoresLista.map((a) => (
                                   <option key={a.id} value={a.id}>{a.nome}{a.codigo ? ` (${a.codigo})` : ''}</option>
@@ -1198,7 +1198,7 @@ export default function Relatorios() {
         {/* Motivos de perda */}
         <Card className="p-5">
           <h2 className="mb-1 flex items-center gap-2 font-semibold text-slate-900">
-            <TrendingDown size={17} className="text-red-500" /> Por que perdemos clientes
+            <TrendingDown size={17} className="text-red-700" /> Por que perdemos clientes
           </h2>
           <p className="mb-4 text-xs text-slate-400">Registrado ao mover para "Perdido" no Kanban</p>
           {motivos.length === 0

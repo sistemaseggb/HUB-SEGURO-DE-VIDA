@@ -74,7 +74,7 @@ export default function Login() {
               <Input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} required placeholder="••••••••" />
             </Campo>
             {erro && (
-              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 ring-1 ring-inset ring-red-100">{erro}</p>
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-inset ring-red-100">{erro}</p>
             )}
             <Button type="submit" className="w-full py-2.5" disabled={carregando}>
               {carregando ? 'Entrando...' : 'Entrar'}

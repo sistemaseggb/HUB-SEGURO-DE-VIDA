@@ -109,7 +109,7 @@ export default function Mensagens() {
                           ? <Button variant="success" onClick={() => enviar(m)}>
                               <MessageCircle size={15} /> Enviar no WhatsApp
                             </Button>
-                          : <span className="text-xs text-amber-600">cliente sem telefone cadastrado</span>}
+                          : <span className="text-xs text-amber-700">cliente sem telefone cadastrado</span>}
                         <Button variant="secondary" onClick={() => marcar(m, 'enviada')}>
                           <Check size={15} /> Já enviei
                         </Button>

@@ -94,9 +94,9 @@ export default function Clientes() {
           </p>
           <ul className="mt-1 text-xs text-amber-700">
             {duplicados.slice(0, 5).map((d) => (
-              <li key={d.fone}>• {d.clientes} <span className="text-amber-500">({d.fone})</span></li>
+              <li key={d.fone}>• {d.clientes} <span className="text-amber-700">({d.fone})</span></li>
             ))}
-            {duplicados.length > 5 && <li className="text-amber-500">…e mais {duplicados.length - 5}</li>}
+            {duplicados.length > 5 && <li className="text-amber-700">…e mais {duplicados.length - 5}</li>}
           </ul>
         </div>
       )}
@@ -167,7 +167,7 @@ export default function Clientes() {
                   <td className="px-2 py-3">
                     {whatsapp(c.telefone) && (
                       <a href={whatsapp(c.telefone)} target="_blank" rel="noreferrer"
-                        className="inline-flex rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50"
+                        className="inline-flex rounded-lg p-1.5 text-emerald-700 hover:bg-emerald-50"
                         title={`WhatsApp de ${c.nome.split(' ')[0]}`}>
                         <MessageCircle size={16} />
                       </a>
@@ -216,7 +216,7 @@ export default function Clientes() {
               onChange={(e) => setForm({ ...form, perfil_necessidade: e.target.value })}
               placeholder="Ex.: médico, 2 filhos, preocupado com sucessão patrimonial..." />
           </Campo>
-          {erro && <p className="text-sm text-red-600">{erro}</p>}
+          {erro && <p className="text-sm text-red-700">{erro}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
             <Button type="submit" disabled={salvando}>{salvando ? 'Salvando...' : 'Cadastrar lead'}</Button>

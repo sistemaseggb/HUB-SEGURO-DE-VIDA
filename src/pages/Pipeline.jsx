@@ -73,8 +73,8 @@ export default function Pipeline() {
       <ComoFunciona id="pipeline">
         Cada cliente é um <strong>card</strong> que caminha da esquerda (novo lead) para a direita (fechado).
         Arraste com o mouse para mudar de etapa — o sistema registra o histórico e conta os dias parados sozinho.
-        Cards que ficam tempo demais numa etapa ficam <span className="text-amber-600">amarelos</span> e depois
-        <span className="text-red-600"> vermelhos</span>, para você não esquecer ninguém.
+        Cards que ficam tempo demais numa etapa ficam <span className="text-amber-700">amarelos</span> e depois
+        <span className="text-red-700"> vermelhos</span>, para você não esquecer ninguém.
       </ComoFunciona>
 
       <div className="flex gap-3 overflow-x-auto pb-4">
@@ -137,7 +137,7 @@ export default function Pipeline() {
                       {whatsapp(card.telefone) && (
                         <a href={whatsapp(card.telefone)} target="_blank" rel="noreferrer"
                           onClick={(e) => e.stopPropagation()} draggable={false}
-                          className="ml-auto rounded p-1 text-emerald-600 hover:bg-emerald-50" title="WhatsApp">
+                          className="ml-auto rounded p-1 text-emerald-700 hover:bg-emerald-50" title="WhatsApp">
                           <MessageCircle size={14} />
                         </a>
                       )}

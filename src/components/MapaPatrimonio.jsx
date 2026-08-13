@@ -22,7 +22,24 @@ import { brl, brlCompacto } from '../lib/format'
 
 const RAMPA_INVENTARIO = ['#0b4f75', '#1272a8', '#3f9bd0', '#6aaed6', '#9ccbe6']
 const COR_LIVRE = '#0e9f6e'
-const TINTA_CLARA = new Set(['#6aaed6', '#9ccbe6'])
+// Qual tinta usar DENTRO de cada faixa colorida. Era uma lista fixa de duas
+// cores, e ficava desatualizada a cada cor nova da rampa: o verde e o azul
+// médio recebiam texto branco em 3,4:1 e 4,2:1, abaixo do mínimo de 4,5:1.
+//
+// Agora a decisão é MEDIDA, não decorada: calcula o contraste dos dois lados e
+// usa o que ganha. O escuro é slate-900 (#0f172a) porque é o único que fecha
+// 4,5:1 em toda a rampa — com slate-800 o verde ficava em 4,3:1.
+const TINTA_ESCURA = '#0f172a'
+const luminancia = (hex) => {
+  const canais = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+  return 0.2126 * canais[0] + 0.7152 * canais[1] + 0.0722 * canais[2]
+}
+const contraste = (a, b) => {
+  const [maior, menor] = [luminancia(a), luminancia(b)].sort((x, y) => y - x)
+  return (maior + 0.05) / (menor + 0.05)
+}
+const pedeTintaEscura = (fundo) => contraste(fundo, TINTA_ESCURA) > contraste(fundo, '#ffffff')
 
 export default function MapaPatrimonio({ estudo, titulo = true, compacto = false }) {
   const [hover, setHover] = useState(null)
@@ -75,8 +92,8 @@ export default function MapaPatrimonio({ estudo, titulo = true, compacto = false
               }}
               title={`${s.rotulo}: ${brl(s.valor)} (${Math.round(pct(s.valor))}%)`}>
               {pct(s.valor) >= 14 && (
-                <span className={`truncate px-1.5 text-[11px] font-semibold tabular ${
-                  TINTA_CLARA.has(s.cor) ? 'text-slate-800' : 'text-white'}`}>
+                <span className="truncate px-1.5 text-[11px] font-semibold tabular"
+                  style={{ color: pedeTintaEscura(s.cor) ? TINTA_ESCURA : '#ffffff' }}>
                   {Math.round(pct(s.valor))}%
                 </span>
               )}
@@ -101,7 +118,7 @@ export default function MapaPatrimonio({ estudo, titulo = true, compacto = false
               <span className="min-w-0 truncate text-slate-400">
                 travado · {brlCompacto(estudo.bensInventariaveis)}
               </span>
-              <span className="min-w-0 truncate text-emerald-600">
+              <span className="min-w-0 truncate text-emerald-700">
                 livre · {brlCompacto(total - estudo.bensInventariaveis)}
               </span>
             </div>
