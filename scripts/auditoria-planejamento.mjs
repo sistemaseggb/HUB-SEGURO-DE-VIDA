@@ -1,0 +1,983 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDITORIA DE 10.000 PLANEJAMENTOS REAIS
+//
+// O `test:motor` já prova que o estudo não QUEBRA: joga lixo na entrada e cobra
+// que nada vire NaN. Isso é robustez, não competência. Um motor que devolvesse
+// zero em tudo passaria naquele teste com louvor.
+//
+// Esta auditoria pergunta outra coisa, muito mais difícil e muito mais
+// importante para quem vai apresentar o estudo na frente do cliente:
+//
+//        O CONSELHO QUE O SISTEMA DÁ ESTÁ CERTO?
+//
+// Para isso não serve entrada aleatória. Serve gente. São 10.000 clientes
+// plausíveis — o CLT de 28 anos sem filhos, a médica autônoma com três
+// crianças, o empresário de 55 com sócio e aval no banco, a viúva que quer
+// resolver o inventário do marido, o casal sem filhos, o cliente que só quer
+// cobrir o financiamento por 20 anos — cada um com números que existem no
+// mundo.
+//
+// Sobre cada estudo calculado passam as REGRAS DE AUDITORIA: cada uma é uma
+// coisa que um consultor sênior olharia e diria "isso está errado" ou "isso
+// você deixou passar". Elas não medem estilo. Medem erro material:
+//
+//   · capital que nenhuma seguradora emite (limite técnico de mercado);
+//   · prêmio que não cabe no bolso do cliente;
+//   · proteção vendida para quem não precisa dela (solteiro sem dependentes);
+//   · a mesma reserva contada duas vezes em dois lugares do estudo;
+//   · pergunta decisiva que o sistema deixou de fazer (regime de bens, UF);
+//   · e conselho que contradiz outro conselho do mesmo estudo.
+//
+// O relatório é deliberadamente desconfortável: lista quantos dos 10.000
+// planejamentos cairiam em cada erro, com um caso concreto para reproduzir.
+//
+//   node scripts/auditoria-planejamento.mjs
+//   CASOS=50000 SEMENTE=42 node scripts/auditoria-planejamento.mjs
+//   node scripts/auditoria-planejamento.mjs --detalhe R07   (dumpa um caso)
+//
+// Saída: código 0 sempre — auditoria informa, não reprova. Quem reprova é o
+// `npm run test:planejamento`, que trava nas regras já corrigidas (ver
+// LIMITES_ACEITOS no fim do arquivo).
+// ─────────────────────────────────────────────────────────────────────────────
+import { calcularEstudo, IDADE_INDEPENDENCIA } from '../src/lib/estudo.js'
+
+// Os tetos ficam AQUI, não importados do motor, de propósito: um auditor que
+// usa as constantes do auditado não audita nada — só confirma que o sistema
+// concorda consigo mesmo. Estes são os limites praticados no mercado brasileiro
+// de vida individual (Icatu, MetLife, Prudential, Omint, Azos na faixa alta).
+const LIMITES_MERCADO = {
+  morte: 20_000_000,        // acima disso: resseguro facultativo, exames, meses
+  doencas_graves: 3_000_000,
+  invalidez: 20_000_000,
+  diaria_dit: 1_500,        // por dia
+  diaria_dih: 1_500,
+}
+
+// O diagnóstico ainda pode não existir na árvore (é o que esta auditoria pede
+// que exista). Sem ele as regras do grupo G ficam neutras em vez de explodir.
+let diagnosticar = null
+try {
+  ({ diagnosticar } = await import('../src/lib/diagnostico.js'))
+} catch {
+  console.log('  ⚠️  src/lib/diagnostico.js ainda não existe — regras R21..R24 desligadas.\n')
+}
+
+const CASOS = Number(process.env.CASOS ?? 10000)
+const alvoDetalhe = (() => {
+  const i = process.argv.indexOf('--detalhe')
+  return i > -1 ? process.argv[i + 1] : null
+})()
+
+// ─── Gerador determinístico ──────────────────────────────────────────────────
+let semente = Number(process.env.SEMENTE ?? 20260813)
+const rnd = () => {
+  semente = (semente * 1103515245 + 12345) % 2147483648
+  return semente / 2147483648
+}
+const entre = (a, b) => a + rnd() * (b - a)
+const inteiroEntre = (a, b) => Math.round(entre(a, b))
+const escolher = (lista) => lista[Math.floor(rnd() * lista.length)]
+const talvez = (p) => rnd() < p
+// arredonda como gente arredonda ao dizer um número numa reunião
+const redondo = (v) => {
+  if (v >= 1_000_000) return Math.round(v / 50_000) * 50_000
+  if (v >= 100_000) return Math.round(v / 10_000) * 10_000
+  if (v >= 10_000) return Math.round(v / 500) * 500
+  return Math.round(v / 100) * 100
+}
+
+const UFS = ['SP', 'RJ', 'MG', 'RS', 'PR', 'SC', 'BA', 'PE', 'CE', 'GO', 'DF', 'MT']
+
+function nascimentoParaIdade(idade, hoje) {
+  const d = new Date(hoje)
+  d.setFullYear(d.getFullYear() - idade)
+  d.setDate(d.getDate() - inteiroEntre(1, 300))
+  return d.toISOString().slice(0, 10)
+}
+
+// ─── Os arquétipos ───────────────────────────────────────────────────────────
+// Cada um devolve { rotulo, publico, idade, plano }. O `publico` é o recorte
+// que o relatório usa para dizer ONDE o sistema erra mais.
+const ARQUETIPOS = [
+  // ── 1. CLT jovem, solteiro, sem dependentes ────────────────────────────────
+  // O caso que mais expõe conselho automático: ninguém depende dessa renda.
+  () => {
+    const renda = redondo(entre(3500, 12_000))
+    return {
+      rotulo: 'CLT jovem solteiro sem dependentes', publico: 'PF sem dependentes',
+      idade: inteiroEntre(23, 32),
+      plano: {
+        tipo_planejamento: 'pf', focos: ['renda'],
+        estado_civil: 'Solteiro(a)', regime_bens: '',
+        renda_mensal: renda, custo_vida_mensal: redondo(renda * entre(0.5, 0.8)),
+        dividas_total: talvez(0.4) ? redondo(entre(5000, 60_000)) : 0,
+        patrimonio_investimentos: talvez(0.6) ? redondo(entre(5000, 80_000)) : 0,
+        dependentes: [],
+        anos_protecao: 10,
+        premio_estimado: redondo(entre(90, 320)),
+      },
+    }
+  },
+
+  // ── 2. Casal com filhos, renda média — o caso mais comum da carteira ───────
+  () => {
+    const renda = redondo(entre(9000, 30_000))
+    const nFilhos = inteiroEntre(1, 3)
+    return {
+      rotulo: 'Casal CLT com filhos', publico: 'PF família',
+      idade: inteiroEntre(32, 45),
+      plano: {
+        tipo_planejamento: 'pf', focos: escolher([['renda'], ['renda', 'educacao'], ['educacao']]),
+        estado_civil: 'Casado(a)',
+        regime_bens: talvez(0.55) ? 'Comunhão parcial' : '',
+        renda_mensal: renda, custo_vida_mensal: redondo(renda * entre(0.6, 0.92)),
+        dividas_total: talvez(0.7) ? redondo(entre(80_000, 700_000)) : 0,
+        patrimonio_imoveis: talvez(0.7) ? redondo(entre(250_000, 1_400_000)) : 0,
+        patrimonio_investimentos: redondo(entre(10_000, 250_000)),
+        patrimonio_veiculos: redondo(entre(25_000, 160_000)),
+        previdencia_saldo: talvez(0.5) ? redondo(entre(15_000, 300_000)) : 0,
+        previdencia_tipo: escolher(['VGBL', 'PGBL', '']),
+        dependentes: Array.from({ length: nFilhos }, (_, i) => ({
+          nome: `Filho ${i + 1}`, idade: inteiroEntre(0, 20),
+          custo_mensal: redondo(entre(800, 3500)),
+        })),
+        anos_protecao: escolher([10, 15, 20]),
+        cobertura_atual: talvez(0.45) ? redondo(entre(80_000, 500_000)) : 0,
+        premio_estimado: redondo(entre(180, 900)),
+      },
+    }
+  },
+
+  // ── 3. Autônomo / liberal de alta renda (médico, advogado, dentista) ───────
+  // A renda para no dia em que ele para: DIT e doenças graves são o coração.
+  () => {
+    const renda = redondo(entre(35_000, 220_000))
+    return {
+      rotulo: 'Autônomo liberal alta renda', publico: 'PF alta renda',
+      idade: inteiroEntre(35, 52),
+      plano: {
+        tipo_planejamento: 'pf', focos: escolher([['renda'], ['renda', 'sucessao'], ['renda', 'blindagem']]),
+        estado_civil: escolher(['Casado(a)', 'Casado(a)', 'União estável']),
+        regime_bens: escolher(['Comunhão parcial', 'Separação total', '']),
+        profissao: escolher(['Médico', 'Advogada', 'Dentista', 'Arquiteto']),
+        renda_mensal: renda, custo_vida_mensal: redondo(renda * entre(0.45, 0.75)),
+        dividas_total: talvez(0.5) ? redondo(entre(200_000, 2_000_000)) : 0,
+        patrimonio_imoveis: redondo(entre(800_000, 6_000_000)),
+        patrimonio_investimentos: redondo(entre(150_000, 3_000_000)),
+        patrimonio_veiculos: redondo(entre(80_000, 500_000)),
+        previdencia_saldo: redondo(entre(80_000, 1_500_000)),
+        previdencia_tipo: escolher(['VGBL', 'PGBL', 'Ambos']),
+        dependentes: Array.from({ length: inteiroEntre(1, 3) }, (_, i) => ({
+          nome: `Filho ${i + 1}`, idade: inteiroEntre(0, 22),
+          custo_mensal: redondo(entre(2500, 12_000)),
+        })),
+        anos_protecao: escolher([15, 20, 25]),
+        premio_estimado: redondo(entre(1500, 9000)),
+        premio_anual: talvez(0.4) ? redondo(entre(16_000, 95_000)) : 0,
+      },
+    }
+  },
+
+  // ── 4. Empresário PJ puro — só a empresa está na mesa ──────────────────────
+  () => {
+    const fat = redondo(entre(1_200_000, 60_000_000))
+    const socios = inteiroEntre(1, 4)
+    return {
+      rotulo: 'Empresário — estudo PJ puro', publico: 'PJ',
+      idade: inteiroEntre(38, 60),
+      plano: {
+        tipo_planejamento: 'pj', focos: ['empresarial'],
+        estado_civil: 'Casado(a)', regime_bens: escolher(['Comunhão parcial', 'Separação total', '']),
+        pj_razao_social: 'Empresa Exemplo Ltda',
+        pj_faturamento_anual: fat,
+        pj_lucro_anual: talvez(0.6) ? redondo(fat * entre(0.06, 0.25)) : 0,
+        pj_valuation: talvez(0.7) ? redondo(fat * entre(0.6, 3)) : 0,
+        pj_num_socios: socios,
+        pj_participacao_pct: socios > 1 ? Math.round(100 / socios) : 100,
+        pj_divida_avalizada: talvez(0.6) ? redondo(entre(150_000, 6_000_000)) : 0,
+        anos_protecao: 15,
+        premio_estimado: redondo(entre(900, 12_000)),
+      },
+    }
+  },
+
+  // ── 5. Sócio com vida pessoal e empresa no mesmo estudo ───────────────────
+  () => {
+    const renda = redondo(entre(20_000, 90_000))
+    const fat = redondo(entre(2_000_000, 40_000_000))
+    const socios = inteiroEntre(2, 4)
+    return {
+      rotulo: 'Sócio PF + PJ', publico: 'PF + PJ',
+      idade: inteiroEntre(36, 56),
+      plano: {
+        tipo_planejamento: 'pf_pj',
+        focos: escolher([['renda', 'empresarial'], ['empresarial', 'sucessao'], ['renda', 'sucessao', 'empresarial']]),
+        estado_civil: 'Casado(a)', regime_bens: escolher(['Comunhão parcial', 'Comunhão universal', 'Separação total', '']),
+        renda_mensal: renda, custo_vida_mensal: redondo(renda * entre(0.5, 0.8)),
+        dividas_total: talvez(0.6) ? redondo(entre(300_000, 3_000_000)) : 0,
+        patrimonio_imoveis: redondo(entre(600_000, 8_000_000)),
+        patrimonio_investimentos: redondo(entre(100_000, 2_500_000)),
+        patrimonio_empresa: talvez(0.5) ? redondo(entre(500_000, 20_000_000)) : 0,
+        patrimonio_veiculos: redondo(entre(60_000, 400_000)),
+        previdencia_saldo: talvez(0.6) ? redondo(entre(50_000, 1_200_000)) : 0,
+        previdencia_tipo: escolher(['VGBL', 'PGBL', 'Ambos', '']),
+        dependentes: Array.from({ length: inteiroEntre(0, 3) }, (_, i) => ({
+          nome: `Filho ${i + 1}`, idade: inteiroEntre(0, 24),
+          custo_mensal: redondo(entre(1500, 8000)),
+        })),
+        pj_faturamento_anual: fat,
+        pj_lucro_anual: redondo(fat * entre(0.05, 0.22)),
+        pj_valuation: redondo(fat * entre(0.8, 2.5)),
+        pj_num_socios: socios,
+        pj_participacao_pct: Math.round(100 / socios),
+        pj_divida_avalizada: talvez(0.65) ? redondo(entre(400_000, 8_000_000)) : 0,
+        anos_protecao: escolher([15, 20]),
+        premio_estimado: redondo(entre(1200, 15_000)),
+      },
+    }
+  },
+
+  // ── 6. Sucessão pura: patrimônio grande, renda já não é o problema ─────────
+  () => {
+    const imoveis = redondo(entre(3_000_000, 40_000_000))
+    return {
+      rotulo: 'Sucessão — patrimônio consolidado', publico: 'Sucessão',
+      idade: inteiroEntre(55, 74),
+      plano: {
+        tipo_planejamento: escolher(['pf', 'pf_pj']),
+        focos: escolher([['sucessao'], ['sucessao', 'blindagem'], ['sucessao', 'empresarial']]),
+        estado_civil: escolher(['Casado(a)', 'Casado(a)', 'Viúvo(a)']),
+        regime_bens: escolher(['Comunhão parcial', 'Comunhão universal', 'Separação total', '']),
+        renda_mensal: redondo(entre(25_000, 150_000)),
+        custo_vida_mensal: redondo(entre(15_000, 70_000)),
+        dividas_total: talvez(0.3) ? redondo(entre(200_000, 3_000_000)) : 0,
+        patrimonio_imoveis: imoveis,
+        patrimonio_investimentos: redondo(imoveis * entre(0.05, 0.5)),
+        patrimonio_empresa: talvez(0.5) ? redondo(imoveis * entre(0.2, 1.5)) : 0,
+        patrimonio_veiculos: redondo(entre(120_000, 900_000)),
+        patrimonio_outros: talvez(0.4) ? redondo(entre(100_000, 2_000_000)) : 0,
+        previdencia_saldo: talvez(0.7) ? redondo(entre(200_000, 4_000_000)) : 0,
+        previdencia_tipo: escolher(['VGBL', 'PGBL', 'Ambos']),
+        tem_holding: talvez(0.3),
+        tem_testamento: talvez(0.25),
+        herdeiros_menores: talvez(0.2),
+        itcmd_pct: escolher([4, 4, 6, 8]),
+        custas_pct: escolher([6, 8, 10]),
+        dependentes: Array.from({ length: inteiroEntre(0, 4) }, (_, i) => ({
+          nome: `Filho ${i + 1}`, idade: inteiroEntre(12, 40),
+          custo_mensal: talvez(0.3) ? redondo(entre(1000, 6000)) : 0,
+        })),
+        anos_protecao: escolher([10, 15, 20]),
+        premio_estimado: redondo(entre(2500, 30_000)),
+      },
+    }
+  },
+
+  // ── 7. Temporário: cobrir o financiamento e o tempo dos filhos, nada mais ──
+  () => {
+    const renda = redondo(entre(8000, 35_000))
+    const saldo = redondo(entre(200_000, 1_200_000))
+    return {
+      rotulo: 'Temporário — cobrir financiamento', publico: 'Temporário',
+      idade: inteiroEntre(28, 45),
+      plano: {
+        tipo_planejamento: 'pf', focos: ['dividas'],
+        estado_civil: escolher(['Casado(a)', 'União estável']),
+        regime_bens: escolher(['Comunhão parcial', '']),
+        renda_mensal: renda, custo_vida_mensal: redondo(renda * entre(0.65, 0.9)),
+        dividas_total: saldo,
+        patrimonio_imoveis: redondo(saldo * entre(1.1, 1.8)),
+        patrimonio_investimentos: talvez(0.5) ? redondo(entre(5000, 90_000)) : 0,
+        dependentes: Array.from({ length: inteiroEntre(0, 2) }, (_, i) => ({
+          nome: `Filho ${i + 1}`, idade: inteiroEntre(0, 15),
+          custo_mensal: redondo(entre(700, 2500)),
+        })),
+        anos_protecao: escolher([5, 8, 20, 25, 30]),
+        premio_estimado: redondo(entre(120, 700)),
+      },
+    }
+  },
+
+  // ── 8. Viúva/viúvo com filhos — já viveu o inventário ─────────────────────
+  () => {
+    const renda = redondo(entre(7000, 40_000))
+    return {
+      rotulo: 'Viúvo(a) com filhos', publico: 'PF família',
+      idade: inteiroEntre(40, 58),
+      plano: {
+        tipo_planejamento: 'pf', focos: escolher([['renda', 'sucessao'], ['renda'], ['sucessao', 'educacao']]),
+        estado_civil: 'Viúvo(a)', regime_bens: '',
+        renda_mensal: renda, custo_vida_mensal: redondo(renda * entre(0.6, 0.88)),
+        dividas_total: talvez(0.35) ? redondo(entre(30_000, 400_000)) : 0,
+        patrimonio_imoveis: redondo(entre(300_000, 2_500_000)),
+        patrimonio_investimentos: redondo(entre(30_000, 800_000)),
+        previdencia_saldo: talvez(0.5) ? redondo(entre(20_000, 400_000)) : 0,
+        previdencia_tipo: escolher(['VGBL', '']),
+        herdeiros_menores: talvez(0.5),
+        dependentes: Array.from({ length: inteiroEntre(1, 3) }, (_, i) => ({
+          nome: `Filho ${i + 1}`, idade: inteiroEntre(2, 20),
+          custo_mensal: redondo(entre(900, 4000)),
+        })),
+        anos_protecao: escolher([10, 15, 20]),
+        premio_estimado: redondo(entre(200, 1500)),
+      },
+    }
+  },
+
+  // ── 9. Foco em aposentadoria e acúmulo ────────────────────────────────────
+  () => {
+    const renda = redondo(entre(12_000, 60_000))
+    return {
+      rotulo: 'Foco em aposentadoria', publico: 'Aposentadoria',
+      idade: inteiroEntre(30, 52),
+      plano: {
+        tipo_planejamento: 'pf',
+        focos: escolher([['aposentadoria'], ['aposentadoria', 'renda'], ['aposentadoria', 'sucessao']]),
+        estado_civil: escolher(['Casado(a)', 'Solteiro(a)', 'União estável']),
+        regime_bens: escolher(['Comunhão parcial', '']),
+        renda_mensal: renda, custo_vida_mensal: redondo(renda * entre(0.5, 0.8)),
+        renda_desejada_aposentadoria: talvez(0.6) ? redondo(renda * entre(0.5, 1.1)) : 0,
+        idade_aposentadoria: escolher([55, 60, 62, 65]),
+        previdencia_saldo: redondo(entre(20_000, 900_000)),
+        previdencia_aporte_mensal: redondo(entre(500, 8000)),
+        previdencia_tipo: escolher(['VGBL', 'PGBL', 'Ambos']),
+        patrimonio_investimentos: redondo(entre(20_000, 800_000)),
+        patrimonio_imoveis: talvez(0.6) ? redondo(entre(300_000, 2_000_000)) : 0,
+        dependentes: Array.from({ length: inteiroEntre(0, 2) }, (_, i) => ({
+          nome: `Filho ${i + 1}`, idade: inteiroEntre(0, 24), custo_mensal: redondo(entre(800, 4000)),
+        })),
+        anos_protecao: escolher([15, 20, 25]),
+        premio_estimado: redondo(entre(300, 3000)),
+      },
+    }
+  },
+
+  // ── 10. Baixa renda / MEI — o plano tem que caber no bolso ────────────────
+  () => {
+    const renda = redondo(entre(2200, 6500))
+    return {
+      rotulo: 'MEI / baixa renda', publico: 'PF baixa renda',
+      idade: inteiroEntre(24, 48),
+      plano: {
+        tipo_planejamento: 'pf', focos: escolher([['renda'], ['renda', 'educacao']]),
+        estado_civil: escolher(['Casado(a)', 'Solteiro(a)', 'União estável']),
+        regime_bens: '',
+        profissao: escolher(['Autônomo', 'MEI', 'Cabeleireira']),
+        renda_mensal: renda, custo_vida_mensal: redondo(renda * entre(0.75, 1.05)),
+        dividas_total: talvez(0.6) ? redondo(entre(3000, 60_000)) : 0,
+        patrimonio_investimentos: talvez(0.3) ? redondo(entre(1000, 25_000)) : 0,
+        patrimonio_veiculos: talvez(0.5) ? redondo(entre(12_000, 70_000)) : 0,
+        dependentes: Array.from({ length: inteiroEntre(0, 3) }, (_, i) => ({
+          nome: `Filho ${i + 1}`, idade: inteiroEntre(0, 18), custo_mensal: redondo(entre(300, 1200)),
+        })),
+        anos_protecao: escolher([10, 15, 20]),
+        premio_estimado: redondo(entre(60, 260)),
+      },
+    }
+  },
+
+  // ── 11. Casal sem filhos (DINK) — dois salários, nenhum dependente ────────
+  () => {
+    const renda = redondo(entre(15_000, 60_000))
+    return {
+      rotulo: 'Casal sem filhos (DINK)', publico: 'PF sem dependentes',
+      idade: inteiroEntre(30, 44),
+      plano: {
+        tipo_planejamento: 'pf', focos: escolher([['renda'], ['blindagem'], ['renda', 'aposentadoria']]),
+        estado_civil: escolher(['Casado(a)', 'União estável']),
+        regime_bens: escolher(['Comunhão parcial', 'Separação total', '']),
+        renda_mensal: renda, custo_vida_mensal: redondo(renda * entre(0.45, 0.75)),
+        dividas_total: talvez(0.5) ? redondo(entre(100_000, 900_000)) : 0,
+        patrimonio_imoveis: talvez(0.7) ? redondo(entre(400_000, 2_500_000)) : 0,
+        patrimonio_investimentos: redondo(entre(50_000, 900_000)),
+        previdencia_saldo: talvez(0.6) ? redondo(entre(30_000, 500_000)) : 0,
+        previdencia_tipo: escolher(['VGBL', 'PGBL', '']),
+        dependentes: [],
+        anos_protecao: escolher([10, 15, 20]),
+        premio_estimado: redondo(entre(200, 1400)),
+      },
+    }
+  },
+
+  // ── 12. Idoso: proteção já não é renda, é sucessão e funeral ──────────────
+  () => {
+    const patrimonio = redondo(entre(800_000, 12_000_000))
+    return {
+      rotulo: 'Cliente 65+', publico: 'Sucessão',
+      idade: inteiroEntre(65, 78),
+      plano: {
+        tipo_planejamento: 'pf', focos: escolher([['sucessao'], ['sucessao', 'blindagem']]),
+        estado_civil: escolher(['Casado(a)', 'Viúvo(a)']),
+        regime_bens: escolher(['Comunhão parcial', 'Comunhão universal', '']),
+        renda_mensal: redondo(entre(6000, 60_000)),
+        custo_vida_mensal: redondo(entre(5000, 35_000)),
+        patrimonio_imoveis: patrimonio,
+        patrimonio_investimentos: redondo(patrimonio * entre(0.1, 0.6)),
+        previdencia_saldo: talvez(0.6) ? redondo(entre(100_000, 2_000_000)) : 0,
+        previdencia_tipo: escolher(['VGBL', 'PGBL']),
+        dependentes: [],
+        anos_protecao: escolher([5, 10, 15, 20]),
+        premio_estimado: redondo(entre(1500, 20_000)),
+      },
+    }
+  },
+
+  // ── 13. Divorciado com pensão alimentícia ─────────────────────────────────
+  () => {
+    const renda = redondo(entre(10_000, 50_000))
+    return {
+      rotulo: 'Divorciado com pensão', publico: 'PF família',
+      idade: inteiroEntre(35, 52),
+      plano: {
+        tipo_planejamento: 'pf', focos: escolher([['renda', 'educacao'], ['educacao']]),
+        estado_civil: 'Divorciado(a)', regime_bens: '',
+        renda_mensal: renda, custo_vida_mensal: redondo(renda * entre(0.55, 0.85)),
+        dividas_total: talvez(0.5) ? redondo(entre(50_000, 500_000)) : 0,
+        patrimonio_imoveis: talvez(0.5) ? redondo(entre(250_000, 1_500_000)) : 0,
+        patrimonio_investimentos: redondo(entre(10_000, 400_000)),
+        dependentes: Array.from({ length: inteiroEntre(1, 3) }, (_, i) => ({
+          nome: `Filho ${i + 1}`, idade: inteiroEntre(1, 21), custo_mensal: redondo(entre(1200, 6000)),
+        })),
+        anos_protecao: escolher([10, 15, 20]),
+        premio_estimado: redondo(entre(250, 1800)),
+      },
+    }
+  },
+
+  // ── 14. Homem-chave: a empresa depende de uma pessoa só ───────────────────
+  () => {
+    const fat = redondo(entre(800_000, 15_000_000))
+    return {
+      rotulo: 'Homem-chave / sócio único', publico: 'PJ',
+      idade: inteiroEntre(34, 58),
+      plano: {
+        tipo_planejamento: 'pf_pj', focos: ['empresarial'],
+        estado_civil: escolher(['Casado(a)', 'Solteiro(a)']),
+        regime_bens: escolher(['Comunhão parcial', '']),
+        renda_mensal: redondo(entre(12_000, 70_000)),
+        custo_vida_mensal: redondo(entre(8000, 40_000)),
+        pj_faturamento_anual: fat,
+        pj_lucro_anual: talvez(0.5) ? redondo(fat * entre(0.08, 0.3)) : 0,
+        pj_num_socios: 1,
+        pj_participacao_pct: 100,
+        pj_valuation: talvez(0.4) ? redondo(fat * entre(1, 3)) : 0,
+        pj_divida_avalizada: talvez(0.7) ? redondo(entre(200_000, 4_000_000)) : 0,
+        patrimonio_imoveis: talvez(0.6) ? redondo(entre(400_000, 3_000_000)) : 0,
+        patrimonio_investimentos: redondo(entre(30_000, 600_000)),
+        dependentes: Array.from({ length: inteiroEntre(0, 3) }, (_, i) => ({
+          nome: `Filho ${i + 1}`, idade: inteiroEntre(0, 22), custo_mensal: redondo(entre(1000, 5000)),
+        })),
+        anos_protecao: escolher([15, 20]),
+        premio_estimado: redondo(entre(700, 8000)),
+      },
+    }
+  },
+
+  // ── 15. Filhos pequenos + patrimônio: o inventário judicial ───────────────
+  () => {
+    const renda = redondo(entre(18_000, 80_000))
+    return {
+      rotulo: 'Herdeiros menores com patrimônio', publico: 'Sucessão',
+      idade: inteiroEntre(33, 46),
+      plano: {
+        tipo_planejamento: 'pf', focos: escolher([['sucessao', 'renda'], ['sucessao', 'educacao']]),
+        estado_civil: 'Casado(a)',
+        regime_bens: escolher(['Comunhão parcial', 'Comunhão universal', 'Separação total']),
+        renda_mensal: renda, custo_vida_mensal: redondo(renda * entre(0.5, 0.8)),
+        dividas_total: talvez(0.5) ? redondo(entre(200_000, 2_000_000)) : 0,
+        patrimonio_imoveis: redondo(entre(1_500_000, 12_000_000)),
+        patrimonio_investimentos: redondo(entre(100_000, 1_500_000)),
+        patrimonio_veiculos: redondo(entre(80_000, 400_000)),
+        previdencia_saldo: talvez(0.6) ? redondo(entre(50_000, 900_000)) : 0,
+        previdencia_tipo: escolher(['VGBL', 'PGBL', 'Ambos']),
+        dependentes: Array.from({ length: inteiroEntre(1, 3) }, (_, i) => ({
+          nome: `Filho ${i + 1}`, idade: inteiroEntre(0, 12), custo_mensal: redondo(entre(1500, 7000)),
+        })),
+        anos_protecao: escolher([15, 20, 25]),
+        premio_estimado: redondo(entre(800, 6000)),
+      },
+    }
+  },
+]
+
+// Ruído de preenchimento: na vida real o estudo raramente chega completo.
+// Sem isso a auditoria só testaria o cenário ideal, que é o que menos acontece.
+function comLacunas(plano) {
+  const p = { ...plano }
+  if (talvez(0.18)) delete p.custo_vida_mensal
+  if (talvez(0.12)) p.renda_mensal = 0
+  if (talvez(0.25)) p.cobertura_atual = undefined
+  if (talvez(0.30)) p.premio_anual = 0
+  if (talvez(0.10)) p.anos_protecao = ''
+  if (talvez(0.15)) p.previdencia_tipo = ''
+  return p
+}
+
+function gerarCenario() {
+  const base = escolher(ARQUETIPOS)()
+  const hoje = new Date('2026-08-13T12:00:00Z')
+  const plano = comLacunas({
+    uf: escolher(UFS),
+    fumante: talvez(0.14),
+    ...base.plano,
+  })
+  return {
+    ...base,
+    hoje,
+    plano,
+    dataNascimento: nascimentoParaIdade(base.idade, hoje),
+  }
+}
+
+// ─── As regras ───────────────────────────────────────────────────────────────
+// Cada regra é uma coisa que um consultor sênior apontaria numa revisão.
+// `quando` devolve string (a explicação do achado) ou null.
+const m = (v) => `R$ ${Math.round(v).toLocaleString('pt-BR')}`
+const temAviso = (e, trecho) => e.inconsistencias.some((i) => i.texto.toLowerCase().includes(trecho))
+
+const REGRAS = [
+  // ── A. Capital que o mercado não emite ────────────────────────────────────
+  {
+    id: 'R01', gravidade: 'grave',
+    titulo: 'Doenças graves acima do teto que a seguradora emite',
+    porque: 'O mercado brasileiro não emite doenças graves acima de ~R$ 3 mi, e quase '
+      + 'sempre limita a cobertura a uma fração do capital de morte. Sugerir R$ 5 mi '
+      + 'é apresentar um número que a cotação vai derrubar na frente do cliente.',
+    quando: (c, e) => {
+      const v = e.sugestoes.doencas_graves
+      if (v > LIMITES_MERCADO.doencas_graves) {
+        return `sugeriu ${m(v)} (teto de mercado ${m(LIMITES_MERCADO.doencas_graves)})`
+      }
+      return null
+    },
+  },
+  {
+    id: 'R02', gravidade: 'grave',
+    titulo: 'Diária de DIT acima do que qualquer seguradora aceita',
+    porque: 'DIT é limitada por dia e pelo comprometimento da renda. Renda ÷ 30 para '
+      + 'quem ganha R$ 150 mil dá R$ 5.000/dia — nenhuma apólice individual emite isso.',
+    quando: (c, e) => {
+      const v = e.sugestoes.dit
+      return v > LIMITES_MERCADO.diaria_dit ? `sugeriu ${m(v)}/dia (teto ${m(LIMITES_MERCADO.diaria_dit)})` : null
+    },
+  },
+  {
+    id: 'R03', gravidade: 'atencao',
+    titulo: 'Capital de morte acima do limite técnico de subscrição',
+    porque: 'Acima de ~R$ 20 mi o caso vira resseguro facultativo, com exames e prazo '
+      + 'de meses. O estudo pode propor, mas precisa avisar — senão a consultora promete prazo que não existe.',
+    quando: (c, e) => {
+      const v = e.valores.morte
+      if (v > LIMITES_MERCADO.morte && !temAviso(e, 'resseguro')) {
+        return `capital de ${m(v)} sem aviso de subscrição especial`
+      }
+      return null
+    },
+  },
+
+  // ── B. O plano cabe no bolso? ─────────────────────────────────────────────
+  {
+    id: 'R04', gravidade: 'grave',
+    titulo: 'Prêmio maior que a sobra mensal do cliente',
+    porque: 'Se o cliente gasta tudo que ganha, o prêmio sai de onde? Apólice que não '
+      + 'cabe no orçamento cancela em 6 meses — e cancelamento estorna comissão.',
+    quando: (c, e) => {
+      const premio = e.investimento?.mensal ?? 0
+      if (!(premio > 0) || e.poupancaMensal == null) return null
+      if (premio > e.poupancaMensal && !temAviso(e, 'sobra')) {
+        return `prêmio ${m(premio)}/mês contra sobra de ${m(e.poupancaMensal)}/mês`
+      }
+      return null
+    },
+  },
+  {
+    id: 'R05', gravidade: 'atencao',
+    titulo: 'Prêmio passa de 10% da renda sem nenhum aviso',
+    porque: 'A régua de mercado para proteção pessoal é 5% a 10% da renda. O motor só '
+      + 'avisa acima de 30% — três vezes o razoável. Entre 10% e 30% a consultora apresenta sem saber.',
+    quando: (c, e) => {
+      const pct = e.investimento?.pctRenda
+      if (pct == null) return null
+      return pct > 10 && !temAviso(e, 'da renda') ? `prêmio em ${pct}% da renda, sem aviso` : null
+    },
+  },
+
+  // ── C. Proteção vendida para quem não precisa dela ────────────────────────
+  {
+    id: 'R06', gravidade: 'grave',
+    titulo: 'Capital de morte cheio para cliente sem nenhum dependente',
+    porque: 'Solteiro sem filhos, sem cônjuge e sem dívida: não há renda a substituir. '
+      + 'Sugerir 10 anos de custo de vida é vender proteção para um risco que não existe — '
+      + 'o certo é ir para doenças graves, invalidez e sucessão.',
+    quando: (c, e) => {
+      const semDependentes = e.filhos.length === 0
+        && ['Solteiro(a)', 'Divorciado(a)', 'Viúvo(a)'].includes(c.plano.estado_civil)
+      if (!semDependentes) return null
+      if (e.sugestoes.morte > e.dividas + 60_000 && !temAviso(e, 'dependente')) {
+        return `sem dependentes e sem aviso: sugeriu ${m(e.sugestoes.morte)} de morte`
+      }
+      return null
+    },
+  },
+  {
+    id: 'R07', gravidade: 'atencao',
+    titulo: 'Estudo PJ puro apresentando coberturas de família',
+    porque: 'Quando a consultora escolhe "Empresarial (PJ)", o estudo é sobre a empresa. '
+      + 'Trazer morte/DIT/funeral calculados sobre uma renda pessoal que nem foi levantada '
+      + 'polui a proposta e abre flanco de pergunta que ela não tem resposta.',
+    quando: (c, e) => {
+      if (e.tipo !== 'pj') return null
+      const pf = e.ativas.filter((x) => !x.pj)
+      return pf.length > 0 ? `${pf.length} cobertura(s) PF num estudo PJ: ${pf.map((x) => x.id).join(', ')}` : null
+    },
+  },
+  {
+    id: 'R08', gravidade: 'atencao',
+    titulo: 'Idoso com capital de morte calculado como reposição de renda',
+    porque: 'Aos 68 anos, com filhos adultos, a renda não precisa ser substituída por '
+      + '20 anos. O capital certo é o do inventário. Projetar custo de vida × 20 anos '
+      + 'infla o prêmio e derruba a venda.',
+    quando: (c, e) => {
+      if (e.idade == null || e.idade < 62) return null
+      if (e.filhos.some((f) => f.idade != null && f.idade < IDADE_INDEPENDENCIA)) return null
+      const rendaEmbutida = e.sugestoes.morte - e.dividas
+      if (rendaEmbutida > 0 && e.custoInventario > 0 && rendaEmbutida > e.custoInventario * 2
+        && !temAviso(e, 'reposição de renda')) {
+        return `aos ${e.idade} anos: ${m(rendaEmbutida)} de reposição de renda contra ${m(e.custoInventario)} de inventário`
+      }
+      return null
+    },
+  },
+
+  // ── D. Dinheiro contado duas vezes ────────────────────────────────────────
+  {
+    id: 'R09', gravidade: 'grave',
+    titulo: 'A mesma apólice atual conta como capital de morte E como liquidez do inventário',
+    porque: 'A cobertura que já existe aparece abatendo o gap de morte e, ao mesmo tempo, '
+      + 'como dinheiro disponível para pagar o ITCMD. Se ela for usada para sustentar a '
+      + 'família, não paga o imposto. O estudo promete o mesmo dinheiro duas vezes.',
+    quando: (c, e) => {
+      if (!(e.coberturaAtual > 0) || !(e.custoInventario > 0)) return null
+      // A apólice atual só pode aparecer na liquidez sucessória na parte que
+      // SOBRA depois de reservado o capital de morte. Se o capital de morte já
+      // consome tudo e mesmo assim sobra alguma coisa aqui, é conta dupla.
+      const consumidaPelaFamilia = Math.min(e.coberturaAtual, e.valores.morte)
+      const livreDeclarada = e.coberturaLivreParaSucessao ?? e.coberturaAtual
+      if (livreDeclarada + consumidaPelaFamilia > e.coberturaAtual + 0.01) {
+        return `${m(e.coberturaAtual)} de apólice atual gerando ${m(livreDeclarada + consumidaPelaFamilia)} de uso`
+      }
+      return null
+    },
+  },
+  {
+    id: 'R10', gravidade: 'atencao',
+    titulo: 'Previdência conta como liquidez do inventário e como reserva da família',
+    porque: 'O saldo do VGBL aparece em `liquidezImediata` (paga o ITCMD) e em '
+      + '`recursosLiquidos` (sustenta a família nos meses do gráfico). É um saldo só.',
+    quando: (c, e) => {
+      if (!(e.previdenciaLiquida > 0) || !(e.custoInventario > 0)) return null
+      // O contrato: a liquidez que paga o inventário tem que ser a EARMARCADA
+      // (sem o dinheiro já prometido à família), e a autonomia "hoje" tem que
+      // descontar o inventário que ninguém cobriu. Sem esses dois campos, o
+      // estudo está somando o mesmo saldo em duas contas diferentes.
+      if (e.liquidezSucessoria == null) return 'estudo não separa a liquidez sucessória da reserva da família'
+      if (e.custoInventarioNaoCoberto == null) return 'a autonomia "hoje" não desconta o custo do inventário'
+      if (e.liquidezSucessoria > e.liquidezBruta + 0.01) {
+        return `liquidez sucessória ${m(e.liquidezSucessoria)} maior que o disponível ${m(e.liquidezBruta)}`
+      }
+      return null
+    },
+  },
+
+  // ── E. Perguntas decisivas que o sistema não faz ──────────────────────────
+  {
+    id: 'R11', gravidade: 'grave',
+    titulo: 'Cliente casado sem regime de bens: o estudo tributa o patrimônio inteiro calado',
+    porque: 'Sem o regime, o motor cai no "sem meação" e cobra ITCMD sobre 100% do '
+      + 'patrimônio — pode superdimensionar a verba sucessória em 50%. E não pede o dado.',
+    quando: (c, e) => {
+      const casado = ['Casado(a)', 'União estável'].includes(c.plano.estado_civil)
+      if (!casado || e.sucessao.regimeBens) return null
+      if (!(e.custoInventario > 0)) return null
+      return temAviso(e, 'regime de bens') ? null
+        : `casado sem regime informado, ITCMD sobre ${m(e.sucessao.baseInventario)}`
+    },
+  },
+  {
+    id: 'R12', gravidade: 'atencao',
+    titulo: 'ITCMD fixo em 4% sem perguntar o estado',
+    porque: 'O ITCMD é estadual: 4% em SP, até 8% no RJ e progressivo em vários estados. '
+      + 'Assumir 4% para todo mundo erra a verba sucessória em até 100% — para menos, '
+      + 'que é o pior lado do erro.',
+    quando: (c, e) => {
+      if (!(e.custoInventario > 0)) return null
+      if (c.plano.itcmd_pct) return null
+      return e.itcmdOrigem == null || e.itcmdOrigem === 'padrao'
+        ? `UF ${c.plano.uf} ignorada, usou ${e.itcmd}% fixo` : null
+    },
+  },
+  {
+    id: 'R13', gravidade: 'atencao',
+    titulo: 'Autônomo/liberal sem DIT no estudo',
+    porque: 'Para quem não tem CLT, o dia parado é o risco mais provável de todos — '
+      + 'muito mais provável que a morte. Um estudo de autônomo sem DIT está incompleto.',
+    quando: (c, e, d) => {
+      if (!/Autônomo|MEI|Médic|Advogad|Dentista|Arquitet|Cabeleireira/i.test(c.plano.profissao ?? '')) return null
+      if (e.valores.dit > 0) return null
+      // DIT zerada porque a renda não foi levantada é falta de DADO, não de
+      // conselho — desde que o sistema esteja pedindo o dado em voz alta.
+      const pediuRenda = d?.pendencias?.some((p) => p.id === 'renda')
+      return pediuRenda ? null : 'profissão autônoma e DIT zerada, sem pedir a renda'
+    },
+  },
+
+  // ── F. Coerência interna do estudo ────────────────────────────────────────
+  {
+    id: 'R14', gravidade: 'grave',
+    titulo: 'Verba sucessória cobre o imposto mas ignora o custo de segurar os bens',
+    porque: 'Enquanto o inventário corre (6 a 18 meses), a família continua pagando IPTU, '
+      + 'condomínio e as contas do imóvel travado. A verba calculada cobre só o ITCMD do dia 1.',
+    quando: (c, e) => {
+      if (!(e.custoInventario > 0) || !(e.sucessao.prazoInventarioMeses >= 6)) return null
+      return e.custoSustentacaoInventario == null
+        ? `inventário de ${e.sucessao.prazoInventarioMeses} meses sem custo de manutenção calculado`
+        : null
+    },
+  },
+  {
+    id: 'R15', gravidade: 'atencao',
+    titulo: 'Aval avalizado sem invalidez correspondente',
+    porque: 'O aval é executado tanto na morte quanto na invalidez do avalista — o banco '
+      + 'não espera o óbito. Cobrir aval só na morte deixa metade do risco na mesa.',
+    quando: (c, e) => {
+      if (!(e.valores.aval > 0)) return null
+      return e.cenarios.invalidez >= e.valores.aval ? null
+        : 'aval coberto na morte e descoberto na invalidez'
+    },
+  },
+  {
+    id: 'R16', gravidade: 'grave',
+    titulo: 'Buy-sell sem número de sócios: não dá para saber quem compra a quota',
+    porque: 'Acordo de sócios só funciona com apólice cruzada entre TODOS os sócios. '
+      + 'Sem saber quantos são, o estudo apresenta um capital sem dizer quem paga o prêmio dele.',
+    quando: (c, e) => {
+      if (!(e.valores.socios > 0)) return null
+      return e.pj.numSocios >= 2 ? null : `capital de ${m(e.valores.socios)} de buy-sell com ${e.pj.numSocios} sócio(s) informado(s)`
+    },
+  },
+  {
+    id: 'R17', gravidade: 'atencao',
+    titulo: 'Participação de 100% recebendo capital de buy-sell',
+    porque: 'Sócio único não tem com quem fazer buy-sell: não há outro sócio para comprar '
+      + 'a quota. O capital certo aqui é homem-chave e liquidez sucessória, não acordo de sócios.',
+    quando: (c, e) => {
+      if (!(e.valores.socios > 0)) return null
+      return e.pj.participacao >= 100 ? `100% do capital social com ${m(e.valores.socios)} de buy-sell` : null
+    },
+  },
+  {
+    id: 'R18', gravidade: 'atencao',
+    titulo: 'Meta de aposentadoria e lacuna que não conversam',
+    porque: 'A lacuna projeta o IR no resgate lá na frente; o aporte necessário parte do '
+      + 'saldo já líquido hoje. São duas contas com premissas diferentes exibidas lado a lado.',
+    quando: (c, e) => {
+      const a = e.aposentadoria
+      if (!a || a.aporteNecessario == null || !(a.lacuna > 0)) return null
+      // reconstroi a lacuna a partir do aporte que o próprio estudo pede
+      const conferencia = a.aporteNecessario > 0 && a.faltaAportar === 0 && a.lacuna > a.capitalNecessario * 0.05
+      return conferencia ? `lacuna de ${m(a.lacuna)} com "falta aportar" zerado` : null
+    },
+  },
+  {
+    id: 'R19', gravidade: 'grave',
+    titulo: 'Horizonte de proteção termina antes de a dívida acabar',
+    porque: 'Financiamento de 30 anos com proteção de 10: nos 20 anos seguintes a família '
+      + 'fica com o saldo devedor e sem capital. É o erro clássico do seguro temporário.',
+    quando: (c, e) => {
+      if (!(e.dividas > 0) || !(e.valores.morte > 0)) return null
+      if (e.prazoDividaAnos == null) return null
+      return e.anos < e.prazoDividaAnos && !temAviso(e, 'dívida') ? `proteção de ${e.anos} anos para dívida de ${e.prazoDividaAnos}` : null
+    },
+  },
+  {
+    id: 'R20', gravidade: 'atencao',
+    titulo: 'Estudo sem nenhuma cobertura que paga em vida',
+    porque: 'Invalidez, doenças graves e DIT são o que desmonta o "só serve se eu morrer". '
+      + 'Um estudo só com morte é um estudo que perde a objeção mais comum da categoria.',
+    quando: (c, e, d) => {
+      if (e.ativas.length === 0) return null
+      const emVida = e.ativas.some((x) => ['invalidez', 'doencas_graves', 'dit', 'dih'].includes(x.id))
+      if (emVida) return null
+      // Passa se o sistema NOTOU o buraco — seja avisando, seja recomendando
+      // a cobertura, seja pedindo o dado que falta para dimensioná-la.
+      const notou = temAviso(e, 'só paga se o cliente morrer')
+        || d?.recomendacoes?.some((r) => ['sem-invalidez', 'sem-doencas-graves', 'sem-dit'].includes(r.id))
+        || d?.pendencias?.some((p) => p.id === 'renda')
+      return notou ? null : 'nenhuma cobertura paga com o cliente vivo, e o sistema não comentou'
+    },
+  },
+
+  // ── G. O diagnóstico (a inteligência que palpita) ─────────────────────────
+  {
+    id: 'R21', gravidade: 'grave',
+    titulo: 'Diagnóstico não produz nenhuma recomendação',
+    porque: 'A consultora abre a aba e não recebe palpite nenhum. Um estudo com dados '
+      + 'sempre tem pelo menos uma coisa a dizer — nem que seja o que falta preencher.',
+    quando: (c, e, d) => {
+      if (!d || d.recomendacoes.length > 0) return null
+      // Estudo em branco não é omissão: se o sistema está pedindo os dados que
+      // faltam, ele ESTÁ dizendo o que fazer. O que não pode é ficar mudo.
+      return d.pendenciasCriticas.length > 0 ? null : 'zero recomendações e zero pendências críticas'
+    },
+  },
+  {
+    id: 'R22', gravidade: 'grave',
+    titulo: 'Recomendação sem número ou sem justificativa',
+    porque: 'Palpite sem conta atrás é chute. Toda recomendação precisa dizer de onde '
+      + 'saiu — é isso que a consultora repete quando o cliente pergunta "por quê?".',
+    quando: (c, e, d) => {
+      if (!d) return null
+      const ruim = d.recomendacoes.find((r) => !r.porque || r.porque.trim().length < 20)
+      return ruim ? `"${ruim.titulo}" sem justificativa` : null
+    },
+  },
+  {
+    id: 'R23', gravidade: 'grave',
+    titulo: 'Recomendação com número impossível na tela',
+    porque: 'NaN, Infinity ou R$ -0 numa recomendação é o pior lugar possível para um bug: '
+      + 'a consultora lê em voz alta para o cliente.',
+    quando: (c, e, d) => {
+      if (!d) return null
+      const texto = JSON.stringify(d)
+      const bug = texto.match(/NaN|Infinity|R\$ -|undefined/)
+      return bug ? `encontrado "${bug[0]}"` : null
+    },
+  },
+  {
+    id: 'R24', gravidade: 'atencao',
+    titulo: 'Perfil do cliente não classificado',
+    porque: 'Sem saber se é família, sucessão, empresa ou acúmulo, o sistema não consegue '
+      + 'priorizar nada — e todo conselho sai genérico.',
+    quando: (c, e, d) => (d && !d.perfil?.id ? 'perfil nulo' : null),
+  },
+]
+
+// ─── Execução ────────────────────────────────────────────────────────────────
+const achados = new Map(REGRAS.map((r) => [r.id, { regra: r, casos: [], porPublico: new Map() }]))
+const totalPorPublico = new Map()
+const erros = []
+let comDiagnostico = 0
+
+console.log(`\n  AUDITORIA DE PLANEJAMENTO — ${CASOS.toLocaleString('pt-BR')} clientes plausíveis`)
+console.log(`  semente ${process.env.SEMENTE ?? 20260813} · ${REGRAS.length} regras de revisão\n`)
+
+for (let i = 0; i < CASOS; i++) {
+  const c = gerarCenario()
+  totalPorPublico.set(c.publico, (totalPorPublico.get(c.publico) ?? 0) + 1)
+
+  let e
+  try {
+    e = calcularEstudo(c.plano, { dataNascimento: c.dataNascimento, hoje: c.hoje })
+  } catch (err) {
+    erros.push(`caso ${i} (${c.rotulo}): calcularEstudo explodiu — ${err.message}`)
+    continue
+  }
+  if (!e) { erros.push(`caso ${i}: estudo nulo`); continue }
+
+  let d = null
+  if (diagnosticar) {
+    try {
+      d = diagnosticar(e, { cliente: { nome: 'Cliente', profissao: c.plano.profissao } })
+      if (d) comDiagnostico += 1
+    } catch (err) {
+      erros.push(`caso ${i} (${c.rotulo}): diagnosticar explodiu — ${err.message}`)
+    }
+  }
+
+  for (const regra of REGRAS) {
+    if (!diagnosticar && regra.id >= 'R21') continue
+    let achou
+    try {
+      achou = regra.quando(c, e, d)
+    } catch (err) {
+      erros.push(`caso ${i}: regra ${regra.id} explodiu — ${err.message}`)
+      continue
+    }
+    if (!achou) continue
+    const alvo = achados.get(regra.id)
+    if (alvo.casos.length < 3) alvo.casos.push({ i, rotulo: c.rotulo, detalhe: achou, cenario: c })
+    alvo.total = (alvo.total ?? 0) + 1
+    alvo.porPublico.set(c.publico, (alvo.porPublico.get(c.publico) ?? 0) + 1)
+  }
+
+  if (alvoDetalhe && achados.get(alvoDetalhe)?.total === 1 && achados.get(alvoDetalhe).casos.length === 1) {
+    console.log(`\n── CASO DE ${alvoDetalhe} ──`)
+    console.log(JSON.stringify({ cenario: c, estudo: e, diagnostico: d }, null, 2).slice(0, 12_000))
+  }
+}
+
+// ─── Relatório ───────────────────────────────────────────────────────────────
+const lista = [...achados.values()].filter((a) => a.total > 0)
+  .sort((a, b) => {
+    const peso = (x) => (x.regra.gravidade === 'grave' ? 1e9 : 0) + x.total
+    return peso(b) - peso(a)
+  })
+
+const pct = (n) => `${((n / CASOS) * 100).toFixed(1).replace('.', ',')}%`
+
+if (erros.length > 0) {
+  console.log('  ⛔ FALHAS DE EXECUÇÃO')
+  for (const x of erros.slice(0, 10)) console.log(`     ${x}`)
+  if (erros.length > 10) console.log(`     … e mais ${erros.length - 10}`)
+  console.log('')
+}
+
+if (lista.length === 0) {
+  console.log('  ✅ Nenhuma das regras de revisão encontrou problema nos 10.000 planejamentos.\n')
+} else {
+  for (const a of lista) {
+    const sigla = a.regra.gravidade === 'grave' ? '🔴 GRAVE  ' : '🟡 ATENÇÃO'
+    console.log(`  ${sigla} ${a.regra.id} · ${a.regra.titulo}`)
+    console.log(`     ${a.total.toLocaleString('pt-BR')} de ${CASOS.toLocaleString('pt-BR')} planejamentos (${pct(a.total)})`)
+    const porPub = [...a.porPublico.entries()].sort((x, y) => y[1] - x[1])
+      .map(([p, n]) => `${p} ${Math.round((n / (totalPorPublico.get(p) || 1)) * 100)}%`).join(' · ')
+    console.log(`     onde dói: ${porPub}`)
+    console.log(`     ${a.regra.porque.replace(/\s+/g, ' ')}`)
+    for (const caso of a.casos.slice(0, 2)) {
+      console.log(`     ex.: [${caso.rotulo}] ${caso.detalhe}`)
+    }
+    console.log('')
+  }
+}
+
+const graves = lista.filter((a) => a.regra.gravidade === 'grave')
+console.log('  ─────────────────────────────────────────────────────────────')
+console.log(`  ${lista.length} regra(s) com achado · ${graves.length} grave(s)`)
+console.log(`  diagnóstico produzido em ${comDiagnostico.toLocaleString('pt-BR')} de ${CASOS.toLocaleString('pt-BR')} estudos`)
+console.log(`  planejamentos por público: ${[...totalPorPublico.entries()].sort((a, b) => b[1] - a[1]).map(([p, n]) => `${p} ${n}`).join(' · ')}`)
+console.log('  ─────────────────────────────────────────────────────────────\n')
+
+// ─── Modo trava ──────────────────────────────────────────────────────────────
+// Depois de corrigido, cada regra vira contrato: `--travar` reprova se qualquer
+// regra passar do limite aceito. É o que roda no `npm test`.
+const LIMITES_ACEITOS = {
+  // Regras que dependem de dado que o cliente pode legitimamente não ter.
+  R12: 0.02,   // UF em branco no cadastro
+  R13: 0.02,   // profissão em branco
+  R16: 0.02,   // nº de sócios em branco num estudo PJ incompleto
+}
+if (process.argv.includes('--travar')) {
+  const reprovadas = lista.filter((a) => {
+    const limite = LIMITES_ACEITOS[a.regra.id] ?? 0
+    return a.total / CASOS > limite
+  })
+  if (erros.length > 0 || reprovadas.length > 0) {
+    console.log('  ⛔ AUDITORIA REPROVADA')
+    for (const a of reprovadas) {
+      console.log(`     ${a.regra.id} em ${pct(a.total)} (limite ${((LIMITES_ACEITOS[a.regra.id] ?? 0) * 100).toFixed(0)}%)`)
+    }
+    console.log('')
+    process.exit(1)
+  }
+  console.log('  ✅ Auditoria aprovada — todas as regras dentro do limite.\n')
+}

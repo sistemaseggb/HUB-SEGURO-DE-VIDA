@@ -130,7 +130,7 @@ function semear() {
     capital_sugerido: null, objetivos: 'Proteger a renda de autônomo (DIT) e a faculdade da Sofia.',
     observacoes_reuniao: 'Sem CLT — a DIT é o centro do estudo. Quer parcela abaixo de R$ 500.',
     capital_invalidez: null, capital_doencas_graves: null, dit_diaria: 700,
-    verba_sucessoria: null, cobertura_atual: 0, itcmd_pct: 4, custas_pct: 8,
+    verba_sucessoria: null, cobertura_atual: 0, itcmd_pct: null, custas_pct: 8,
     premio_estimado: 480,
     conjuge_nome: 'Paula', filhos_idades: '3 anos',
     // migração 019 — planejamento completo
@@ -139,6 +139,9 @@ function semear() {
     patrimonio_veiculos: 90_000, patrimonio_outros: null,
     previdencia_saldo: 60_000, previdencia_tipo: 'VGBL', previdencia_aporte_mensal: 800,
     regime_bens: 'Comunhão parcial', tem_holding: false, tem_testamento: false, herdeiros_menores: true,
+    // migração 024 — o estado define o ITCMD, e o prazo da dívida diz se a
+    // proteção acaba antes do financiamento (aqui não acaba: 21 anos para 18)
+    uf: 'PR', dividas_prazo_anos: 18,
     pj_razao_social: null, pj_valuation: null, pj_participacao_pct: null, pj_num_socios: null,
     pj_faturamento_anual: null, pj_lucro_anual: null, pj_divida_avalizada: null,
     capital_socios: null, capital_homem_chave: null, capital_aval: null,
@@ -173,7 +176,7 @@ function semear() {
     capital_sugerido: null, objetivos: 'Garantir a faculdade dos filhos, blindar o patrimônio e proteger a sociedade da clínica.',
     observacoes_reuniao: 'Preocupado com sucessão da clínica. Esposa não trabalha fora. Quer revisar previdência no 2º semestre.',
     capital_invalidez: null, capital_doencas_graves: null, dit_diaria: 1600,
-    verba_sucessoria: null, cobertura_atual: 800_000, itcmd_pct: 4, custas_pct: 8,
+    verba_sucessoria: null, cobertura_atual: 800_000, itcmd_pct: null, custas_pct: 8,
     premio_estimado: 1890,
     conjuge_nome: 'Mariana', filhos_idades: '6 e 9 anos',
     // migração 019 — estudo PF + PJ, com sucessão e acordo de sócios
@@ -183,6 +186,8 @@ function semear() {
     patrimonio_veiculos: 200_000, patrimonio_outros: null,
     previdencia_saldo: 450_000, previdencia_tipo: 'PGBL', previdencia_aporte_mensal: 4_000,
     regime_bens: 'Comunhão parcial', tem_holding: false, tem_testamento: false, herdeiros_menores: true,
+    // migração 024 — Rio Grande do Sul cobra 6% de ITCMD, não os 4% de SP
+    uf: 'RS', dividas_prazo_anos: 12,
     pj_razao_social: 'Cardiocare Serviços Médicos Ltda', pj_valuation: 1_500_000,
     pj_participacao_pct: 40, pj_num_socios: 3,
     pj_faturamento_anual: 4_200_000, pj_lucro_anual: 900_000, pj_divida_avalizada: 350_000,

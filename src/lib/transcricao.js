@@ -257,6 +257,31 @@ const FAIXA = {
 // Além disso a relação vira chute.
 const ALCANCE_PISTA = 90
 
+// ─── NEGAÇÃO ─────────────────────────────────────────────────────────────────
+// "Não tenho dívida nenhuma, só o financiamento do carro de 40 mil" — a palavra
+// "dívida" está lá, e o extrator pescava o número como se fosse o total de
+// dívidas do cliente. Pior: "não tenho previdência" com qualquer número por
+// perto virava um saldo de VGBL que não existe, e o estudo saía calculando
+// liquidez sucessória em cima de nada.
+//
+// A regra: se a pista vem logo depois de uma negação, ela não vale. O alcance
+// é curto de propósito — "não tenho tempo, mas minha renda é 20 mil" tem uma
+// negação na frase e mesmo assim a renda é verdadeira.
+const RE_NEGACAO = /\b(?:nao|nunca|nenhum[a]?|zero|sem|ja quitei|quitei|ja paguei|paguei tudo|acabei de quitar)\b/g
+const ALCANCE_NEGACAO = 28
+
+function negacoesDe(chave) {
+  const marcas = []
+  RE_NEGACAO.lastIndex = 0
+  let m
+  while ((m = RE_NEGACAO.exec(chave)) !== null) marcas.push({ inicio: m.index, fim: m.index + m[0].length })
+  return marcas
+}
+
+// A pista está negada? Só quando a negação vem ANTES dela e perto.
+const pistaNegada = (marca, negacoes) => negacoes.some(
+  (n) => n.fim <= marca.inicio && marca.inicio - n.fim <= ALCANCE_NEGACAO)
+
 // Onde cada pista aparece na frase — calculado uma vez por frase e reusado
 // por todos os números dela.
 function mapearPistas(chave) {
@@ -293,7 +318,10 @@ function extrairValores(falas) {
       // semAcento preserva o comprimento (acento vira base + combinante, e o
       // combinante some), então os índices valem para as duas versões.
       const chave = semAcento(frase)
-      const marcas = mapearPistas(chave)
+      // Pista negada não é pista: "não tenho previdência" não pode virar saldo
+      // de VGBL só porque a palavra apareceu na frase.
+      const negacoes = negacoesDe(chave)
+      const marcas = mapearPistas(chave).filter((marca) => !pistaNegada(marca, negacoes))
       if (marcas.length === 0 && !doContexto) continue
 
       RE_VALOR.lastIndex = 0
@@ -578,9 +606,75 @@ function extrairPerfil(falas) {
     if (n >= 1 && n <= 50) numSocios = { valor: n, trecho: provaDe(mSocios[0]) }
   }
 
+  // ── ONDE ESTÃO OS BENS ──
+  // O ITCMD é estadual e vai de 2% a 8%: sem o estado, o estudo assume 4% (a
+  // alíquota de São Paulo) e pode errar a verba sucessória pela metade. Numa
+  // reunião ninguém diz "a UF é RJ" — diz "moro no Rio", "sou de Curitiba".
+  // A cidade resolve o estado do mesmo jeito, e é o que sai na fala.
+  const CIDADES_UF = {
+    'sao paulo': 'SP', campinas: 'SP', santos: 'SP', 'ribeirao preto': 'SP', sorocaba: 'SP',
+    'rio de janeiro': 'RJ', niteroi: 'RJ', 'petropolis': 'RJ',
+    'belo horizonte': 'MG', uberlandia: 'MG', 'juiz de fora': 'MG', contagem: 'MG',
+    'porto alegre': 'RS', caxias: 'RS', pelotas: 'RS', canoas: 'RS',
+    curitiba: 'PR', londrina: 'PR', maringa: 'PR', 'foz do iguacu': 'PR',
+    florianopolis: 'SC', joinville: 'SC', blumenau: 'SC', 'balneario camboriu': 'SC',
+    salvador: 'BA', recife: 'PE', fortaleza: 'CE', goiania: 'GO', brasilia: 'DF',
+    cuiaba: 'MT', 'campo grande': 'MS', manaus: 'AM', belem: 'PA', 'sao luis': 'MA',
+    natal: 'RN', 'joao pessoa': 'PB', maceio: 'AL', aracaju: 'SE', teresina: 'PI',
+    vitoria: 'ES', palmas: 'TO', 'porto velho': 'RO', 'rio branco': 'AC',
+    'boa vista': 'RR', macapa: 'AP',
+  }
+  const ESTADOS_UF = {
+    'sao paulo': 'SP', 'rio de janeiro': 'RJ', 'minas gerais': 'MG',
+    'rio grande do sul': 'RS', parana: 'PR', 'santa catarina': 'SC',
+    bahia: 'BA', pernambuco: 'PE', ceara: 'CE', goias: 'GO',
+    'distrito federal': 'DF', 'mato grosso': 'MT', 'mato grosso do sul': 'MS',
+    amazonas: 'AM', para: 'PA', maranhao: 'MA', 'rio grande do norte': 'RN',
+    paraiba: 'PB', alagoas: 'AL', sergipe: 'SE', piaui: 'PI',
+    'espirito santo': 'ES', tocantins: 'TO', rondonia: 'RO', acre: 'AC',
+    roraima: 'RR', amapa: 'AP',
+  }
+  let uf = null
+  {
+    // "moro em", "sou de", "os imóveis estão em", "aqui em"
+    const gatilho = /\b(?:moro em|moramos em|sou de|somos de|aqui em|fica em|ficam em|estao em|esta em|imovel em|imoveis em|o apartamento em|casa em)\s+([a-z\s]{3,30})/g
+    let g
+    while ((g = gatilho.exec(chave)) !== null && !uf) {
+      const dito = g[1].trim()
+      // o nome mais longo ganha: "rio grande do sul" antes de "rio de janeiro"
+      const achado = [...Object.entries(ESTADOS_UF), ...Object.entries(CIDADES_UF)]
+        .sort((a, b) => b[0].length - a[0].length)
+        .find(([nome]) => dito.startsWith(nome))
+      if (achado) uf = { valor: achado[1], trecho: provaDe(g[0].slice(0, 40)) }
+    }
+  }
+
+  // ── PRAZO QUE FALTA DA DÍVIDA ──
+  // "ainda faltam 22 anos de financiamento" é a frase que decide se a proteção
+  // temporária cobre a dívida inteira ou deixa a família com o saldo devedor
+  // nos últimos anos — o erro clássico do seguro curto demais.
+  let prazoDivida = null
+  const mPrazo = chave.match(/\b(?:faltam|falta|restam|ainda tem|ainda sao|mais)\s+(\d{1,2})\s+anos?\b[^.!?]{0,40}?\b(?:de\s+)?(?:financiamento|prestacao|parcelas|consorcio|divida)/)
+    ?? chave.match(/\b(?:financiamento|consorcio|divida)\b[^.!?]{0,40}?\b(?:de|em|por)\s+(\d{1,2})\s+anos?\b/)
+  if (mPrazo) {
+    const n = Number(mPrazo[1])
+    if (n >= 1 && n <= 40) prazoDivida = { valor: n, trecho: provaDe(mPrazo[0].slice(0, 40)) }
+  }
+
+  // ── APOSENTADORIA: quando e com quanto ──
+  // O foco "aposentadoria" existia no estudo e nada na transcrição o alimentava.
+  let idadeAposentadoria = null
+  const mApos = chave.match(/\b(?:aposentar|parar de trabalhar|me aposentar|encostar)\b[^.!?]{0,30}?\b(?:aos|com)\s+(\d{2})\b/)
+    ?? chave.match(/\baos\s+(\d{2})\s+(?:eu\s+)?(?:quero|pretendo|penso em)\s+(?:me\s+)?(?:aposentar|parar)/)
+  if (mApos) {
+    const n = Number(mApos[1])
+    if (n >= 40 && n <= 90) idadeAposentadoria = { valor: n, trecho: provaDe(mApos[0].slice(0, 40)) }
+  }
+
   return {
     idade, fumante, saude, seguros, quemDecide, prazoDecisao,
     orcamento, motivo, outrosDependentes, numSocios,
+    uf, prazoDivida, idadeAposentadoria,
   }
 }
 
@@ -884,27 +978,65 @@ export function perguntasQueFaltaram(a) {
   if (!a) return []
   const tem = (campo) => a.valores.some((v) => v.campo === campo)
   const p = a.perfil ?? {}
-  const q = []
 
-  if (!tem('renda_mensal')) q.push('Quanto entra por mês, no total? (renda é a base de quase todo o estudo)')
-  if (!tem('custo_vida_mensal')) q.push('Quanto a família gasta por mês para manter o padrão de vida?')
-  if (!tem('patrimonio_imoveis') && !tem('patrimonio_total')) {
-    q.push('O que você já construiu de patrimônio — imóveis, aplicações, participação em empresa?')
-  }
-  if (!tem('dividas_total')) q.push('Existe financiamento, consignado ou dívida que a família herdaria?')
-  if (!tem('previdencia_saldo')) q.push('Tem previdência privada? Se sim, VGBL ou PGBL — muda o imposto na entrega.')
-  if (a.familia.filhos.length === 0) q.push('Quem depende dessa renda hoje? Filhos, e com que idades?')
-  if (!a.familia.estadoCivil) q.push('Você é casado? Em que regime de bens? (a meação muda a base do ITCMD)')
-  if (!p.idade) q.push('Quantos anos você tem? (o prêmio e o prazo do produto dependem disso)')
-  if (!p.fumante) q.push('Você fuma, ou fumou nos últimos 12 meses? (muda o prêmio de forma relevante)')
-  if (!p.seguros || p.seguros.length === 0) {
-    q.push('Você já tem algum seguro? De quem é — empresa, banco, individual? (o da empresa acaba com o emprego)')
-  }
-  if (!p.quemDecide) q.push('Quem decide uma contratação dessas junto com você?')
-  if (!p.prazoDecisao && a.compromissos.length === 0) q.push('Em quanto tempo você pretende decidir?')
-  if (!p.motivo) q.push('O que fez você aceitar essa conversa agora? (a resposta vira o argumento da proposta)')
+  // A lista sai cortada em oito — mais que isso ninguém leva para uma reunião.
+  // Por isso a ORDEM importa mais do que o conteúdo, e ela não pode ser a
+  // ordem em que as perguntas foram escritas no código. Cada uma carrega o
+  // peso do que trava sem ela:
+  //
+  //   100  o estudo não existe sem esse dado
+  //    70  o dado muda um número grande da apresentação
+  //    50  o dado muda o desenho da apólice ou a estratégia
+  //    30  ajuda a conduzir o follow-up
+  //
+  // Um peso condicional (a UF só pesa quando há patrimônio; o prazo da dívida
+  // só quando há dívida) evita encher a lista com pergunta que não muda nada
+  // para ESTE cliente.
+  const temPatrimonio = tem('patrimonio_imoveis') || tem('patrimonio_total')
+    || tem('patrimonio_investimentos')
+  const candidatas = [
+    [100, !tem('renda_mensal'),
+      'Quanto entra por mês, no total? (renda é a base de quase todo o estudo)'],
+    [100, !tem('custo_vida_mensal'),
+      'Quanto a família gasta por mês para manter o padrão de vida?'],
+    [95, !p.idade,
+      'Quantos anos você tem? (o prêmio e o prazo do produto dependem disso)'],
+    [90, a.familia.filhos.length === 0,
+      'Quem depende dessa renda hoje? Filhos, e com que idades?'],
+    [85, !temPatrimonio,
+      'O que você já construiu de patrimônio — imóveis, aplicações, participação em empresa?'],
+    [80, !a.familia.estadoCivil,
+      'Você é casado? Em que regime de bens? (a meação muda a base do ITCMD)'],
+    // Sem patrimônio não há inventário, e a alíquota do estado não muda nada.
+    // Com patrimônio, ela pode dobrar a verba sucessória.
+    [temPatrimonio ? 75 : 20, !p.uf,
+      'Os bens estão em qual estado? (o ITCMD é estadual e vai de 2% a 8%)'],
+    [70, !tem('dividas_total'),
+      'Existe financiamento, consignado ou dívida que a família herdaria?'],
+    // Só faz sentido perguntar o prazo quando existe a dívida.
+    [tem('dividas_total') ? 72 : 0, !p.prazoDivida,
+      'Quantos anos ainda faltam do financiamento? (para a proteção não acabar antes da dívida)'],
+    [65, !p.seguros || p.seguros.length === 0,
+      'Você já tem algum seguro? De quem é — empresa, banco, individual? (o da empresa acaba com o emprego)'],
+    [60, !p.fumante,
+      'Você fuma, ou fumou nos últimos 12 meses? (muda o prêmio de forma relevante)'],
+    [55, !tem('previdencia_saldo'),
+      'Tem previdência privada? Se sim, VGBL ou PGBL — muda o imposto na entrega.'],
+    [50, !p.motivo,
+      'O que fez você aceitar essa conversa agora? (a resposta vira o argumento da proposta)'],
+    [45, !p.quemDecide,
+      'Quem decide uma contratação dessas junto com você?'],
+    [40, !p.idadeAposentadoria,
+      'Com que idade você pretende parar de trabalhar?'],
+    [30, !p.prazoDecisao && a.compromissos.length === 0,
+      'Em quanto tempo você pretende decidir?'],
+  ]
 
-  return q.slice(0, 8)
+  return candidatas
+    .filter(([peso, falta]) => falta && peso > 0)
+    .sort((x, y) => y[0] - x[0])
+    .map(([, , texto]) => texto)
+    .slice(0, 8)
 }
 
 // Versão curta e humana para MANDAR AO CLIENTE. O resumo executivo é interno —
@@ -980,6 +1112,9 @@ export function resumoExecutivo(a, { nomeCliente = 'o cliente', data } = {}) {
     p.saude ? `saúde: ${p.saude.termo} (confirmar na DPS)` : null,
     p.outrosDependentes ? 'ajuda os pais financeiramente' : null,
     p.numSocios ? `${p.numSocios.valor} sócios` : null,
+    p.uf ? `bens em ${p.uf.valor}` : null,
+    p.prazoDivida ? `faltam ${p.prazoDivida.valor} anos de financiamento` : null,
+    p.idadeAposentadoria ? `quer parar aos ${p.idadeAposentadoria.valor}` : null,
   ].filter(Boolean)
   if (pedacosPerfil.length) L.push('', `PERFIL: ${pedacosPerfil.join(' · ')}`)
 

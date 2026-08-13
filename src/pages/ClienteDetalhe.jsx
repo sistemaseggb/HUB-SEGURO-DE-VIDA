@@ -6,7 +6,7 @@ import {
   Phone, Mail, Handshake, StickyNote, Flame, ChartPie, HeartHandshake, RefreshCw, CheckCircle2,
   Users2, Wallet, Shield, Landmark, Sparkles, Plus, Baby, Archive, TrendingDown, TrendingUp,
   ListChecks, Lightbulb, MessageSquareQuote, Clock3,
-  Building2, PiggyBank, Coins, HeartPulse, Ambulance, AlertTriangle, FileAudio, Scale,
+  Building2, PiggyBank, Coins, HeartPulse, Ambulance, AlertTriangle,
 } from 'lucide-react'
 import { ETAPAS_FORM, ROTULOS_FORM } from '../lib/formularioConfig'
 import { supabase } from '../lib/supabase'
@@ -15,9 +15,13 @@ import { brl, brlCompacto, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib
 import {
   calcularEstudo, normalizarFilhos, IDADE_INDEPENDENCIA, MESES_VITALICIO,
   COBERTURAS, GRUPOS_COBERTURA, TIPOS_PLANEJAMENTO, FOCOS, CLASSES_PATRIMONIO,
-  porqueCobertura,
+  porqueCobertura, ITCMD_POR_UF,
 } from '../lib/estudo'
 import { BLOCOS_ROTEIRO } from '../lib/roteiro'
+import { diagnosticar } from '../lib/diagnostico'
+import { ABAS_CLIENTE } from '../lib/navegacao'
+import { registrarVisita } from '../lib/recentes'
+import PainelDiagnostico from '../components/PainelDiagnostico'
 import {
   Button, Card, Input, InputMoeda, Select, Textarea, Campo, Modal, Badge, Spinner, ComoFunciona,
 } from '../components/ui'
@@ -27,27 +31,21 @@ import MapaPatrimonio from '../components/MapaPatrimonio'
 import AbaTranscricao from './AbaTranscricao'
 import AbaComparador from './AbaComparador'
 
-const ABAS = [
-  { nome: 'Planejamento', icone: ChartPie },
-  { nome: 'Comparador', icone: Scale },
-  { nome: 'Roteiro', icone: ListChecks },
-  { nome: 'Transcrição', icone: FileAudio },
-  { nome: 'Interações', icone: MessageCircle },
-  { nome: 'Reuniões', icone: CalendarPlus },
-  { nome: 'Apólices', icone: FileSignature },
-  { nome: 'Comissões', icone: Wallet },
-  { nome: 'Documentos', icone: FileText },
-  { nome: 'Formulário', icone: ClipboardList },
-  { nome: 'Tarefas', icone: CheckCircle2 },
-  { nome: 'Histórico', icone: RefreshCw },
-]
-
 export default function ClienteDetalhe() {
-  const { id } = useParams()
+  const { id, aba: abaUrl } = useParams()
   const [cliente, setCliente] = useState(null)
-  const [aba, setAba] = useState('Planejamento')
 
   const navigate = useNavigate()
+  // A aba vem da URL, não do estado do componente. Slug desconhecido (link
+  // antigo, erro de digitação) cai no Planejamento em vez de mostrar nada.
+  const abaAtiva = ABAS_CLIENTE.find((a) => a.slug === abaUrl) ?? ABAS_CLIENTE[0]
+  // Cada troca de aba entra no histórico (e não substitui a entrada anterior):
+  // o botão voltar precisa devolver a ABA anterior. Com `replace`, voltar
+  // saltava para a lista de clientes e a consultora perdia o cliente inteiro
+  // querendo apenas desfazer um clique.
+  const irParaAba = useCallback((slug) => {
+    navigate(`/clientes/${id}/${slug}`)
+  }, [navigate, id])
   const toast = useToast()
   const [prioridade, setPrioridade] = useState(null)
   const [contato, setContato] = useState(null)
@@ -57,6 +55,9 @@ export default function ClienteDetalhe() {
   const [erroEdit, setErroEdit] = useState(null)
 
   const [carteira, setCarteira] = useState(null)
+  // Quais abas já têm conteúdo — a bolinha da tira de abas. Sem isso a
+  // consultora precisa abrir doze abas para descobrir onde tem alguma coisa.
+  const [preenchidas, setPreenchidas] = useState({})
 
   const carregar = useCallback(async () => {
     const [c, pr, ct, ap] = await Promise.all([
@@ -79,9 +80,38 @@ export default function ClienteDetalhe() {
       capital: ativas.reduce((s, a) => s + Number(a.capital_segurado || 0), 0),
       comissao: (ap.data ?? []).reduce((s, a) => s + Number(a.comissao_gerada || 0), 0),
     })
+    if (c.data) registrarVisita(c.data)
   }, [id])
 
   useEffect(() => { carregar() }, [carregar])
+
+  // As bolinhas das abas. Uma consulta por aba seria caro e lento; aqui é uma
+  // contagem só, em paralelo, e o erro de qualquer uma delas apenas apaga a
+  // bolinha daquela aba — nunca derruba a tela.
+  useEffect(() => {
+    let vivo = true
+    const contar = async (tabela, coluna = 'id_cliente') => {
+      const { count } = await supabase.from(tabela).select('id', { count: 'exact', head: true }).eq(coluna, id)
+      return (count ?? 0) > 0
+    }
+    Promise.all([
+      supabase.from('planejamentos').select('id, premio_estimado, capital_sugerido').eq('id_cliente', id).maybeSingle(),
+      contar('interacoes'), contar('reunioes'), contar('tarefas'),
+      contar('apolices'), contar('documentos'), contar('historico_funil'),
+      supabase.from('transcricoes_reuniao').select('id', { count: 'exact', head: true }).eq('id_cliente', id),
+    ]).then(([plano, interacoes, reunioes, tarefas, apolices, documentos, historico, transcricoes]) => {
+      if (!vivo) return
+      const p = plano.data
+      setPreenchidas({
+        planejamento: !!p,
+        comparador: !!p?.premio_estimado,
+        transcricao: (transcricoes?.count ?? 0) > 0,
+        interacoes, reunioes, tarefas, apolices, documentos, historico,
+        comissoes: apolices,
+      })
+    }).catch(() => { /* sem bolinhas: a navegação segue igual */ })
+    return () => { vivo = false }
+  }, [id])
 
   function abrirEdicao() {
     setFormEdit({
@@ -291,31 +321,54 @@ export default function ClienteDetalhe() {
         )}
       </Modal>
 
-      {/* Abas */}
-      <div className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200">
-        {ABAS.map(({ nome, icone: Icone }) => (
-          <button key={nome} onClick={() => setAba(nome)}
-            className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2 text-sm font-medium transition-colors ${
-              aba === nome ? 'border-laranja-500 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}>
-            <Icone size={15} className={aba === nome ? 'text-laranja-600' : 'text-slate-400'} />
-            {nome}
-          </button>
-        ))}
+      {/* ── Abas ──
+          Doze abas numa tira que rola de lado escondem o que está fora da
+          tela: a consultora só encontra "Comissões" se souber que ela existe e
+          arrastar até lá. Agrupá-las pelo momento da consultoria (o que se faz
+          NA reunião, o registro do relacionamento e o pós-venda) transforma a
+          tira num mapa, e a bolinha marca as que já têm conteúdo — ela vê onde
+          tem coisa sem precisar abrir uma por uma. */}
+      <div className="mb-4 border-b border-slate-200">
+        <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="Seções do cliente">
+          {ABAS_CLIENTE.map((a, i) => {
+            const Icone = a.icone
+            const ativa = a.slug === abaAtiva.slug
+            const abreGrupo = i > 0 && ABAS_CLIENTE[i - 1].grupo !== a.grupo
+            return (
+              <div key={a.slug} className="flex items-center">
+                {abreGrupo && <span className="mx-1.5 h-4 w-px shrink-0 bg-slate-200" aria-hidden="true" />}
+                <button
+                  role="tab" aria-selected={ativa}
+                  onClick={() => irParaAba(a.slug)}
+                  title={`${a.grupo} · ${a.descricao}`}
+                  className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2 text-sm font-medium transition-colors ${
+                    ativa ? 'border-laranja-500 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}>
+                  <Icone size={15} className={ativa ? 'text-laranja-600' : 'text-slate-400'} />
+                  {a.nome}
+                  {preenchidas[a.slug] && (
+                    <span className={`h-1.5 w-1.5 rounded-full ${ativa ? 'bg-laranja-500' : 'bg-emerald-500/70'}`}
+                      title="Esta aba já tem conteúdo" />
+                  )}
+                </button>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
-      {aba === 'Planejamento' && <AbaPlanejamento idCliente={id} cliente={cliente} />}
-      {aba === 'Comparador' && <AbaComparador idCliente={id} cliente={cliente} />}
-      {aba === 'Roteiro' && <AbaRoteiro idCliente={id} cliente={cliente} />}
-      {aba === 'Transcrição' && <AbaTranscricao idCliente={id} cliente={cliente} />}
-      {aba === 'Interações' && <AbaInteracoes idCliente={id} onMudanca={carregar} />}
-      {aba === 'Reuniões' && <AbaReunioes idCliente={id} onMudanca={carregar} />}
-      {aba === 'Apólices' && <AbaApolices idCliente={id} onMudanca={carregar} />}
-      {aba === 'Comissões' && <AbaComissoes idCliente={id} cliente={cliente} />}
-      {aba === 'Documentos' && <AbaDocumentos idCliente={id} />}
-      {aba === 'Formulário' && <AbaFormulario idCliente={id} cliente={cliente} />}
-      {aba === 'Tarefas' && <AbaTarefas idCliente={id} />}
-      {aba === 'Histórico' && <AbaHistorico idCliente={id} cliente={cliente} />}
+      {abaAtiva.slug === 'planejamento' && <AbaPlanejamento idCliente={id} cliente={cliente} />}
+      {abaAtiva.slug === 'comparador' && <AbaComparador idCliente={id} cliente={cliente} />}
+      {abaAtiva.slug === 'roteiro' && <AbaRoteiro idCliente={id} cliente={cliente} />}
+      {abaAtiva.slug === 'transcricao' && <AbaTranscricao idCliente={id} cliente={cliente} />}
+      {abaAtiva.slug === 'interacoes' && <AbaInteracoes idCliente={id} onMudanca={carregar} />}
+      {abaAtiva.slug === 'reunioes' && <AbaReunioes idCliente={id} onMudanca={carregar} />}
+      {abaAtiva.slug === 'apolices' && <AbaApolices idCliente={id} onMudanca={carregar} />}
+      {abaAtiva.slug === 'comissoes' && <AbaComissoes idCliente={id} cliente={cliente} />}
+      {abaAtiva.slug === 'documentos' && <AbaDocumentos idCliente={id} />}
+      {abaAtiva.slug === 'formulario' && <AbaFormulario idCliente={id} cliente={cliente} />}
+      {abaAtiva.slug === 'tarefas' && <AbaTarefas idCliente={id} />}
+      {abaAtiva.slug === 'historico' && <AbaHistorico idCliente={id} cliente={cliente} />}
     </div>
   )
 }
@@ -458,6 +511,22 @@ function CampoCobertura({ cob, estudo, plano, setPlano }) {
 const rascunhosPlano = new Map()
 const ESPERA_AUTOSALVAR = 1800
 
+// Onde cada campo mora no formulário — é o que faz o botão "preencher" de uma
+// pendência do diagnóstico rolar até o bloco certo em vez de deixar a
+// consultora procurando num formulário de quase cem campos.
+const SECAO_DO_CAMPO = {
+  renda_mensal: 'sec-financeira', custo_vida_mensal: 'sec-financeira',
+  dividas_total: 'sec-financeira', dividas_prazo_anos: 'sec-financeira',
+  cobertura_atual: 'sec-financeira',
+  data_nascimento: 'sec-familia', regime_bens: 'sec-sucessao', uf: 'sec-sucessao',
+  patrimonio_imoveis: 'sec-patrimonio', patrimonio_investimentos: 'sec-patrimonio',
+  pj_num_socios: 'sec-empresa', pj_valuation: 'sec-empresa',
+  premio_estimado: 'sec-investimento', premio_anual: 'sec-investimento',
+  capital_invalidez: 'sec-coberturas', capital_doencas_graves: 'sec-coberturas',
+  dit_diaria: 'sec-coberturas', verba_sucessoria: 'sec-coberturas',
+  capital_sugerido: 'sec-coberturas', anos_protecao: 'sec-financeira',
+}
+
 function AbaPlanejamento({ idCliente, cliente }) {
   const toast = useToast()
   const [plano, setPlano] = useState(null)
@@ -489,9 +558,9 @@ function AbaPlanejamento({ idCliente, cliente }) {
     Promise.all([
       supabase.from('planejamentos').select('*').eq('id_cliente', idCliente).maybeSingle(),
       probe('capital_invalidez'), probe('premio_estimado'), probe('tipo_planejamento'),
-      probe('renda_desejada_aposentadoria'),
-    ]).then(([{ data }, tem014, tem015, tem019, tem021]) => {
-      setColunas({ tem014, tem015, tem019, tem021 })
+      probe('renda_desejada_aposentadoria'), probe('uf'),
+    ]).then(([{ data }, tem014, tem015, tem019, tem021, tem024]) => {
+      setColunas({ tem014, tem015, tem019, tem021, tem024 })
       // Rascunho local vence a resposta do banco quando é mais recente que a
       // linha lida — cobre tanto a gravação ainda em voo quanto a volta rápida
       // para a aba. Se outra tela (a Transcrição, por exemplo) gravou depois,
@@ -522,6 +591,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
           fumante: false, renda_desejada_aposentadoria: '', idade_aposentadoria: '',
           seguros_existentes: [], quem_decide: '', prazo_decisao: '',
         }),
+        ...(tem024 && { uf: '', dividas_prazo_anos: '' }),
       })
     })
   }, [idCliente])
@@ -559,7 +629,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
 
   if (!plano || !colunas) return <Spinner />
 
-  const { tem014, tem015, tem019, tem021 } = colunas
+  const { tem014, tem015, tem019, tem021, tem024 } = colunas
   const estudo = calcularEstudo(plano, { dataNascimento: cliente?.data_nascimento })
   const set = (k) => (e) => setPlano({ ...plano, [k]: e.target.value })
   const setValor = (k, v) => setPlano({ ...plano, [k]: v })
@@ -634,7 +704,9 @@ function AbaPlanejamento({ idCliente, cliente }) {
         dit_diaria: num(plano.dit_diaria),
         verba_sucessoria: num(plano.verba_sucessoria),
         cobertura_atual: num(plano.cobertura_atual) ?? 0,
-        itcmd_pct: num(plano.itcmd_pct) ?? 4,
+        // vazio agora significa "deixa o estado decidir": o motor usa a
+        // alíquota da UF, e só cai nos 4% quando nem a UF foi informada
+        itcmd_pct: num(plano.itcmd_pct),
         custas_pct: num(plano.custas_pct) ?? 8,
         conjuge_nome: plano.conjuge_nome || null,
         // texto-resumo das idades (mantém compatibilidade com telas antigas)
@@ -675,6 +747,10 @@ function AbaPlanejamento({ idCliente, cliente }) {
         funeral_familiar: num(plano.funeral_familiar),
         premio_anual: num(plano.premio_anual),
         forma_pagamento: plano.forma_pagamento || 'mensal',
+      }),
+      ...(tem024 && {
+        uf: (plano.uf || '').trim().toUpperCase() || null,
+        dividas_prazo_anos: num(plano.dividas_prazo_anos),
       }),
       ...(tem021 && {
         fumante: !!plano.fumante,
@@ -789,6 +865,10 @@ function AbaPlanejamento({ idCliente, cliente }) {
   ].filter(Boolean)
   const irPara = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
+  // A leitura do estudo (perfil, recomendações e pendências). Roda a cada
+  // tecla, como o resto do formulário: é determinístico e leva milissegundos.
+  const diagnostico = diagnosticar(estudo, { cliente })
+
   return (
     <Card className="p-5">
       <ComoFunciona id="planejamento" titulo="Como montar o planejamento">
@@ -864,6 +944,23 @@ function AbaPlanejamento({ idCliente, cliente }) {
           </ul>
         )}
       </div>
+
+      {/* A leitura do estudo: perfil, o que fazer e o que ainda perguntar.
+          Fica logo abaixo da prontidão porque é a primeira coisa que a
+          consultora precisa ler ao abrir o cliente antes de uma reunião. */}
+      <PainelDiagnostico
+        diagnostico={diagnostico}
+        onAplicar={(r) => {
+          setValor(r.campo, r.valor)
+          toast.ok(`${r.titulo}: valor aplicado no formulário.`)
+        }}
+        onIrParaCampo={(campo) => {
+          const secao = SECAO_DO_CAMPO[campo]
+          if (secao) irPara(secao)
+          const el = document.querySelector(`[data-campo="${campo}"]`)
+          el?.focus?.()
+        }}
+      />
 
       {/* Roteiro: a espinha do estudo em uma linha. Um clique leva ao bloco. */}
       <div className="mb-5 flex flex-wrap gap-1.5">
@@ -1045,8 +1142,15 @@ function AbaPlanejamento({ idCliente, cliente }) {
             <InputMoeda value={plano.custo_vida_mensal ?? ''} onChange={set('custo_vida_mensal')} />
           </Campo>
           <Campo label="Dívidas totais" dica="Financiamentos, consignados, cartão — o que a família herdaria">
-            <InputMoeda value={plano.dividas_total ?? ''} onChange={set('dividas_total')} />
+            <InputMoeda data-campo="dividas_total" value={plano.dividas_total ?? ''} onChange={set('dividas_total')} />
           </Campo>
+          {tem024 && estudo.dividas > 0 && (
+            <Campo label="Anos que ainda faltam da dívida"
+              dica="O financiamento imobiliário costuma correr por 20 ou 30 anos — se a proteção acabar antes, a família fica com o saldo devedor">
+              <Input data-campo="dividas_prazo_anos" type="number" min="0" max="60"
+                value={plano.dividas_prazo_anos ?? ''} onChange={set('dividas_prazo_anos')} />
+            </Campo>
+          )}
           <Campo label="Anos de proteção"
             dica={estudo.janelaProtecao
               ? `Sugestão: ${estudo.janelaProtecao.anos} anos — ${estudo.janelaProtecao.motivo}`
@@ -1203,8 +1307,36 @@ function AbaPlanejamento({ idCliente, cliente }) {
           <>
             <p id="sec-sucessao" className={SECAO}><Landmark size={13} /> Sucessão — o custo do inventário</p>
             <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-4">
-              <Campo label="ITCMD do estado (%)" dica="RS 6 · PR 4 · SC até 8">
-                <Input type="number" step="0.5" min="0" max="20" value={plano.itcmd_pct ?? 4} onChange={set('itcmd_pct')} />
+              {/* O estado escolhe a alíquota. Antes o campo já vinha com 4%
+                  preenchido e ninguém trocava — o estudo saía com a alíquota de
+                  São Paulo para um cliente do Rio, onde ela é o dobro. */}
+              {tem024 && (
+                <Campo label="Estado dos bens (UF)"
+                  dica={estudo.itcmdOrigem === 'uf'
+                    ? `${estudo.uf}: ITCMD de ${estudo.itcmd}%`
+                    : 'O ITCMD é estadual e vai de 2% a 8%'}>
+                  {/* Escolher o estado LIMPA o ITCMD digitado, de propósito.
+                      A coluna nasceu com `default 4`, então todo planejamento
+                      antigo tem 4% gravado — sem limpar, a consultora escolheria
+                      "RJ" e o imposto continuaria nos 4% de São Paulo, sem
+                      nenhum aviso. Ela pode digitar um override logo em seguida;
+                      o campo ao lado mostra qual alíquota está valendo. */}
+                  <Select data-campo="uf" value={plano.uf ?? ''}
+                    onChange={(e) => setPlano({ ...plano, uf: e.target.value, itcmd_pct: '' })}>
+                    <option value="">Não informado (usa 4%)</option>
+                    {Object.entries(ITCMD_POR_UF).sort().map(([sigla, aliquota]) => (
+                      <option key={sigla} value={sigla}>{sigla} — {aliquota}%</option>
+                    ))}
+                  </Select>
+                </Campo>
+              )}
+              <Campo label="ITCMD (%)"
+                dica={estudo.itcmdOrigem === 'uf'
+                  ? `Preenchido pelo estado (${estudo.uf}). Digite para sobrescrever.`
+                  : estudo.itcmdOrigem === 'consultora' ? 'Definido por você' : 'RS 6 · PR 4 · SC até 8'}>
+                <Input type="number" step="0.5" min="0" max="20"
+                  placeholder={String(estudo.itcmd)}
+                  value={plano.itcmd_pct ?? ''} onChange={set('itcmd_pct')} />
               </Campo>
               <Campo label="Custas + honorários (%)" dica="Tipicamente 6–12%">
                 <Input type="number" step="0.5" min="0" max="30" value={plano.custas_pct ?? 8} onChange={set('custas_pct')} />
@@ -1213,9 +1345,19 @@ function AbaPlanejamento({ idCliente, cliente }) {
                 <p className="text-xs uppercase text-slate-400">Custo estimado do inventário</p>
                 <p className="font-display text-xl font-semibold text-slate-900 tabular-nums">
                   {brl(estudo.custoInventario)}
-                  <span className="ml-2 text-sm font-normal text-slate-400">
-                    ({(estudo.itcmd + estudo.sucessao.custasEfetivas).toFixed(1).replace('.', ',')}% de {brlCompacto(estudo.sucessao.baseInventario)})
-                  </span>
+                </p>
+                {/* A conta aberta em duas parcelas: o imposto é o número que
+                    todo mundo cita, e é o menor deles. O que ninguém conta é a
+                    conta que continua chegando enquanto o processo corre. */}
+                <p className="mt-1 text-xs text-slate-500">
+                  {brlCompacto(estudo.impostoECustas)} de imposto e custas
+                  ({(estudo.itcmd + estudo.sucessao.custasEfetivas).toFixed(1).replace('.', ',')}%
+                  de {brlCompacto(estudo.sucessao.baseInventario)})
+                  {estudo.custoSustentacaoInventario > 0 && (
+                    <> + {brlCompacto(estudo.custoSustentacaoInventario)} de IPTU, condomínio e
+                      manutenção dos bens travados durante os {estudo.sucessao.prazoInventarioMeses} meses
+                      do inventário {estudo.sucessao.inventarioJudicial ? 'judicial' : 'em cartório'}</>
+                  )}.
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
                   Incide só sobre o que passa por inventário

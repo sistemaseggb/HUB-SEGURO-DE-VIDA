@@ -23,7 +23,7 @@ Vercel e (C) o teste final. Reserve ~30 minutos na primeira vez.
 **Jeito fácil (recomendado, 1 minuto):** No Supabase, abra **SQL Editor** →
 **New query**. Abra o arquivo **`supabase/setup_completo.sql`** deste
 repositório, copie **tudo**, cole no editor e clique em **Run**. Esse arquivo já
-junta as 18 migrações na ordem certa — pronto. *(Use este caminho num projeto
+junta as 24 migrações na ordem certa — pronto. *(Use este caminho num projeto
 Supabase novo/vazio.)*
 
 **Jeito manual (se preferir, ou se o de cima der erro):** rode um arquivo de
@@ -48,6 +48,12 @@ cada vez, na **ordem**, copiando o conteúdo de cada um da pasta
 16. `016_filhos_custo_mensal.sql`
 17. `017_proposta_publica.sql`
 18. `018_roteiro_reuniao.sql`
+19. `019_planejamento_completo.sql`
+20. `020_transcricoes_reuniao.sql`
+21. `021_planejamento_inteligente.sql`
+22. `022_comparador.sql`
+23. `023_apresentacao.sql`
+24. `024_estado_e_prazo_divida.sql`
 
 > **Como saber se deu certo?** Cada Run deve terminar com "Success". Em
 > **Table Editor** você verá as tabelas (clientes, apólices, planejamentos…).

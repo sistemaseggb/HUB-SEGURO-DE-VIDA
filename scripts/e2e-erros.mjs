@@ -161,10 +161,51 @@ await passo('10. Pendência de classificação: "É da Nati" resolve na hora', a
   if (pendencia > 0) throw new Error('pendência de produção não sumiu')
 })
 
-await passo('11. Busca global acha cliente por nome parcial', async () => {
-  await page.fill('input[placeholder*="Buscar"]', 'fernanda')
+await passo('11. Paleta (Ctrl+K) acha cliente por nome parcial', async () => {
+  await page.keyboard.press('Control+k')
+  await page.waitForSelector('input[placeholder*="Buscar cliente"]', { timeout: 5000 })
+  await page.fill('input[placeholder*="Buscar cliente"]', 'fernanda')
   await page.waitForSelector('text=Fernanda Ribas Antunes', { timeout: 5000 })
   await page.keyboard.press('Escape')
+  await page.waitForTimeout(200)
+})
+
+await passo('11b. A paleta também acha TELA pelo nome (não só cliente)', async () => {
+  await page.keyboard.press('Control+k')
+  await page.waitForSelector('input[placeholder*="Buscar cliente"]', { timeout: 5000 })
+  // "fechamento" não é o nome da tela: é o sinônimo que a consultora usaria
+  await page.fill('input[placeholder*="Buscar cliente"]', 'fechamento')
+  await page.waitForTimeout(300)
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(900)
+  if (!page.url().includes('/relatorios')) {
+    throw new Error(`a paleta não levou aos Relatórios (foi para ${page.url()})`)
+  }
+})
+
+await passo('11c. Atalho "g c" leva aos Clientes sem passar pelo menu', async () => {
+  await page.goto(BASE + '/')
+  await page.waitForTimeout(700)
+  await page.keyboard.press('g')
+  await page.keyboard.press('c')
+  await page.waitForTimeout(800)
+  if (!page.url().endsWith('/clientes')) {
+    throw new Error(`o atalho não navegou (url ${page.url()})`)
+  }
+})
+
+await passo('11d. Atalho NÃO dispara enquanto se digita num campo', async () => {
+  await page.goto(BASE + '/clientes')
+  await page.waitForTimeout(700)
+  const campo = page.locator('main input[type="search"], main input[placeholder*="uscar"]').first()
+  if (await campo.count()) {
+    await campo.click()
+    await campo.type('gd')
+    await page.waitForTimeout(600)
+    if (!page.url().endsWith('/clientes')) {
+      throw new Error('digitar "gd" num campo teletransportou a página')
+    }
+  }
 })
 
 await passo('12. Excluir cliente pede CONFIRMAÇÃO (cancelar preserva)', async () => {
