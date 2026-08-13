@@ -367,9 +367,47 @@ function semear() {
     created_at: iso(diasAtras(30)), updated_at: iso(diasAtras(30)),
   }]
 
+  // Propostas na seguradora (migração 024): o vão entre "o cliente disse sim" e
+  // "a apólice existe". Três estados que a consultora vive de verdade — uma
+  // travada com o cliente, uma andando dentro do prazo e uma aprovada
+  // esperando só a emissão.
+  const propostas_seguradora = [
+    {
+      id: idDemo(), id_cliente: rodrigo.id, id_seguradora: seguradoras[0].id,
+      numero_proposta: 'PRP-2026-4471', data_envio: dia(diasAtras(19)),
+      capital: 1_200_000, premio_mensal: 940, situacao: 'exigencia',
+      exigencias: [
+        { o_que: 'Exame de sangue e eletrocardiograma', de_quem: 'cliente',
+          pedida_em: dia(diasAtras(13)), resolvida_em: null },
+        { o_que: 'Declaração pessoal de saúde assinada', de_quem: 'cliente',
+          pedida_em: dia(diasAtras(13)), resolvida_em: dia(diasAtras(8)) },
+      ],
+      motivo_recusa: null, observacoes: 'Cliente viajou a trabalho, prometeu fazer o exame na volta.',
+      id_apolice: null, created_at: iso(diasAtras(19)), updated_at: iso(diasAtras(13)),
+    },
+    {
+      id: idDemo(), id_cliente: gustavo.id, id_seguradora: seguradoras[1]?.id ?? seguradoras[0].id,
+      numero_proposta: 'PRP-2026-4620', data_envio: dia(diasAtras(4)),
+      capital: 600_000, premio_mensal: 410, situacao: 'em_analise',
+      exigencias: [], motivo_recusa: null, observacoes: null,
+      id_apolice: null, created_at: iso(diasAtras(4)), updated_at: iso(diasAtras(4)),
+    },
+    {
+      id: idDemo(), id_cliente: beatriz.id, id_seguradora: seguradoras[0].id,
+      numero_proposta: 'PRP-2026-4388', data_envio: dia(diasAtras(26)),
+      capital: 850_000, premio_mensal: 620, situacao: 'aprovada',
+      exigencias: [
+        { o_que: 'Parecer da mesa médica', de_quem: 'seguradora',
+          pedida_em: dia(diasAtras(20)), resolvida_em: dia(diasAtras(9)) },
+      ],
+      motivo_recusa: null, observacoes: 'Aprovada sem agravo. Falta emitir.',
+      id_apolice: null, created_at: iso(diasAtras(26)), updated_at: iso(diasAtras(9)),
+    },
+  ]
+
   return {
     assessores, seguradoras, clientes, apolices, planejamentos, reunioes, interacoes, tarefas,
-    transcricoes,
+    transcricoes, propostas_seguradora,
     formularios_onboarding: formularios, comissoes_importadas, fila_mensagens, historico_funil,
     documentos: [], agenda_externa: [],
     configuracoes: [{
@@ -466,7 +504,32 @@ function criarViews(db) {
     return m
   }
 
+  // Espelha a view SQL da migração 024: só as propostas vivas, com os dias
+  // parados calculados. A conta fica aqui pelo mesmo motivo que fica no banco —
+  // a resposta tem que ser a mesma em toda tela que perguntar.
+  const vwPropostasAbertas = () => {
+    const cli = porId('clientes')
+    const seg = porId('seguradoras')
+    const ABERTAS = new Set(['enviada', 'em_analise', 'exigencia', 'aprovada'])
+    return (db.propostas_seguradora ?? [])
+      .filter((p) => ABERTAS.has(p.situacao))
+      .map((p) => {
+        const pendentes = (p.exigencias ?? []).filter((e) => !e.resolvida_em)
+        return {
+          ...p,
+          cliente_nome: cli.get(p.id_cliente)?.nome ?? '—',
+          cliente_telefone: cli.get(p.id_cliente)?.telefone ?? null,
+          seguradora_nome: seg.get(p.id_seguradora)?.nome ?? null,
+          dias_na_seguradora: diasDesde(p.data_envio),
+          exigencias_abertas: pendentes.length,
+          dias_exigencia_mais_antiga: pendentes.length
+            ? Math.max(...pendentes.map((e) => diasDesde(e.pedida_em))) : null,
+        }
+      })
+  }
+
   return {
+    vw_propostas_abertas: vwPropostasAbertas,
     vw_pipeline: vwPipeline,
     vw_regua_relacionamento: vwRegua,
     vw_prioridades_classificadas: vwPrioridades,

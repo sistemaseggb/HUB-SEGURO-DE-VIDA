@@ -39,7 +39,8 @@ e registrar os dados; o sistema cuida do resto.
   amarelo/vermelho configurável, motivo obrigatório ao perder um cliente.
 - **Clientes** — perfil 360º com abas: Planejamento (dados da reunião),
   **Comparador** (seguro resgatável × previdência, com o gráfico do cruzamento),
-  Roteiro, **Transcrição** (análise da gravação do Tactiq), Reuniões, Apólices,
+  Roteiro, **Transcrição** (análise da gravação do Tactiq), Reuniões,
+  **Em análise** (o que falta para a apólice sair), Apólices,
   **Documentos** (anexos no Storage), Formulário de onboarding, Tarefas e
   Histórico. Faixa de **Próxima Melhor Ação** e
   temperatura no topo. Botão **Gerar proposta** cria a apresentação.
@@ -100,7 +101,8 @@ npm run build && npm test        # lint + motor + ponta a ponta
 
 Ou em separado: os que não precisam de navegador — `npm run test:motor`,
 `npm run test:transcricao`, `npm run test:comparador`,
-`npm run test:apresentacao` — e `npm run test:e2e`. A suíte de navegador sobe o servidor de preview sozinha
+`npm run test:apresentacao`, `npm run test:formato`, `npm run test:vigia`,
+`npm run test:propostas` — e `npm run test:e2e`. A suíte de navegador sobe o servidor de preview sozinha
 (e reaproveita um que já esteja rodando), então basta um terminal.
 
 **`test:motor`** — `calcularEstudo()` é a única fonte dos números do
@@ -201,6 +203,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 21. [`supabase/migrations/021_planejamento_inteligente.sql`](supabase/migrations/021_planejamento_inteligente.sql)
 22. [`supabase/migrations/022_comparador.sql`](supabase/migrations/022_comparador.sql)
 23. [`supabase/migrations/023_apresentacao.sql`](supabase/migrations/023_apresentacao.sql)
+24. [`supabase/migrations/024_propostas_em_analise.sql`](supabase/migrations/024_propostas_em_analise.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -370,6 +373,40 @@ npm run dev
       renda no PGBL, usa a tabela regressiva de verdade e admite em voz alta
       que num horizonte longo sem sinistro o investimento acumula mais — é isso
       que a torna difícil de derrubar
+- [x] **Em análise: o que falta para a apólice sair** (migração 024) — o funil
+      sempre teve a etapa "Em Análise" e ela sempre foi uma **caixa preta**. O
+      cliente diz sim, a proposta entra na seguradora, e o sistema só sabia
+      dizer "retomar contato". É o lugar mais caro para perder um cliente: o
+      trabalho já foi todo feito — as reuniões, o estudo, a apresentação, a
+      objeção respondida, o sim.
+      - Cada proposta guarda seguradora, número, data de envio, capital, prêmio
+        e situação (enviada → em análise → com exigência → aprovada → emitida,
+        ou recusada / desistiu).
+      - **As exigências têm dono.** Cada pendência registra o que falta e **de
+        quem depende** — cliente, seguradora ou ela. Sem isso a lista vira um
+        monte de tarefa sem responsável, e a pendência que mata negócio é
+        sempre a que está com o cliente esperando alguém lembrar de cobrar.
+      - **Prazos diferentes por dono**, porque a ação é outra: 5 dias com o
+        cliente já é atraso (ele já disse sim, cada semana calada desfaz um
+        pouco disso), 10 na seguradora ainda é ritmo normal, 2 no que depende
+        só dela.
+      - O Dashboard ganha **"Esperando a apólice sair"**, ordenado pela urgência
+        real, com o número que faz abrir a lista: quanto de **prêmio está
+        travado** — não "3 propostas paradas", mas "R$ 1.560/mês esperando uma
+        pendência".
+      - Atalho para **cobrar pelo WhatsApp** citando exatamente o que falta, e
+        aviso quando a recusa fica sem motivo registrado (é o que orienta a
+        próxima tentativa em outra seguradora).
+      - O sistema **não dispara cobrança sozinho**: mostra o que está parado e
+        há quantos dias. Uma mensagem automática para quem está esperando o
+        resultado de um exame seria a pior coisa que ele poderia mandar.
+- [x] **Nenhuma falha de banco passa despercebida** — as 161 consultas do
+      sistema quase todas ignoravam o `error` e mostravam **lista vazia** quando
+      a consulta falhava. Num CRM de seguros isso é abrir o cliente na frente
+      dele e dizer "você não tem cobertura hoje" quando tem. O cliente do
+      Supabase agora sai observado de um ponto só: cada falha vira aviso na
+      tela, com pausa entre avisos, e os erros de rotina (`.single()` sem linha,
+      coluna que ainda não existe) ficam de fora para o alarme não virar ruído.
 - [x] **Modo apresentação com Apple Pencil** (migração 023) — a consultora
       apresenta pelo iPad compartilhando a tela no Meet, e a proposta deixa de
       ser um deck mudo. Botão **Apresentar**: tela cheia, tela sempre acesa

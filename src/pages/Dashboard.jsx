@@ -3,12 +3,13 @@ import { Link } from 'react-router-dom'
 import {
   CalendarCheck, Wallet, FileSignature, TrendingUp, CheckCircle2,
   MessageCircle, AlertTriangle, Trophy, Cake, Target, Percent, Timer, ShieldCheck, Flame, Rocket,
-  CalendarClock, Sun, Snowflake, GraduationCap,
+  CalendarClock, Sun, Snowflake, GraduationCap, Hourglass, User, Building2, UserCheck,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, mesBR, dataBR, mesLocal, whatsapp } from '../lib/format'
 import { CHART, etapaLabel } from '../lib/constants'
 import { Card, StatTile, Skeleton, Badge, EmptyState } from '../components/ui'
+import { resumoPropostas } from '../lib/propostas'
 
 // ─── Gráfico de barras (série única, tooltip por barra) ──────────────────────
 function GraficoBarras({ dados, formatoValor = brlCompacto, meta = 0 }) {
@@ -308,10 +309,11 @@ export default function Dashboard() {
   const [conversao, setConversao] = useState([])
   const [recebidas, setRecebidas] = useState([])
   const [regua, setRegua] = useState([])
+  const [propostas, setPropostas] = useState([])
   const [periodo, setPeriodo] = useState(6) // meses exibidos nos gráficos
 
   async function carregar() {
-    const [c, d, r, ce, f, k, cfg, pr, cv, ri, rg] = await Promise.all([
+    const [c, d, r, ce, f, k, cfg, pr, cv, ri, rg, pa] = await Promise.all([
       supabase.from('vw_comissoes_mensal').select('*').limit(periodo),
       supabase.from('vw_dashboard_mensal').select('*').limit(periodo),
       supabase.from('vw_ranking_assessores').select('*').limit(5),
@@ -323,6 +325,8 @@ export default function Dashboard() {
       supabase.from('vw_conversao_mensal').select('*').limit(periodo),
       supabase.from('vw_comissoes_importadas_resumo').select('*'),
       supabase.from('vw_regua_relacionamento').select('*').lte('dias_restantes', 30),
+      // só existe depois da migração 024; sem ela o bloco simplesmente não aparece
+      supabase.from('vw_propostas_abertas').select('*'),
     ])
     setComissoes(c.data ?? [])
     setDashboard(d.data ?? [])
@@ -335,6 +339,7 @@ export default function Dashboard() {
     setConversao(cv.data ?? [])
     setRecebidas(ri.data ?? [])
     setRegua(rg.data ?? [])
+    setPropostas(pa.data ?? [])
     setCarregando(false)
   }
 
@@ -515,6 +520,12 @@ export default function Dashboard() {
           </div>
         </Card>
       )}
+
+      {/* ── O que falta para a apólice sair ──────────────────────────────────
+          O cliente já disse sim; o negócio agora depende de uma pendência que
+          alguém precisa cobrar. É a etapa mais cara para perder, porque o
+          trabalho todo já foi feito — e era a única que não aparecia aqui. */}
+      <PropostasEmAnalise lista={propostas} />
 
       {/* Aniversários e renovações — o pós-venda na tela inicial */}
       {regua.length > 0 && (
@@ -743,5 +754,98 @@ export default function Dashboard() {
         </Card>
       </div>
     </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROPOSTAS EM ANÁLISE — o que falta para a apólice sair.
+//
+// O cliente já disse sim. O estudo foi feito, a apresentação aconteceu, a
+// objeção foi respondida. E aí a proposta entra na seguradora e some do radar
+// por semanas, presa numa pendência que ninguém cobrou.
+//
+// Este bloco existe para uma pergunta só: COM QUEM ESTÁ A BOLA. É ela que
+// decide a ação — cobrar a seguradora quando a pendência é do cliente é perder
+// o dia; cobrar o cliente quando a bola é da seguradora é irritar quem já fez
+// a parte dele.
+//
+// O número em destaque é o PRÊMIO TRAVADO. "3 propostas paradas" não faz
+// ninguém abrir a lista; "R$ 1.560 por mês esperando uma pendência" faz.
+// ─────────────────────────────────────────────────────────────────────────────
+function PropostasEmAnalise({ lista }) {
+  const r = resumoPropostas(lista)
+  if (r.abertas.length === 0) return null
+
+  const DONO = {
+    cliente: { Icone: User, rotulo: 'com o cliente' },
+    seguradora: { Icone: Building2, rotulo: 'com a seguradora' },
+    consultora: { Icone: UserCheck, rotulo: 'comigo' },
+  }
+
+  return (
+    <Card className="mb-6 p-5">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+          <Hourglass size={17} className="text-laranja-600" />
+          Esperando a apólice sair
+          <span className="rounded-full bg-laranja-50 px-2 py-0.5 text-xs font-semibold text-laranja-700">
+            {r.abertas.length}
+          </span>
+        </h2>
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+          {Object.entries(DONO).map(([id, { Icone, rotulo }]) => {
+            const n = id === 'cliente' ? r.comCliente : id === 'seguradora' ? r.comSeguradora : r.comigo
+            if (!n) return null
+            return (
+              <span key={id} className="inline-flex items-center gap-1">
+                <Icone size={13} /> {n} {rotulo}
+              </span>
+            )
+          })}
+        </div>
+      </div>
+      <p className="mb-4 text-xs text-slate-400">
+        {r.travadas.length > 0 ? (
+          <>
+            <strong className="text-red-600">{brl(r.premioEmRisco)}/mês</strong> de prêmio parado em{' '}
+            {r.travadas.length} {r.travadas.length === 1 ? 'proposta travada' : 'propostas travadas'} —
+            o cliente já disse sim, falta destravar.
+          </>
+        ) : (
+          <>{brl(r.premioEmAnalise)}/mês em análise, tudo dentro do prazo.</>
+        )}
+      </p>
+
+      <div className="space-y-2">
+        {r.fila.slice(0, 5).map((d) => {
+          const dono = d.comQuem ? DONO[d.comQuem] : null
+          return (
+            <Link key={d.id} to={`/clientes/${d.id_cliente}`}
+              className="flex items-start gap-3 rounded-xl border border-slate-100 p-3 transition-colors hover:border-slate-200 hover:bg-slate-50">
+              <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                d.travada ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'}`}>
+                {dono ? <dono.Icone size={15} /> : <Hourglass size={15} />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-slate-800">{d.cliente_nome}</span>
+                  <Badge tom={d.info.tom}>{d.info.rotulo}</Badge>
+                  {d.seguradora_nome && <span className="text-xs text-slate-400">{d.seguradora_nome}</span>}
+                </div>
+                <p className={`mt-0.5 text-xs ${d.travada ? 'text-red-600' : 'text-slate-500'}`}>
+                  {d.proximaAcao.texto}
+                </p>
+              </div>
+              {d.premio_mensal > 0 && (
+                <span className="shrink-0 text-right text-xs tabular text-slate-400">{brl(d.premio_mensal)}/mês</span>
+              )}
+            </Link>
+          )
+        })}
+      </div>
+      {r.fila.length > 5 && (
+        <p className="mt-3 text-xs text-slate-400">+{r.fila.length - 5} em análise — abra o cliente para ver as pendências.</p>
+      )}
+    </Card>
   )
 }

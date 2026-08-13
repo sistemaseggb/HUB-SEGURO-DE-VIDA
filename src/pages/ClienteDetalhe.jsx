@@ -6,7 +6,7 @@ import {
   Phone, Mail, Handshake, StickyNote, Flame, ChartPie, HeartHandshake, RefreshCw, CheckCircle2,
   Users2, Wallet, Shield, Landmark, Sparkles, Plus, Baby, Archive, TrendingDown, TrendingUp,
   ListChecks, Lightbulb, MessageSquareQuote, Clock3,
-  Building2, PiggyBank, Coins, HeartPulse, Ambulance, AlertTriangle, FileAudio, Scale,
+  Building2, PiggyBank, Coins, HeartPulse, Ambulance, AlertTriangle, FileAudio, Scale, Hourglass,
 } from 'lucide-react'
 import { ETAPAS_FORM, ROTULOS_FORM } from '../lib/formularioConfig'
 import { supabase } from '../lib/supabase'
@@ -26,6 +26,7 @@ import LinhaProtecao from '../components/LinhaProtecao'
 import MapaPatrimonio from '../components/MapaPatrimonio'
 import AbaTranscricao from './AbaTranscricao'
 import AbaComparador from './AbaComparador'
+import AbaAnalise from './AbaAnalise'
 
 const ABAS = [
   { nome: 'Planejamento', icone: ChartPie },
@@ -34,6 +35,7 @@ const ABAS = [
   { nome: 'Transcrição', icone: FileAudio },
   { nome: 'Interações', icone: MessageCircle },
   { nome: 'Reuniões', icone: CalendarPlus },
+  { nome: 'Em análise', icone: Hourglass },
   { nome: 'Apólices', icone: FileSignature },
   { nome: 'Comissões', icone: Wallet },
   { nome: 'Documentos', icone: FileText },
@@ -310,6 +312,7 @@ export default function ClienteDetalhe() {
       {aba === 'Transcrição' && <AbaTranscricao idCliente={id} cliente={cliente} />}
       {aba === 'Interações' && <AbaInteracoes idCliente={id} onMudanca={carregar} />}
       {aba === 'Reuniões' && <AbaReunioes idCliente={id} onMudanca={carregar} />}
+      {aba === 'Em análise' && <AbaAnalise idCliente={id} cliente={cliente} onMudanca={carregar} />}
       {aba === 'Apólices' && <AbaApolices idCliente={id} onMudanca={carregar} />}
       {aba === 'Comissões' && <AbaComissoes idCliente={id} cliente={cliente} />}
       {aba === 'Documentos' && <AbaDocumentos idCliente={id} />}

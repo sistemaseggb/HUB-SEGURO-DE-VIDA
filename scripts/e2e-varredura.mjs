@@ -101,7 +101,7 @@ const ROTAS = [
 ]
 
 const ABAS = ['Dossiê', 'Planejamento', 'Comparador', 'Roteiro', 'Transcrição', 'Interações', 'Reuniões',
-  'Apólices', 'Comissões', 'Documentos', 'Formulário', 'Tarefas', 'Histórico']
+  'Em análise', 'Apólices', 'Comissões', 'Documentos', 'Formulário', 'Tarefas', 'Histórico']
 
 // Os quatro estados em que um cliente realmente aparece na carteira.
 const PERFIS = [
