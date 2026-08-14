@@ -119,6 +119,15 @@ function semear() {
       numero: 'IC-30412', vigencia: dia(diasAtras(400)), status: 'cancelada',
       motivo: 'Substituída por apólice maior na Azos', criado: diasAtras(400), importada: true,
     }),
+    // ── A disputa dos GB Awards, no demo ───────────────────────────────────
+    // Duas formas de produzir muito, que é a razão de existirem DOIS prêmios:
+    // o assessor do Carlos emite MAIS apólices (leva o "maior emissor"), o da
+    // Fernanda emite MENOS e MAIORES (leva o "maior prêmio"). Sem isso o
+    // ranking do demo mostraria a mesma pessoa nos dois pódios e esconderia
+    // justamente o que a tela existe para separar.
+    apolice(carlos, idIcatu, 240, 400_000, 45, { numero: 'IC-88140', vigencia: dia(diasAtras(60)), criado: diasAtras(60), importada: true }),
+    apolice(carlos, idAzos, 195, 350_000, 40, { numero: 'AZ-61277', vigencia: dia(diasAtras(25)), criado: diasAtras(25), importada: true }),
+    apolice(fernanda, idPrud, 1_400, 3_000_000, 40, { numero: 'PR-44120', vigencia: dia(diasAtras(95)), tipo: 'Seguro Vitalício', criado: diasAtras(95), importada: true }),
   ]
 
   const planejamentos = [{

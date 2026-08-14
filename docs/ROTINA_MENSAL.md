@@ -128,6 +128,27 @@ No card **Fechamento para o financeiro**:
 No card "Comissões recebidas": **Matriz cliente × mês** exporta a visão da
 antiga aba "Comissão Mês" da planilha geral, agora sempre atualizada.
 
+## Passo 4 — o ranking dos GB Awards (depois de subir a planilha geral)
+
+A premiação do ano tem dois prêmios que saem da área de seguros: **maior
+emissor** (quantidade de apólices) e **maior prêmio** (volume somado). Os dois
+são apurados sozinhos a partir da **planilha geral** — depois de subi-la em
+**Importar → Planilha geral (Seguros Fechados)**, abra **GB Awards** no menu
+(atalho `g` depois `w`) e o ranking já está atualizado.
+
+- A janela vai de **1º de janeiro a 30 de novembro** (o mês da premiação),
+  pela **data de emissão** da apólice. O mês de fechamento é ajustável no topo
+  da tela, se a regra do ano mudar.
+- **Apólice cancelada não conta** — a menos que você ligue a opção "contar
+  apólices canceladas".
+- O bloco **"O que ficou de fora"** lista as apólices **sem assessor
+  identificado**. Corrija o assessor desses clientes antes do fechamento:
+  enquanto estiverem assim, essa produção não entra no ranking de ninguém.
+- **Exportar CSV** dá o quadro completo (posição nos dois prêmios, apólices,
+  prêmio mensal e anualizado, ticket médio, distância até o líder) e
+  **Mandar no grupo** abre o WhatsApp com o pódio já escrito — é o recado
+  mensal para os assessores, com quantos dias faltam para o fechamento.
+
 ---
 
 ## Perguntas frequentes

@@ -694,9 +694,16 @@ export default function Dashboard() {
 
         {/* Ranking */}
         <Card className="p-5">
-          <h2 className="mb-4 flex items-center gap-2 font-semibold text-slate-900">
-            <Trophy size={18} className="text-amber-500" /> Top 5 Assessores
-          </h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+              <Trophy size={18} className="text-amber-500" /> Top 5 Assessores
+            </h2>
+            {/* O histórico completo mora aqui; a disputa do ano (maior emissor
+                e maior prêmio) mora no GB Awards — dois recortes diferentes. */}
+            <Link to="/gb-awards" className="text-xs font-medium text-laranja-600 hover:underline">
+              GB Awards do ano →
+            </Link>
+          </div>
           {ranking.filter((r) => r.total_vendas > 0).length === 0
             ? <p className="text-sm text-slate-400">Ainda sem vendas convertidas.</p>
             : (
