@@ -128,6 +128,27 @@ No card **Fechamento para o financeiro**:
 No card "Comissões recebidas": **Matriz cliente × mês** exporta a visão da
 antiga aba "Comissão Mês" da planilha geral, agora sempre atualizada.
 
+## Passo 3b — a conferência da planilha geral (antes de importar)
+
+Ao subir o .xlsx em **Importar → Planilha geral**, o Hub agora mostra uma faixa
+de **conferência** antes do botão de importar. Ela existe porque dois defeitos
+da planilha não quebram nada — só produzem número errado com cara de certo:
+
+- **PRÊMIO MES fora do PRÊMIO ANUAL.** A coluna mensal é calculada, e o cálculo
+  quebrou: em julho/2026 são 65 linhas em que as duas colunas discordam (a
+  fórmula aponta para a linha de outro cliente, ou o valor anual foi colado
+  dentro da coluna mensal). **O Hub usa o PRÊMIO ANUAL**, que é o valor digitado
+  do contrato — e lista as linhas divergentes para você conferir. Se quiser
+  arrumar na origem, a coluna mensal deveria ser sempre `= anual ÷ 12`.
+- **O código de um assessor na apólice de outro.** O Hub identifica o assessor
+  pelo **código** primeiro; quando dois assessores aparecem com o mesmo código,
+  a apólice de um vai para o outro no ranking, sem deixar rastro depois de
+  importada. A faixa lista os códigos em conflito e os assessores que aparecem
+  com mais de um código (o que divide a produção da mesma pessoa em duas).
+
+Nada disso impede a importação — mas o conflito de código só você resolve,
+corrigindo na planilha ou ajustando o assessor do cliente depois em Clientes.
+
 ## Passo 4 — o ranking dos GB Awards (depois de subir a planilha geral)
 
 A premiação do ano tem dois prêmios que saem da área de seguros: **maior
