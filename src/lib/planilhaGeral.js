@@ -87,6 +87,39 @@ function campo(linhaNorm, ...apelidos) {
   return ''
 }
 
+// ─── Qual coluna de prêmio manda: a ANUAL ────────────────────────────────────
+// A planilha traz PRÊMIO ANUAL e PRÊMIO MES, e por muito tempo o Hub leu a
+// mensal primeiro — parecia o dado mais fino. Não é: a mensal é uma coluna
+// CALCULADA, e o cálculo dela quebrou.
+//
+// Na planilha de julho/2026, das 342 linhas que têm os dois valores, 65 têm as
+// duas colunas em desacordo por mais de 1%, e 43 delas por mais de 50%. Três
+// defeitos distintos convivem ali:
+//
+//   · a fórmula aponta para OUTRA linha (a célula K2 é `$I9/12`, o prêmio de um
+//     cliente que não é o dela) — 20 linhas, herança de uma reordenação;
+//   · alguém colou o valor anual dentro da coluna mensal — 20 linhas, que assim
+//     entram valendo 12 vezes o que valem;
+//   · sobraram 7 células `#REF!`.
+//
+// A coluna ANUAL é digitada — é o valor do contrato. Então ela passa a mandar,
+// e a mensal vira o que sempre deveria ter sido: um cálculo (anual ÷ 12), usado
+// como fonte só quando não existe anual nenhum.
+//
+// Sem isso o ranking dos GB Awards somava R$ 2,36 mi de prêmio em 2026 onde há
+// R$ 436 mil — e trocava o 3º e o 4º lugar do prêmio por dois assessores que
+// não estavam lá. Números de premiação não podem depender de uma fórmula que
+// alguém arrastou errado.
+//
+// O que diverge NÃO é escondido: cada registro carrega o que a planilha dizia
+// nas duas colunas, e a tela de importação mostra a lista antes de importar.
+export const TOLERANCIA_PREMIO = 0.01 // 1% — muito acima do arredondamento de ÷12
+
+// Um código de assessor do escritório é letra(s) + dígitos (A65587, CS8868).
+// Qualquer outra coisa ali é anotação humana ("não é cliente") e não serve
+// para identificar ninguém.
+const CODIGO_VALIDO = /^[A-Za-z]{1,3}\s*\d{3,6}$/
+
 // Escolhe a aba das apólices vigentes
 export function acharAbaApolices(nomes) {
   return nomes.find((n) => /proposta.*fechad|seguro.*fechad|fechad|apolic|vigent/i.test(n))
@@ -136,7 +169,18 @@ export async function lerPlanilhaGeral(arrayBuffer) {
     const status = /cancel|inativ/.test(statusBruto) ? 'cancelada'
       : /suspens/.test(statusBruto) ? 'suspensa' : 'ativa'
 
+    // O anual manda; a mensal só entra quando não há anual (ver o bloco
+    // TOLERANCIA_PREMIO acima para o porquê).
+    const premioAnualFinal = premioAnual ?? (premioMes != null ? Math.round(premioMes * 12 * 100) / 100 : null)
+    const premioMensalFinal = premioAnual != null
+      ? Math.round((premioAnual / 12) * 100) / 100
+      : premioMes
+    const divergencia = premioAnual != null && premioMes != null && premioAnual > 0 && premioMes > 0
+      ? Math.abs(premioAnual - premioMes * 12) / premioAnual
+      : 0
+
     registros.push({
+      linha: registros.length + ignoradas + 2, // +2: cabeçalho e base 1 do Excel
       cliente,
       codCliente: String(campo(linhaNorm, 'codcliente', 'codigocliente', 'codigo') ?? '').trim() || null,
       assessor: String(campo(linhaNorm, 'assessor', 'consultor') ?? '').trim() || null,
@@ -144,8 +188,12 @@ export async function lerPlanilhaGeral(arrayBuffer) {
       especialista: String(campo(linhaNorm, 'especialista') ?? '').trim() || null,
       numeroApolice: String(campo(linhaNorm, 'apolice', 'contrato', 'numero') ?? '').trim() || null,
       seguradora,
-      premioMensal: premioMes ?? (premioAnual != null ? Math.round((premioAnual / 12) * 100) / 100 : null),
-      premioAnual,
+      premioMensal: premioMensalFinal,
+      premioAnual: premioAnualFinal,
+      // o que a planilha dizia, para a tela poder mostrar a divergência
+      premioMesPlanilha: premioMes,
+      premioAnualPlanilha: premioAnual,
+      premioIncoerente: divergencia > TOLERANCIA_PREMIO,
       percentual,
       vigencia: dataISO,
       tipoProduto: String(campo(linhaNorm, 'tipo', 'produto') ?? '').trim() || null,
@@ -154,5 +202,79 @@ export async function lerPlanilhaGeral(arrayBuffer) {
     })
   }
 
-  return { aba, abas: wb.SheetNames, registros, ignoradas }
+  return { aba, abas: wb.SheetNames, registros, ignoradas, conferencia: conferir(registros) }
+}
+
+// ─── A conferência da planilha ───────────────────────────────────────────────
+// Roda antes de importar e devolve o que, se passar batido, produz um ranking
+// errado com cara de certo. Não conserta nada sozinha: o que ela encontra são
+// decisões humanas (de quem é a apólice, qual valor vale) — o papel dela é não
+// deixar a decisão passar despercebida.
+export function conferir(registros = []) {
+  const premioIncoerente = registros.filter((r) => r.premioIncoerente)
+  const semPremioAnual = registros.filter((r) => r.premioAnualPlanilha == null && r.premioMesPlanilha != null)
+  const semAssessor = registros.filter((r) => !r.assessor && !r.codAssessor)
+  const semVigencia = registros.filter((r) => !r.vigencia)
+
+  // O mesmo código em duas pessoas é o defeito mais caro: o Hub resolve o
+  // assessor pelo CÓDIGO primeiro, então a apólice de uma vai para a outra
+  // sem deixar rastro nenhum depois de importada.
+  const nomesPorCodigo = new Map()
+  const codigosPorNome = new Map()
+  const codigoSuspeito = new Map()
+  for (const r of registros) {
+    const nome = (r.assessor ?? '').trim()
+    const cod = (r.codAssessor ?? '').trim()
+    if (cod && !CODIGO_VALIDO.test(cod)) {
+      if (!codigoSuspeito.has(cod)) codigoSuspeito.set(cod, [])
+      codigoSuspeito.get(cod).push(r)
+    }
+    if (cod && nome) {
+      const kc = cod.toUpperCase()
+      if (!nomesPorCodigo.has(kc)) nomesPorCodigo.set(kc, new Set())
+      nomesPorCodigo.get(kc).add(nome)
+    }
+    if (nome) {
+      const kn = nome.toUpperCase()
+      if (!codigosPorNome.has(kn)) codigosPorNome.set(kn, new Set())
+      codigosPorNome.get(kn).add(cod ? cod.toUpperCase() : '(sem código)')
+    }
+  }
+  // "Romário" e "Romário Almeida" são a mesma pessoa; "Ikaro" e "Carine" não.
+  // Sem essa distinção o alerta acusaria metade do escritório e ninguém leria
+  // o que importa — que é o código de uma pessoa aparecendo na apólice de
+  // outra.
+  const chaveNome = (n) => n.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim()
+  const mesmaPessoa = (a, b) => {
+    const [x, y] = [chaveNome(a), chaveNome(b)]
+    return x === y || x.startsWith(`${y} `) || y.startsWith(`${x} `)
+  }
+  // Agrupa as grafias em pessoas: sobra mais de um grupo = duas pessoas mesmo.
+  const pessoasDistintas = (nomes) => {
+    const grupos = []
+    for (const n of nomes) {
+      const g = grupos.find((grupo) => grupo.some((m) => mesmaPessoa(m, n)))
+      if (g) g.push(n); else grupos.push([n])
+    }
+    return grupos
+  }
+
+  return {
+    premioIncoerente,
+    semPremioAnual,
+    semAssessor,
+    semVigencia,
+    // duas PESSOAS diferentes com o mesmo código — o defeito que entrega a
+    // apólice de uma para a outra sem deixar rastro
+    codigoCompartilhado: [...nomesPorCodigo.entries()]
+      .map(([codigo, nomes]) => ({ codigo, grupos: pessoasDistintas([...nomes]) }))
+      .filter((x) => x.grupos.length > 1)
+      .map((x) => ({ codigo: x.codigo, nomes: x.grupos.map((g) => g[0]) })),
+    // a mesma pessoa aparecendo com códigos diferentes (ou às vezes sem
+    // nenhum) — divide a produção dela em dois no ranking
+    nomeComVariosCodigos: [...codigosPorNome.entries()]
+      .filter(([, cods]) => cods.size > 1)
+      .map(([nome, cods]) => ({ nome, codigos: [...cods] })),
+    codigoSuspeito: [...codigoSuspeito.entries()].map(([codigo, linhas]) => ({ codigo, linhas: linhas.length })),
+  }
 }

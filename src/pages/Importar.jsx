@@ -348,10 +348,29 @@ async function importarPlanilhaGeral(registros) {
   }
 
   // 4. Apólices — UPSERT por (cliente + seguradora + nº da apólice)
+  //
+  // 303 das 364 linhas da planilha real não têm número de apólice. Com a chave
+  // antiga — cliente + seguradora + número — todas as apólices sem número do
+  // mesmo cliente na mesma seguradora viravam A MESMA chave: na reimportação do
+  // mês, uma delas era atualizada e as outras ficavam paradas no valor velho,
+  // sem erro nenhum na tela. São 24 linhas nesse caso na planilha de julho.
+  //
+  // Agora, sem número, a chave usa a VIGÊNCIA (que é a identidade da apólice e
+  // não muda), e os candidatos entram numa FILA: a primeira linha da planilha
+  // casa com a primeira apólice já gravada, a segunda com a segunda, e o que
+  // sobrar é inserido. O prêmio fica fora da chave de propósito — ele é
+  // justamente o que a reimportação vem atualizar.
   const { data: apExistentes } = await supabase.from('apolices')
-    .select('id, id_cliente, id_seguradora, numero_apolice')
-  const chaveAp = (idC, idS, num) => `${idC}|${idS}|${normalizar(num ?? '')}`
-  const apMap = new Map((apExistentes ?? []).map((a) => [chaveAp(a.id_cliente, a.id_seguradora, a.numero_apolice), a.id]))
+    .select('id, id_cliente, id_seguradora, numero_apolice, data_vigencia')
+  const chaveAp = (idC, idS, num, vigencia) => (num
+    ? `${idC}|${idS}|n:${normalizar(num)}`
+    : `${idC}|${idS}|v:${String(vigencia ?? '').slice(0, 10)}`)
+  const filaAp = new Map()
+  for (const a of apExistentes ?? []) {
+    const k = chaveAp(a.id_cliente, a.id_seguradora, a.numero_apolice, a.data_vigencia)
+    if (!filaAp.has(k)) filaAp.set(k, [])
+    filaAp.get(k).push(a.id)
+  }
   // colunas opcionais (migrações 012/013) — só enviamos se o banco já as tiver
   const temTipo = (apExistentes ?? []).some((a) => 'tipo_produto' in a) || (apExistentes ?? []).length === 0
   const temMotivo = (apExistentes ?? []).some((a) => 'motivo_cancelamento' in a) || (apExistentes ?? []).length === 0
@@ -372,7 +391,8 @@ async function importarPlanilhaGeral(registros) {
       ...(temTipo && r.tipoProduto ? { tipo_produto: r.tipoProduto } : {}),
       ...(temMotivo ? { motivo_cancelamento: r.status === 'cancelada' ? (r.motivoCancelamento || null) : null } : {}),
     }
-    const existenteId = apMap.get(chaveAp(idCliente, idSeg, r.numeroApolice))
+    const fila = filaAp.get(chaveAp(idCliente, idSeg, r.numeroApolice, r.vigencia))
+    const existenteId = fila?.length ? fila.shift() : null
     if (existenteId) {
       const { error } = await supabase.from('apolices').update(patch).eq('id', existenteId)
       if (error) erros.push(`Atualizar apólice de "${r.cliente}": ${error.message}`); else atualizados += 1
@@ -387,6 +407,119 @@ async function importarPlanilhaGeral(registros) {
   }
 
   return { ok, atualizados, erros, criados }
+}
+
+// ─── A conferência da planilha, antes de importar ────────────────────────────
+// O que esta faixa mostra já entrou no sistema uma vez sem ninguém ver: a
+// coluna PRÊMIO MES desencontrada da PRÊMIO ANUAL (65 linhas em julho/2026) e
+// o código de um assessor na apólice de outro. Nenhum dos dois quebra a
+// importação — eles produzem um número errado com cara de certo, e é por isso
+// que precisam aparecer ANTES do clique, não depois.
+function ConferenciaPlanilha({ conferencia }) {
+  const c = conferencia
+  if (!c) return null
+  const nada = c.premioIncoerente.length === 0 && c.codigoCompartilhado.length === 0
+    && c.nomeComVariosCodigos.length === 0 && c.codigoSuspeito.length === 0
+    && c.semAssessor.length === 0 && c.semVigencia.length === 0
+  if (nada) {
+    return (
+      <p className="mb-4 flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/70 p-3 text-sm text-emerald-800">
+        <CheckCircle2 size={15} className="shrink-0" />
+        Conferência da planilha: nada fora do lugar — prêmios coerentes e cada assessor com um código só.
+      </p>
+    )
+  }
+  return (
+    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+      <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-900">
+        <AlertTriangle size={15} className="shrink-0" /> Confira antes de importar
+      </p>
+
+      {c.codigoCompartilhado.length > 0 && (
+        <details className="mb-2">
+          <summary className="cursor-pointer text-sm text-slate-700">
+            <strong className="text-red-700">{c.codigoCompartilhado.length} código(s) de assessor usados por pessoas diferentes</strong>
+            {' '}— a apólice de uma vai para a outra no ranking
+          </summary>
+          <ul className="mt-2 space-y-1 pl-4 text-xs text-slate-600">
+            {c.codigoCompartilhado.map((x) => (
+              <li key={x.codigo}>
+                <span className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px]">{x.codigo}</span>
+                {' → '}{x.nomes.join(' · ')}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {c.nomeComVariosCodigos.length > 0 && (
+        <details className="mb-2">
+          <summary className="cursor-pointer text-sm text-slate-700">
+            <strong>{c.nomeComVariosCodigos.length} assessor(es) com mais de um código</strong>
+            {' '}— a produção da mesma pessoa se divide em duas no ranking
+          </summary>
+          <ul className="mt-2 space-y-1 pl-4 text-xs text-slate-600">
+            {c.nomeComVariosCodigos.map((x) => (
+              <li key={x.nome}>{x.nome} → {x.codigos.join(' · ')}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {c.premioIncoerente.length > 0 && (
+        <details className="mb-2">
+          <summary className="cursor-pointer text-sm text-slate-700">
+            <strong>{c.premioIncoerente.length} linha(s) com PRÊMIO MES fora do PRÊMIO ANUAL</strong>
+            {' '}— vale o anual, que é o valor do contrato
+          </summary>
+          <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-amber-200/70 bg-white">
+            <table className="w-full text-left text-xs">
+              <thead className="sticky top-0 bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="px-2 py-1.5 font-medium">Cliente</th>
+                  <th className="px-2 py-1.5 font-medium">Assessor</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Anual (planilha)</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Mês × 12</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Vai valer</th>
+                </tr>
+              </thead>
+              <tbody>
+                {c.premioIncoerente.slice(0, 80).map((x, i) => (
+                  <tr key={`${x.cliente}-${i}`} className="border-t border-slate-100">
+                    <td className="px-2 py-1.5 text-slate-700">{x.cliente}</td>
+                    <td className="px-2 py-1.5 text-slate-500">{x.assessor ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-slate-600">{brl(x.premioAnualPlanilha)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-red-600">{brl((x.premioMesPlanilha ?? 0) * 12)}</td>
+                    <td className="px-2 py-1.5 text-right font-semibold tabular-nums text-emerald-700">{brl(x.premioAnual)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {c.premioIncoerente.length > 80 && (
+            <p className="mt-1 text-xs text-slate-400">… e mais {c.premioIncoerente.length - 80} linha(s).</p>
+          )}
+        </details>
+      )}
+
+      <ul className="space-y-1 text-xs text-slate-600">
+        {c.codigoSuspeito.length > 0 && (
+          <li>Campo de código com texto que não é código: {c.codigoSuspeito.map((x) => `"${x.codigo}" (${x.linhas} linha(s))`).join(', ')}</li>
+        )}
+        {c.semAssessor.length > 0 && (
+          <li>{c.semAssessor.length} apólice(s) sem assessor — entram no sistema, mas ficam fora do ranking até você corrigir.</li>
+        )}
+        {c.semVigencia.length > 0 && (
+          <li>{c.semVigencia.length} apólice(s) sem data de vigência — essas não são importadas.</li>
+        )}
+      </ul>
+      <p className="mt-3 text-xs text-slate-500">
+        Pode importar assim mesmo: nada aqui impede a carga. O prêmio usado é sempre o <strong>anual</strong> da
+        planilha. Os conflitos de código, porém, só você resolve — corrija na planilha e suba de novo, ou
+        ajuste o assessor do cliente depois em Clientes.
+      </p>
+    </div>
+  )
 }
 
 function ImportarPlanilhaGeral({ onVoltar }) {
@@ -495,6 +628,9 @@ function ImportarPlanilhaGeral({ onVoltar }) {
             <p className="mb-3 text-xs text-slate-500">
               <strong>{resumo.segs.length} seguradoras</strong> (grafias unificadas): {resumo.segs.join(', ')}
             </p>
+
+            <ConferenciaPlanilha conferencia={analise.conferencia} />
+
             <div className="mb-4 overflow-x-auto rounded-lg border border-slate-100">
               <table className="w-full text-left text-xs">
                 <thead><tr className="bg-slate-50 text-slate-500">

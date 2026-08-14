@@ -377,6 +377,18 @@ separada para ser corrigida; e a conta fecha do jeito que uma auditoria refaz
 na mão (ranking + sem assessor = tudo que entrou na janela, prêmio anual =
 mensal × 12, a série mês a mês somando o total do ano).
 
+**`test:planilha`** — o **leitor da planilha geral**, que é a porta de entrada de
+todos os números da carteira. Os casos não são hipóteses: são os defeitos reais
+da planilha de julho/2026, em miniatura. A coluna **PRÊMIO MES** é calculada e o
+cálculo dela quebrou — em 65 das 342 linhas com os dois valores ela discorda do
+**PRÊMIO ANUAL** em mais de 1% (em 43 delas, mais de 50%), porque a fórmula
+aponta para a linha de outro cliente, porque alguém colou o valor anual dentro
+da coluna mensal, ou porque sobrou `#REF!`. O teste cobra que o **anual mande**
+(é o valor digitado, o do contrato), que a mensal só entre quando não há anual,
+que arredondamento de ÷12 não vire alarme — e que o ranking que sai do leitor
+seja o mesmo que sai dos contratos. Cobra também a conferência de cadastro: o
+mesmo código em duas **pessoas** é acusado, "Romário" e "Romário Almeida" não.
+
 **`test:conhecimento`** — as três camadas que produzem **texto lido em voz alta**
 na reunião, e afirmações que o cliente pode conferir com o advogado dele. O que
 se cobra aqui é diferente do que se cobra de um motor de cálculo: que a

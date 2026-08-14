@@ -63,6 +63,13 @@ jobs:
       - name: Apuração dos GB Awards (maior emissor e maior prêmio)
         run: npm run test:premiacao
 
+      # A planilha geral é a porta de entrada de TODOS os números da carteira.
+      # Em julho/2026 ela chegou com 65 linhas de prêmio incoerente e o código
+      # de um assessor na apólice de outro — nenhum dos dois quebra nada, os
+      # dois produzem número errado com cara de certo.
+      - name: Leitor da planilha geral (prêmio e cadastro de assessor)
+        run: npm run test:planilha
+
       - name: Subscrição, objeções e beneficiários
         run: npm run test:conhecimento
 
