@@ -347,6 +347,38 @@ async function importarPlanilhaGeral(registros) {
     criados.push(`${clientesNovos.size} cliente(s)`)
   }
 
+  // 3b. O ASSESSOR DE QUEM JÁ EXISTE TAMBÉM MUDA
+  //
+  // O importador só definia o assessor ao CRIAR o cliente. Quem já estava no
+  // banco ficava congelado no assessor da primeira carga — a consultora subia a
+  // planilha do mês, os prêmios atualizavam e o ranking dos GB Awards não se
+  // movia. Parecia que o Hub não estava lendo a planilha; ele estava, só não
+  // movia a atribuição.
+  //
+  // Manda a linha MAIS RECENTE do cliente na planilha (a planilha geral é o
+  // registro-mestre do escritório). Só mexemos quando muda de verdade, para não
+  // escrever 300 linhas à toa a cada importação.
+  const assessorDesejado = new Map() // idCliente → { idAssessor, vigencia }
+  for (const r of registros) {
+    const idCliente = acharCliente(r)
+    const idAssessor = acharAssessor(r)
+    if (!idCliente || !idAssessor) continue
+    const atual = assessorDesejado.get(idCliente)
+    if (!atual || String(r.vigencia ?? '') >= String(atual.vigencia ?? '')) {
+      assessorDesejado.set(idCliente, { idAssessor, vigencia: r.vigencia })
+    }
+  }
+  const { data: clientesAtuais } = await supabase.from('clientes').select('id, id_assessor')
+  const assessorAtual = new Map((clientesAtuais ?? []).map((c) => [c.id, c.id_assessor]))
+  let reatribuidos = 0
+  for (const [idCliente, { idAssessor }] of assessorDesejado) {
+    if (assessorAtual.get(idCliente) === idAssessor) continue
+    const { error } = await supabase.from('clientes').update({ id_assessor: idAssessor }).eq('id', idCliente)
+    if (error) erros.push(`Reatribuir assessor do cliente: ${error.message}`)
+    else reatribuidos += 1
+  }
+  if (reatribuidos) criados.push(`${reatribuidos} cliente(s) com o assessor atualizado pela planilha`)
+
   // 4. Apólices — UPSERT por (cliente + seguradora + nº da apólice)
   //
   // 303 das 364 linhas da planilha real não têm número de apólice. Com a chave
@@ -374,6 +406,13 @@ async function importarPlanilhaGeral(registros) {
   // colunas opcionais (migrações 012/013) — só enviamos se o banco já as tiver
   const temTipo = (apExistentes ?? []).some((a) => 'tipo_produto' in a) || (apExistentes ?? []).length === 0
   const temMotivo = (apExistentes ?? []).some((a) => 'motivo_cancelamento' in a) || (apExistentes ?? []).length === 0
+  // migração 026: o assessor mora na própria apólice. A planilha traz o
+  // assessor por LINHA, e 4 clientes têm apólices de assessores diferentes —
+  // com um assessor só por cliente, um dos dois sempre perdia a produção dele.
+  // Se a migração ainda não rodou, seguimos sem a coluna (o ranking cai no
+  // assessor do cliente, que o passo 3b acabou de acertar).
+  const { error: erroAssessorApolice } = await supabase.from('apolices').select('id_assessor').limit(1)
+  const temAssessorNaApolice = !erroAssessorApolice
 
   let ok = 0, atualizados = 0
   const novas = []
@@ -390,6 +429,8 @@ async function importarPlanilhaGeral(registros) {
       numero_apolice: r.numeroApolice,
       ...(temTipo && r.tipoProduto ? { tipo_produto: r.tipoProduto } : {}),
       ...(temMotivo ? { motivo_cancelamento: r.status === 'cancelada' ? (r.motivoCancelamento || null) : null } : {}),
+      // o assessor DESTA linha, não o do cliente
+      ...(temAssessorNaApolice ? { id_assessor: acharAssessor(r) || null } : {}),
     }
     const fila = filaAp.get(chaveAp(idCliente, idSeg, r.numeroApolice, r.vigencia))
     const existenteId = fila?.length ? fila.shift() : null

@@ -98,6 +98,10 @@ function semear() {
     const comissao = Math.round(premio * 12 * pct) / 100
     return {
       id: idDemo(), id_cliente: cliente.id, id_seguradora: seg,
+      // migração 026: o assessor mora na apólice (a planilha traz um por
+      // linha). No seed ele nasce igual ao do cliente; o importador é quem
+      // passa a movê-lo linha a linha.
+      id_assessor: extras.assessor ?? cliente.id_assessor,
       numero_apolice: extras.numero ?? null, valor_premio_mensal: premio, capital_segurado: capital,
       percentual_comissao: pct, comissao_gerada: comissao,
       comissao_natalia: Math.round(comissao * 40) / 100,

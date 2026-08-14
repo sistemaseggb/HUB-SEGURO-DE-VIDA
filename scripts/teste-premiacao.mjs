@@ -213,6 +213,43 @@ console.log('\n── Apólice sem assessor não some e não premia ──')
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+console.log('\n── De quem é a apólice: dela, ou do cliente ──')
+// A planilha traz o assessor por LINHA; o cliente guarda um só. Antes da
+// migração 026 a apólice herdava o do cliente, e reimportar a planilha não
+// movia ninguém de lugar — o ranking ficava congelado na primeira carga.
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  const base2 = {
+    assessores,
+    seguradoras,
+    clientes: [{ id: 'k1', nome: 'Cliente com dois assessores', id_assessor: 'ana' }],
+    apolices: [
+      // sem assessor próprio: vale o do cliente (comportamento antigo, intacto)
+      { id: 'w1', id_cliente: 'k1', id_seguradora: 's1', valor_premio_mensal: 100, data_vigencia: '2026-03-01', status: 'ativa' },
+      // com assessor próprio: manda ele, mesmo o cliente sendo de outro
+      { id: 'w2', id_cliente: 'k1', id_seguradora: 's1', id_assessor: 'bru', valor_premio_mensal: 500, data_vigencia: '2026-04-01', status: 'ativa' },
+    ],
+  }
+  const r = apurarPremiacao(base2, { ano: 2026, hoje: '2026-08-14' })
+  const ana = r.linhas.find((l) => l.id === 'ana')
+  const bru = r.linhas.find((l) => l.id === 'bru')
+  ok(ana?.apolices === 1 && ana?.premioMensal === 100,
+    'apólice SEM assessor próprio continua caindo no assessor do cliente')
+  ok(bru?.apolices === 1 && bru?.premioMensal === 500,
+    'apólice COM assessor próprio vai para ele, não para o do cliente')
+  ok(r.totais.apolices === 2, 'o mesmo cliente pode render para dois assessores diferentes')
+
+  // o assessor da apólice apontando para alguém que não existe mais não pode
+  // engolir a apólice: ela volta para o assessor do cliente
+  const orfao = apurarPremiacao({
+    ...base2,
+    apolices: [{ id: 'w3', id_cliente: 'k1', id_seguradora: 's1', id_assessor: 'nao-existe', valor_premio_mensal: 100, data_vigencia: '2026-03-01', status: 'ativa' }],
+  }, { ano: 2026, hoje: '2026-08-14' })
+  ok(orfao.linhas.find((l) => l.id === 'ana')?.apolices === 1,
+    'assessor inexistente na apólice cai de volta no assessor do cliente, sem sumir')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 console.log('\n── A conta que a auditoria refaz na mão ──')
 // ─────────────────────────────────────────────────────────────────────────────
 {

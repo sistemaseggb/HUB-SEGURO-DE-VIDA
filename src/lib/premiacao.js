@@ -152,8 +152,13 @@ export function apurarPremiacao(dados = {}, opcoes = {}) {
     if (!emissao || emissao < inicio || emissao > fim) { foraDaJanela += 1; continue }
     if (!incluirCanceladas && ap.status !== 'ativa') { canceladasIgnoradas += 1; continue }
 
+    // De quem é esta apólice: do assessor DELA (migração 026, vindo linha a
+    // linha da planilha) e, na falta dele, do assessor do cliente — que é como
+    // o sistema inteiro funcionava antes. A ordem importa: um cliente pode ter
+    // apólices de assessores diferentes, e o cliente só guarda um.
     const cliente = clientePorId.get(ap.id_cliente)
-    const assessor = cliente ? assessorPorId.get(cliente.id_assessor) : null
+    const assessor = assessorPorId.get(ap.id_assessor)
+      ?? (cliente ? assessorPorId.get(cliente.id_assessor) : null)
     const premio = numero(ap.valor_premio_mensal)
 
     if (!assessor || ASSESSOR_RESERVA.test(assessor.nome ?? '')) {

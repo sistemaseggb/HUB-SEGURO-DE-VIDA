@@ -149,6 +149,13 @@ da planilha não quebram nada — só produzem número errado com cara de certo:
 Nada disso impede a importação — mas o conflito de código só você resolve,
 corrigindo na planilha ou ajustando o assessor do cliente depois em Clientes.
 
+> **Rode uma vez a migração `026_assessor_na_apolice.sql`** no SQL Editor do
+> Supabase. Antes dela, o assessor morava só no cliente — e um cliente guarda
+> **um** assessor, enquanto a planilha traz **um por linha de apólice**. Com a
+> migração, cada apólice carrega o assessor da própria linha, que é o que o
+> ranking precisa. Sem rodar, tudo continua funcionando pelo assessor do
+> cliente (o comportamento antigo).
+
 ## Passo 4 — o ranking dos GB Awards (depois de subir a planilha geral)
 
 A premiação do ano tem dois prêmios que saem da área de seguros: **maior
