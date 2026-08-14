@@ -96,7 +96,7 @@ async function revistar(page, rotulo, { celular = false } = {}) {
 const ROTAS = [
   ['/', 'Dashboard'], ['/clientes', 'Clientes'], ['/pipeline', 'Pipeline'],
   ['/agenda', 'Agenda'], ['/relatorios', 'Relatórios'], ['/pos-venda', 'Pós-Venda'],
-  ['/mensagens', 'Mensagens'], ['/cadastros', 'Cadastros'],
+  ['/mensagens', 'Mensagens'], ['/cadastros', 'Cadastros'], ['/gb-awards', 'GB Awards'],
   ['/importar', 'Importar'], ['/guia', 'Guia'],
 ]
 

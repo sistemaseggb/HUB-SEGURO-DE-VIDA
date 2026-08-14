@@ -30,6 +30,7 @@ const Agenda = lazy(() => import('./pages/Agenda'))
 const AssessorDetalhe = lazy(() => import('./pages/AssessorDetalhe'))
 const Mensagens = lazy(() => import('./pages/Mensagens'))
 const Relatorios = lazy(() => import('./pages/Relatorios'))
+const Premiacao = lazy(() => import('./pages/Premiacao'))
 const Importar = lazy(() => import('./pages/Importar'))
 const Guia = lazy(() => import('./pages/Guia'))
 
@@ -74,6 +75,7 @@ export default function App() {
               <Route path="/agenda" element={<Agenda />} />
               <Route path="/mensagens" element={<Mensagens />} />
               <Route path="/relatorios" element={<Relatorios />} />
+              <Route path="/gb-awards" element={<Premiacao />} />
               <Route path="/importar" element={<Importar />} />
               <Route path="/guia" element={<Guia />} />
               <Route path="/assessores/:id" element={<AssessorDetalhe />} />

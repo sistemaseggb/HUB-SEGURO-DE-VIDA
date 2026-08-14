@@ -4,7 +4,7 @@ import {
   GraduationCap, PhoneCall, CalendarDays, ListChecks, ChartPie, Presentation,
   FileSignature, HeartHandshake, ChevronDown, Sparkles, Rocket, Lightbulb,
   Users, KanbanSquare, Upload, MessageSquareText, BarChart3, Settings, ArrowRight,
-  LayoutDashboard,
+  LayoutDashboard, Trophy,
 } from 'lucide-react'
 import { PageHeader, Card } from '../components/ui'
 
@@ -138,6 +138,15 @@ const MODULOS = [
       'Importe a planilha de comissões do mês e veja a quebra por assessor e seguradora.',
       'O fechamento para o financeiro sai pronto — confere centavo a centavo.',
       'Acompanhe a evolução mês a mês e a concentração de receita.',
+    ],
+  },
+  {
+    icone: Trophy, nome: 'GB Awards',
+    resumo: 'O ranking do ano: quem emitiu mais apólices e quem somou mais prêmio.',
+    itens: [
+      'Sai sozinho da planilha geral — suba o arquivo do mês em Importar e o pódio se move.',
+      'Conta a data de emissão da apólice, de 1º de janeiro até novembro (o mês da premiação).',
+      'Mostra a distância de cada assessor até o líder — e manda o pódio pronto no WhatsApp.',
     ],
   },
   {

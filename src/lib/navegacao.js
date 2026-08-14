@@ -16,7 +16,7 @@ import {
   LayoutDashboard, KanbanSquare, Users, HeartHandshake, Settings, CalendarDays,
   MessageSquareText, BarChart3, Upload, GraduationCap, ChartPie, ListChecks,
   FileAudio, MessageCircle, CalendarPlus, FileSignature, Wallet, FileText,
-  ClipboardList, CheckCircle2, RefreshCw, Scale,
+  ClipboardList, CheckCircle2, RefreshCw, Scale, Trophy,
 } from 'lucide-react'
 
 // ─── Destinos do menu ────────────────────────────────────────────────────────
@@ -65,6 +65,13 @@ export const DESTINOS = [
     atalho: 'r',
     descricao: 'Fechamento do mês, comissões e motivos de perda',
     termos: ['fechamento', 'comissao', 'financeiro', 'analise', 'numeros', 'csv'],
+  },
+  {
+    secao: 'Gestão', para: '/gb-awards', rotulo: 'GB Awards', icone: Trophy,
+    atalho: 'w',
+    descricao: 'O ranking do ano: maior emissor e maior prêmio',
+    termos: ['premiacao', 'premiação', 'ranking', 'awards', 'gb', 'troféu', 'trofeu', 'campanha',
+      'concurso', 'maior emissor', 'maior premio', 'disputa', 'assessores', 'podio', 'pódio'],
   },
   {
     secao: 'Gestão', para: '/importar', rotulo: 'Importar', icone: Upload,

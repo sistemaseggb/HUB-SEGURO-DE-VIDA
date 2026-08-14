@@ -273,6 +273,15 @@ pode ser deliberado, e por isso é pergunta e não acusação.
   cascata bruto → imposto → líquido → divisão 40/30/30 (CSV para o
   financeiro + PDF), Controle da Natália (ganho líquido mês a mês e
   recorrência), motivos de perda e tempo médio por etapa do funil.
+- **GB Awards** — o ranking do ano na área de seguros, com os **dois prêmios**
+  que a premiação de novembro entrega: **maior emissor** (quantidade de apólices
+  emitidas) e **maior prêmio** (volume somado). Apura direto da planilha geral —
+  ninguém digita ranking: subiu a planilha do mês, o pódio se move. Janela de
+  1º de janeiro ao fechamento (novembro, ajustável), pela **data de emissão** da
+  apólice; cancelada não conta (opcional); apólice sem assessor volta separada
+  para ser corrigida antes do fechamento. Traz a corrida em barras, a distância
+  de cada um até o líder, a projeção no ritmo atual, o quadro completo em CSV e
+  o resumo pronto para o grupo do WhatsApp.
 - **Importar** — traga as planilhas históricas (clientes e apólices): colunas
   detectadas automaticamente, prévia antes de importar, criação automática de
   assessores/seguradoras que faltam e planilha modelo para download.
@@ -302,7 +311,8 @@ npm run build && npm test        # lint + motor + ponta a ponta
 ```
 
 Ou em separado: os que não precisam de navegador — `npm run test:motor`,
-`npm run test:planejamento`, `npm run test:premio`, `npm run test:conhecimento`,
+`npm run test:planejamento`, `npm run test:premio`, `npm run test:premiacao`,
+`npm run test:conhecimento`,
 `npm run test:transcricao`, `npm run test:comparador`, `npm run test:apresentacao`
 — e `npm run test:e2e`.
 A suíte de navegador sobe o servidor de preview sozinha
@@ -353,6 +363,19 @@ total. As regras **R25–R31** levam as mesmas cobranças para os 10.000
 planejamentos da auditoria, agora gerados também com apólices existentes
 misturadas (vida em grupo, prestamista, individual antiga), porque código novo
 que não passa pelo teste que mais protege o sistema é código não testado.
+
+**`test:premiacao`** — a apuração dos **GB Awards**. É o único número do sistema
+que decide **quem sobe no palco**: se errar, alguém recebe um troféu que não é
+dele, e o erro só aparece quando já não dá para desfazer. São 60 conferências
+sobre o que a premiação precisa garantir: a janela do ano começa em 1º de
+janeiro e termina em 30 de novembro (a apólice do dia 30 entra, a de dezembro
+não, a do ano passado também não); apólice cancelada não premia, a menos que o
+escritório mande; os **dois prêmios sabem ter donos diferentes** (muitas
+pequenas × poucas grandes); empate no topo vira dois primeiros e o próximo é o
+**terceiro**, não o segundo; apólice sem assessor não some nem premia — volta
+separada para ser corrigida; e a conta fecha do jeito que uma auditoria refaz
+na mão (ranking + sem assessor = tudo que entrou na janela, prêmio anual =
+mensal × 12, a série mês a mês somando o total do ano).
 
 **`test:conhecimento`** — as três camadas que produzem **texto lido em voz alta**
 na reunião, e afirmações que o cliente pode conferir com o advogado dele. O que
@@ -532,6 +555,7 @@ npm run dev
 │   │   ├── objecoes.js           # O que ele vai dizer, respondido com os números dele
 │   │   ├── beneficiarios.js      # Quem recebe — e o que trava (CC 792/793/794)
 │   │   ├── comparador.js         # Seguro × VGBL/PGBL, ano a ano
+│   │   ├── premiacao.js          # GB Awards: maior emissor e maior prêmio do ano
 │   │   ├── transcricao.js        # Análise da gravação da reunião
 │   │   ├── apresentacao.js       # Traço da caneta, borracha e simulação
 │   │   ├── telaDeApresentacao.js # Tela cheia e tela acesa (iPad/Safari)

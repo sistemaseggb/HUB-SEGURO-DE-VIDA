@@ -57,6 +57,12 @@ jobs:
       # que o cliente pode conferir com o advogado dele. Duas promessas aqui não
       # podem falhar nunca: restrição de cobertura sempre dita, e beneficiário
       # menor sempre avisado.
+      # A apuração dos GB Awards é o único número do sistema que decide QUEM
+      # SOBE NO PALCO. Um erro aqui não quebra tela nenhuma: entrega o troféu
+      # para a pessoa errada, e só aparece quando já não dá para desfazer.
+      - name: Apuração dos GB Awards (maior emissor e maior prêmio)
+        run: npm run test:premiacao
+
       - name: Subscrição, objeções e beneficiários
         run: npm run test:conhecimento
 
