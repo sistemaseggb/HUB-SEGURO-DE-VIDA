@@ -33,11 +33,16 @@ import {
 // Busca uma tabela inteira em páginas de 1000 (o limite do Supabase por
 // consulta). A carteira do escritório já passa disso, e um ranking que perde
 // as últimas apólices premia a pessoa errada.
-async function buscarTudo(tabela, colunas) {
+async function buscarTudo(tabela, colunas, colunasReserva = null) {
   const todas = []
   for (let de = 0; ; de += 1000) {
     const { data, error } = await supabase.from(tabela).select(colunas).order('id').range(de, de + 999)
-    if (error || !data?.length) break
+    if (error) {
+      // coluna que só existe depois de uma migração: tenta o conjunto antigo
+      if (colunasReserva && de === 0) return buscarTudo(tabela, colunasReserva)
+      break
+    }
+    if (!data?.length) break
     todas.push(...data)
     if (data.length < 1000) break
   }
@@ -158,7 +163,12 @@ export default function Premiacao() {
   useEffect(() => {
     let vivo = true
     Promise.all([
-      buscarTudo('apolices', 'id, id_cliente, id_seguradora, valor_premio_mensal, data_vigencia, status'),
+      // `id_assessor` na apólice é da migração 026 — quando o banco ainda não a
+      // tem, a busca cai para o conjunto antigo de colunas e o ranking usa o
+      // assessor do cliente, como antes. Uma tela de premiação não pode ficar
+      // em branco porque falta rodar uma migração.
+      buscarTudo('apolices', 'id, id_cliente, id_seguradora, id_assessor, valor_premio_mensal, data_vigencia, status',
+        'id, id_cliente, id_seguradora, valor_premio_mensal, data_vigencia, status'),
       buscarTudo('clientes', 'id, nome, id_assessor'),
       buscarTudo('assessores', 'id, nome, codigo, ativo'),
       buscarTudo('seguradoras', 'id, nome'),
@@ -248,8 +258,9 @@ export default function Premiacao() {
         você sobe todo mês em <Link to="/importar" className="font-medium text-laranja-700 underline">Importar</Link> —
         nada é digitado aqui. Conta a <strong>data de emissão</strong> da apólice (a vigência), de 1º de janeiro
         até o mês de fechamento escolhido aí em cima (novembro, o mês da premiação). Apólice cancelada fica de
-        fora, a menos que você ligue a opção abaixo. O assessor de cada apólice é o do <strong>cliente</strong>:
-        se alguém estiver no assessor errado, corrija no cadastro do cliente e o ranking se ajusta.
+        fora, a menos que você ligue a opção abaixo. O assessor vem da <strong>linha da apólice</strong> na
+        planilha — então um mesmo cliente pode render para dois assessores diferentes, e reimportar a planilha
+        move a atribuição junto com os números.
       </ComoFunciona>
 
       {/* Prazo da apuração */}
