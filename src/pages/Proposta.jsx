@@ -707,7 +707,13 @@ export default function Proposta({ publica = false }) {
             momento={roteiro?.momentoDe(slideAtivo) ?? null}
             temRoteiro={!!roteiro?.falaDe(slideAtivo)}
             roteiroAberto={painelRoteiro}
-            alternarRoteiro={() => setPainelRoteiro((v) => !v)}
+            // Um painel por vez. Os dois abertos empilham e cobrem dois terços
+            // do slide — e ela usa um OU outro: ou está montando a frase que
+            // vai dizer, ou está mexendo no número na frente do cliente.
+            alternarRoteiro={() => {
+              setPainelRoteiro((v) => !v)
+              setPainelSimulacao(false)
+            }}
             etapa={etapa} etapasDoSlide={etapasDoSlide}
             revelando={revelando} alternarRevelacao={() => setRevelando((v) => !v)}
             inicioReuniao={inicioReuniao}
@@ -718,7 +724,10 @@ export default function Proposta({ publica = false }) {
             desenhosPendentes={desenhosPendentes && podeGuardar}
             guardarDesenhos={() => guardarDesenhos()}
             simulando={painelSimulacao || simulando}
-            alternarSimulacao={() => setPainelSimulacao((v) => !v)}
+            alternarSimulacao={() => {
+              setPainelSimulacao((v) => !v)
+              setPainelRoteiro(false)
+            }}
             escuro={escuro} alternarEscuro={() => setEscuro((v) => !v)}
             sair={tentarSair}>
             {erroSalvar && (
