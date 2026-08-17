@@ -1,7 +1,7 @@
 -- ============================================================================
 -- HUB SEGURO DE VIDA — SETUP COMPLETO (arquivo único)
 --
--- Este arquivo junta TODAS as 25 migrações na ordem certa. Rode UMA vez, num
+-- Este arquivo junta TODAS as 27 migrações na ordem certa. Rode UMA vez, num
 -- projeto Supabase NOVO (vazio), colando tudo no SQL Editor e clicando em Run.
 -- Cria todas as tabelas, o cálculo de comissão, o bucket de documentos e tudo
 -- mais que o Hub precisa para funcionar.
@@ -3009,4 +3009,90 @@ alter table planejamentos
 alter table planejamentos
   add constraint planejamentos_beneficiarios_lista
   check (jsonb_typeof(beneficiarios) = 'array');
+
+
+-- ############################################################################
+-- ### 026_assessor_na_apolice.sql
+-- ####################################################################################
+
+-- ============================================================================
+-- 026 — O ASSESSOR PASSA A MORAR NA APÓLICE
+--
+-- Até aqui o assessor morava no CLIENTE, e a apólice herdava o dele. Duas
+-- coisas quebravam por causa disso, e as duas apareceram na planilha de
+-- julho/2026:
+--
+--   1. REIMPORTAR NÃO MOVIA NINGUÉM. O importador só define o assessor quando
+--      CRIA o cliente. Cliente que já existe ficava congelado no assessor da
+--      primeira carga — então a consultora subia a planilha do mês, os prêmios
+--      atualizavam, e o ranking dos GB Awards continuava igual. Parecia que o
+--      sistema não estava lendo a planilha; ele estava, só não movia a
+--      atribuição.
+--
+--   2. UM CLIENTE, DOIS ASSESSORES. A planilha traz o assessor por LINHA de
+--      apólice, não por cliente — e 4 clientes têm apólices de assessores
+--      diferentes (6 delas em 2026). Com um assessor só por cliente, um dos
+--      dois sempre perdia a produção dele.
+--
+-- A coluna é opcional de propósito: quando está vazia, tudo continua caindo no
+-- assessor do cliente, que é o comportamento antigo. Nenhuma tela quebra se
+-- esta migração ainda não tiver rodado.
+-- ============================================================================
+
+alter table public.apolices
+  add column if not exists id_assessor uuid references public.assessores(id) on delete set null;
+
+create index if not exists idx_apolices_assessor on public.apolices (id_assessor);
+
+comment on column public.apolices.id_assessor is
+  'Assessor DESTA apólice (vem da coluna ASSESSOR da planilha geral, linha a linha). '
+  'Quando nulo, vale o assessor do cliente — o comportamento anterior à migração 026.';
+
+-- Preenche o histórico com o que se sabe hoje: o assessor do cliente. A partir
+-- da próxima importação da planilha geral, cada apólice passa a carregar o
+-- assessor da própria linha.
+update public.apolices a
+   set id_assessor = c.id_assessor
+  from public.clientes c
+ where c.id = a.id_cliente
+   and a.id_assessor is null;
+
+
+-- ############################################################################
+-- ### 027_cirurgias.sql
+-- ####################################################################################
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 027 — CIRURGIAS: a cobertura que faltava no catálogo
+--
+-- O estudo cobria bem os dois extremos do "pagar em vida": a doença grave, que
+-- é o diagnóstico que muda a vida, e a diária, que repõe renda por dia parado.
+-- Faltava exatamente o que acontece no MEIO e é o mais frequente dos três: a
+-- cirurgia.
+--
+-- É a cobertura que resolve o buraco que o cliente conhece de perto — o plano
+-- de saúde cobre o procedimento e não cobre o resto: coparticipação, material
+-- fora do rol, o honorário do cirurgião de escolha dele, o acompanhante, o
+-- deslocamento e as semanas de recuperação sem faturar. Ela indeniza por
+-- procedimento, conforme a tabela cirúrgica da apólice, e paga com o segurado
+-- vivo, em dias.
+--
+-- Sem ela, o capítulo "a maior parte paga em vida" da apresentação tinha três
+-- linhas onde devia ter quatro — e a objeção "eu já tenho plano de saúde"
+-- ficava sem a resposta mais concreta que existe.
+--
+-- Como no resto do sistema: a coluna é opcional e as telas detectam se ela
+-- existe antes de oferecer a cobertura. Uma instalação que não aplicou esta
+-- migração continua funcionando, só sem Cirurgias.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+alter table planejamentos
+  -- Capital da tabela cirúrgica: é o TETO da cobertura, não o valor de cada
+  -- procedimento. A apólice paga um percentual dele por cirurgia, conforme o
+  -- porte do procedimento — por isso o estudo sugere ~3× a renda mensal e
+  -- respeita o teto de mercado (ver CIRURGIAS_TETO em src/lib/estudo.js).
+  add column if not exists capital_cirurgias numeric(14,2);
+
+comment on column planejamentos.capital_cirurgias is
+  'Cirurgias: capital máximo da tabela cirúrgica. A apólice indeniza um percentual dele por procedimento. Vazio = usar a sugestão do estudo.';
 

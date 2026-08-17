@@ -23,7 +23,7 @@ Vercel e (C) o teste final. Reserve ~30 minutos na primeira vez.
 **Jeito fácil (recomendado, 1 minuto):** No Supabase, abra **SQL Editor** →
 **New query**. Abra o arquivo **`supabase/setup_completo.sql`** deste
 repositório, copie **tudo**, cole no editor e clique em **Run**. Esse arquivo já
-junta as 24 migrações na ordem certa — pronto. *(Use este caminho num projeto
+junta as 27 migrações na ordem certa — pronto. *(Use este caminho num projeto
 Supabase novo/vazio.)*
 
 **Jeito manual (se preferir, ou se o de cima der erro):** rode um arquivo de

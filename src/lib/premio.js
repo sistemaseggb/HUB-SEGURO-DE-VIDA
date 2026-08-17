@@ -57,6 +57,12 @@ export const TABELA_TAXAS = {
   doencas_graves: { taxa: 0.42, elasticidade: 1.15, base: 'capital' },
   morte_acidental: { taxa: 0.02, elasticidade: 0.35, base: 'capital' },
   fraturas: { taxa: 0.35, elasticidade: 0.30, base: 'capital' },
+  // Cirurgias é a cobertura mais ACIONADA da apólice — cirurgia acontece muito
+  // mais que invalidez, doença grave ou morte —, e é por isso que ela custa
+  // caro por mil de capital mesmo pagando pouco por evento. E acompanha a idade
+  // mais que a fratura (0,65 contra 0,30): quebrar o braço aos 30 e aos 55 tem
+  // probabilidade parecida, operar não.
+  cirurgias: { taxa: 0.62, elasticidade: 0.65, base: 'capital' },
   funeral_individual: { taxa: 0.55, elasticidade: 0.70, base: 'capital' },
   funeral_familiar: { taxa: 1.10, elasticidade: 0.70, base: 'capital' },
   // Capitais de morte com outro nome: a seguradora cobra pelo mesmo risco.
@@ -84,6 +90,7 @@ export const IDADE_MAXIMA_EMISSAO = {
   doencas_graves: 65,
   dit: 65,
   dih: 70,
+  cirurgias: 70,
   fraturas: 70,
   invalidez: 70,
   morte: 75,

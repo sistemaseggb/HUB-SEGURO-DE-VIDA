@@ -15,6 +15,7 @@ import { brl, brlCompacto, dataBR, dataHoraBR, whatsapp, iniciais } from '../lib
 import {
   calcularEstudo, normalizarFilhos, IDADE_INDEPENDENCIA, MESES_VITALICIO,
   COBERTURAS, GRUPOS_COBERTURA, TIPOS_PLANEJAMENTO, FOCOS, CLASSES_PATRIMONIO,
+  coberturaDisponivel,
   porqueCobertura, ITCMD_POR_UF, valorDoCampo,
 } from '../lib/estudo'
 import { BLOCOS_ROTEIRO } from '../lib/roteiro'
@@ -533,6 +534,7 @@ const SECAO_DO_CAMPO = {
   pj_num_socios: 'sec-empresa', pj_valuation: 'sec-empresa',
   premio_estimado: 'sec-investimento', premio_anual: 'sec-investimento',
   capital_invalidez: 'sec-coberturas', capital_doencas_graves: 'sec-coberturas',
+  capital_cirurgias: 'sec-coberturas',
   dit_diaria: 'sec-coberturas', verba_sucessoria: 'sec-coberturas',
   capital_sugerido: 'sec-coberturas', anos_protecao: 'sec-financeira',
   seguros_existentes: 'sec-financeira',
@@ -573,8 +575,9 @@ function AbaPlanejamento({ idCliente, cliente }) {
       supabase.from('planejamentos').select('*').eq('id_cliente', idCliente).maybeSingle(),
       probe('capital_invalidez'), probe('premio_estimado'), probe('tipo_planejamento'),
       probe('renda_desejada_aposentadoria'), probe('uf'), probe('beneficiarios'),
-    ]).then(([{ data }, tem014, tem015, tem019, tem021, tem024, tem025]) => {
-      setColunas({ tem014, tem015, tem019, tem021, tem024, tem025 })
+      probe('capital_cirurgias'),
+    ]).then(([{ data }, tem014, tem015, tem019, tem021, tem024, tem025, tem027]) => {
+      setColunas({ tem014, tem015, tem019, tem021, tem024, tem025, tem027 })
       // Rascunho local vence a resposta do banco quando é mais recente que a
       // linha lida — cobre tanto a gravação ainda em voo quanto a volta rápida
       // para a aba. Se outra tela (a Transcrição, por exemplo) gravou depois,
@@ -610,6 +613,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
           atividades_risco: [], altura_cm: '', peso_kg: '',
           condicoes_declaradas: '', beneficiarios: [],
         }),
+        ...(tem027 && { capital_cirurgias: '' }),
       })
     })
   }, [idCliente])
@@ -672,7 +676,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
 
   if (!plano || !colunas) return <Spinner />
 
-  const { tem014, tem015, tem019, tem021, tem024, tem025 } = colunas
+  const { tem014, tem015, tem019, tem021, tem024, tem025, tem027 } = colunas
   const estudo = calcularEstudo(plano, { dataNascimento: cliente?.data_nascimento })
   const set = (k) => (e) => setPlano({ ...plano, [k]: e.target.value })
   const setValor = (k, v) => setPlano({ ...plano, [k]: v })
@@ -696,7 +700,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
     .map((g) => ({
       ...g,
       itens: COBERTURAS.filter((c) => c.grupo === g.id)
-        .filter((c) => (c.requer !== '014' || tem014) && (c.requer !== '019' || tem019))
+        .filter((c) => coberturaDisponivel(c, { tem014, tem019, tem027 }))
         .filter((c) => !c.pj || estudo.temPJ),
     }))
     .filter((g) => g.itens.length > 0)
@@ -811,6 +815,9 @@ function AbaPlanejamento({ idCliente, cliente }) {
             pct: num(b.pct) ?? 0,
             nascimento: b.nascimento || null,
           })),
+      }),
+      ...(tem027 && {
+        capital_cirurgias: num(plano.capital_cirurgias),
       }),
       ...(tem021 && {
         fumante: !!plano.fumante,

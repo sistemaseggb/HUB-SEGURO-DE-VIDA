@@ -279,6 +279,11 @@ export const MESES_VITALICIO = 1200
 export const FUNERAL_INDIVIDUAL_PADRAO = 15_000
 export const FUNERAL_FAMILIAR_PADRAO = 15_000
 export const FRATURAS_TETO = 50_000
+// Cirurgias indeniza por PROCEDIMENTO, conforme a tabela cirúrgica da apólice:
+// o capital contratado é o teto da tabela, e cada porte de cirurgia paga um
+// percentual dele. O mercado individual trabalha entre R$ 10 mil e R$ 50 mil —
+// acima disso a cobertura deixa de ser automática.
+export const CIRURGIAS_TETO = 50_000
 export const DIH_DIAS_PADRAO = 30
 export const DIT_DIAS_PADRAO = 90
 export const DIT_FRANQUIA_PADRAO = 15
@@ -387,6 +392,12 @@ export const COBERTURAS = [
     comoCalcula: 'renda mensal ÷ 30, por dia de afastamento',
   },
   {
+    id: 'cirurgias', campo: 'capital_cirurgias', grupo: 'vida', tipo: 'capital', soma: true, requer: '027',
+    rotulo: 'Cirurgias', curto: 'Cirurgias',
+    descricao: 'Indeniza por procedimento cirúrgico — o custo que o plano de saúde não cobre',
+    comoCalcula: '≈ 3 × a renda mensal, respeitando o teto de mercado da tabela cirúrgica',
+  },
+  {
     id: 'dih', campo: 'dih_diaria', grupo: 'vida', tipo: 'diaria', soma: false, requer: '019',
     campoDias: 'dih_dias', diasPadrao: DIH_DIAS_PADRAO,
     rotulo: 'Diária por internação hospitalar (DIH)', curto: 'Diária de internação',
@@ -451,6 +462,28 @@ export const COBERTURAS = [
   },
 ]
 
+// ─── O QUE PAGA COM O CLIENTE AQUI ───────────────────────────────────────────
+// A lista existe em um lugar só porque três telas dependem dela e discordar
+// entre si seria pior do que não ter nenhuma: o capítulo "proteção em vida" da
+// apresentação, a resposta à objeção "não recebo nada de volta" e a ordem em
+// que as coberturas entram quando o orçamento é curto.
+//
+// O critério é literal — a apólice paga com o segurado VIVO. Morte acidental e
+// funeral ficam de fora por definição; a verba sucessória também, embora seja
+// a que mais se confunde com elas, porque quem recebe é a família depois.
+export const COBERTURAS_EM_VIDA = [
+  'invalidez', 'doencas_graves', 'cirurgias', 'dit', 'dih', 'fraturas',
+]
+
+// Uma cobertura só pode ser oferecida quando a migração que criou a coluna dela
+// já foi aplicada. A regra mora aqui para o formulário, os níveis do plano e o
+// estudo nunca divergirem sobre o que este banco consegue gravar.
+export function coberturaDisponivel(cobertura, { tem014, tem019, tem027 } = {}) {
+  if (!cobertura?.requer) return true
+  const migracoes = { '014': tem014, '019': tem019, '027': tem027 }
+  return migracoes[cobertura.requer] === true
+}
+
 // ─── O PORQUÊ DE CADA NÚMERO ─────────────────────────────────────────────────
 // `comoCalcula` explica a fórmula em abstrato ("24 × a renda mensal"). Isto
 // aqui explica com os números DESTE cliente ("24 × os R$ 48 mil que ele ganha
@@ -498,6 +531,12 @@ export function porqueCobertura(id, e) {
         : null
     case 'fraturas':
       return 'Indeniza por tabela conforme o osso — cobre o custo imediato do acidente sem mexer na reserva.'
+    case 'cirurgias':
+      return e.renda > 0
+        ? `Até ${m(v)} por procedimento, conforme a tabela cirúrgica. É o que o plano de saúde não paga: `
+          + `coparticipação, material fora do rol, o cirurgião de escolha dele e as semanas de recuperação `
+          + `sem faturar os ${m(e.renda)} do mês.`
+        : 'Indeniza por procedimento conforme a tabela cirúrgica — cobre o que o plano de saúde deixa de fora.'
     case 'funeral_individual':
       return 'Acionada por telefone e resolvida em horas: a família não gasta nem decide nada no pior dia.'
     case 'funeral_familiar':
@@ -753,9 +792,9 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
   // apresenta menos capítulos em vez de prometer o que não pode gravar.
   const tem014 = 'capital_invalidez' in plano
   const tem019 = 'tipo_planejamento' in plano
-  const disponivel = (c) => !c.requer
-    || (c.requer === '014' && tem014)
-    || (c.requer === '019' && tem019)
+  const tem027 = 'capital_cirurgias' in plano
+  const migracoes = { '014': tem014, '019': tem019, '027': tem027 }
+  const disponivel = (c) => !c.requer || migracoes[c.requer] === true
 
   // ── Filhos: o gasto de hoje que DEIXA de existir quando cada um faz 24 ────
   const filhos = normalizarFilhos(plano, anos)
@@ -972,6 +1011,12 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
     // fraturas indenizam por tabela: o mercado trabalha entre R$ 10 mil e
     // R$ 50 mil, então a sugestão acompanha a renda mas respeita esse teto
     fraturas: renda > 0 ? Math.min(Math.round((renda * 3) / 1000) * 1000, FRATURAS_TETO) : 0,
+    // Cirurgias segue a mesma lógica da tabela: o capital é o TETO do que a
+    // apólice paga por procedimento, e cada porte recebe um percentual dele.
+    // Três meses de renda é a régua — é o que uma cirurgia de médio porte
+    // custa de verdade a quem passa por ela: coparticipação, material fora do
+    // rol, honorário do cirurgião escolhido e o tempo de recuperação.
+    cirurgias: renda > 0 ? Math.min(Math.round((renda * 3) / 1000) * 1000, CIRURGIAS_TETO) : 0,
     // As assistências têm valor fixo de mercado. Só entram quando o estudo já
     // tem substância — senão um planejamento em branco nasceria anunciando
     // duas coberturas que ninguém levantou.
@@ -1645,7 +1690,7 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
     // previdência: o extrato x o que a família saca
     previdenciaTipo, previdenciaAporte, previdenciaLiquida, irPrevidencia,
     // coberturas
-    sugestoes, valores, ativas, diarias, diariaPorId, tem014, tem019, limitados,
+    sugestoes, valores, ativas, diarias, diariaPorId, tem014, tem019, tem027, limitados,
     capitalReposicaoRenda,
     capitalTotal, capitalPF, capitalPJ, totalDiarias, cenarios, capitalMaximoEvento,
     // empresa

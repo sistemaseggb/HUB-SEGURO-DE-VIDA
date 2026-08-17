@@ -38,7 +38,7 @@
 // tecla. O planejamento continua sendo a fonte única da verdade.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { COBERTURAS } from './estudo.js'
+import { COBERTURAS, coberturaDisponivel } from './estudo.js'
 import { precoMensal, TABELA_TAXAS } from './premio.js'
 
 // ─── A ORDEM DO RISCO ────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ import { precoMensal, TABELA_TAXAS } from './premio.js'
 // ele, esta é a ordem padrão.
 export const ORDEM_RISCO_PADRAO = [
   'invalidez', 'morte', 'aval', 'doencas_graves', 'sucessao',
-  'dit', 'socios', 'homem_chave', 'morte_acidental', 'dih',
+  'dit', 'socios', 'homem_chave', 'morte_acidental', 'cirurgias', 'dih',
   'funeral_individual', 'funeral_familiar', 'fraturas',
 ]
 
@@ -79,6 +79,7 @@ const RISCO_SEM = {
   doencas_graves: 'No diagnóstico não entra um real: o tratamento sai do patrimônio da família.',
   dit: 'Cada dia parado é um dia sem receber, sem nenhuma reposição.',
   dih: 'A internação corre por conta dele — o que o plano de saúde não cobre não tem de onde sair.',
+  cirurgias: 'Cada cirurgia sai do bolso na parte que o plano de saúde não paga, e a recuperação sai da renda.',
   morte_acidental: 'No cenário mais súbito a indenização não dobra: a família recebe só o capital de morte.',
   fraturas: 'O custo imediato de um acidente sai da reserva.',
   sucessao: 'O inventário continua sem liquidez: os bens travam até alguém pôr o imposto em dinheiro.',
@@ -123,8 +124,7 @@ function universo(estudo) {
     // uma cobertura empresarial não entra num estudo sem PJ, e uma cobertura
     // que a migração não liberou não pode ser prometida
     if (c.pj && !estudo.temPJ) continue
-    if (c.requer === '014' && !estudo.tem014) continue
-    if (c.requer === '019' && !estudo.tem019) continue
+    if (!coberturaDisponivel(c, estudo)) continue
     if (estudo.tipo === 'pj' && !c.pj && c.id !== 'invalidez') continue
 
     const atual = disponiveis.get(c.id)

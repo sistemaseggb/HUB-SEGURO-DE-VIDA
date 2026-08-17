@@ -114,6 +114,26 @@
 }
 
 /* ============================================================================
+   A ORDEM DOS CAPÍTULOS VEM DO ROTEIRO, NÃO DO ARQUIVO.
+
+   Cada público tem uma ordem própria: quem veio por sucessão vê o inventário
+   logo depois do reenquadramento; quem não tem dependentes vê primeiro o que
+   a apólice paga com ele vivo. Reescrever o JSX da proposta para cada um seria
+   manter cinco apresentações diferentes.
+
+   Com o `.proposta` em coluna flex, `roteiroApresentacao.js` só precisa dizer
+   um número por capítulo (`order`), e o JSX continua escrito na ordem em que
+   se lê melhor. Elementos `fixed` (a barra de ações, as bolinhas) saem do
+   fluxo e não viram itens flex — a barra continua exatamente onde estava.
+
+   Vale também na impressão: o PDF sai na ordem que o cliente viu na reunião.
+   ============================================================================ */
+.proposta {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================================================================
    MODO APRESENTAÇÃO — o iPad na mão, compartilhando a tela na reunião.
 
    A classe entra no <html> enquanto a apresentação está ligada, e faz três
