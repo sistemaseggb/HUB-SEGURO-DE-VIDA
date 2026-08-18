@@ -30,6 +30,7 @@ import { responderObjecoes } from '../src/lib/objecoes.js'
 import {
   ORDEM_BASE, PUBLICOS, montarRoteiro, ordemPara, protecaoEmVida, publicoPorId,
 } from '../src/lib/roteiroApresentacao.js'
+import { readFileSync } from 'node:fs'
 
 const falhas = []
 const ok = (cond, msg, extra) => {
@@ -675,6 +676,158 @@ console.log('\n── O capítulo que responde ao "só serve depois que eu morro
     'e o capítulo não promete o que o banco não consegue gravar')
   ok(protecaoEmVida(antigo).itens.length > 0,
     'o capítulo da proteção em vida continua de pé sem ela')
+}
+
+// ── 18. O DECK E O ROTEIRO NÃO PODEM DIVERGIR ───────────────────────────────
+// Este é o teste que protege quem mexer nisto depois de nós.
+//
+// Um capítulo novo no JSX sem entrada no roteiro não quebra nada e não avisa
+// nada: ele simplesmente vai parar DEPOIS do fechamento (a posição de quem não
+// é conhecido é 900), sem título no índice, sem momento e sem nota — e isso só
+// aparece na frente do cliente. O contrário também: uma entrada no roteiro
+// para um capítulo que não existe mais deixa um buraco na ordem.
+//
+// Por isso a conferência é feita contra o ARQUIVO da proposta, e não contra uma
+// lista escrita à mão aqui — lista à mão envelhece junto com o defeito.
+console.log('\n── O deck da proposta e o roteiro, conferidos um contra o outro ──')
+{
+  const fonte = readFileSync(new URL('../src/pages/Proposta.jsx', import.meta.url), 'utf8')
+  const naTela = [...fonte.matchAll(/<Slide\s+nome="([^"]+)"/g)].map((m) => m[1])
+  const titulos = (() => {
+    const bloco = fonte.match(/const TITULO_SLIDE = \{([\s\S]*?)\n\}/)?.[1] ?? ''
+    return new Set([...bloco.matchAll(/(?:^|[\s,{])'?([a-z-]+)'?\s*:/g)].map((m) => m[1]))
+  })()
+
+  ok(naTela.length >= 20, 'o arquivo da proposta foi lido e tem capítulos', naTela.length)
+  ok(new Set(naTela).size === naTela.length, 'nenhum capítulo aparece duas vezes no JSX')
+
+  const r = roteiroDe(PROVEDOR)
+  const semOrdem = naTela.filter((s) => r.ordemDe(s) >= 900)
+  ok(semOrdem.length === 0,
+    'TODO capítulo da tela tem posição no roteiro (senão ele cai depois do fechamento)',
+    semOrdem.join(', '))
+  const semMomento = naTela.filter((s) => !r.momentoDe(s))
+  ok(semMomento.length === 0, 'e todo capítulo pertence a um momento da reunião', semMomento.join(', '))
+  const semNota = naTela.filter((s) => !r.falaDe(s))
+  ok(semNota.length === 0, 'e todo capítulo tem a nota da consultora', semNota.join(', '))
+  const semTitulo = naTela.filter((s) => !titulos.has(s))
+  ok(semTitulo.length === 0, 'e todo capítulo tem nome curto para o índice', semTitulo.join(', '))
+
+  // E o contrário: nada de posição reservada para capítulo que não existe.
+  const fantasmas = ORDEM_BASE.filter((s) => !naTela.includes(s))
+  ok(fantasmas.length === 0, 'o roteiro não guarda lugar para capítulo que não existe mais',
+    fantasmas.join(', '))
+  ok(ORDEM_BASE.length === naTela.length,
+    'a ordem base tem exatamente os capítulos do deck', `${ORDEM_BASE.length} × ${naTela.length}`)
+}
+
+// ── 19. DEZ MIL CLIENTES AO ACASO PASSANDO PELO ROTEIRO ─────────────────────
+// O roteiro decide o que a consultora vai LER EM VOZ ALTA na frente de alguém.
+// Um campo vazio no meio de uma frase ("faltam R$ NaN de liquidez") não derruba
+// a tela e não aparece em teste de exemplo — aparece na reunião.
+//
+// Aqui o estudo é montado com lixo de propósito: números negativos, texto onde
+// devia ter valor, listas nulas, planos sem nada. Para cada um, o roteiro
+// inteiro é gerado e conferido contra as regras que ele promete cumprir.
+console.log('\n── Dez mil roteiros ao acaso: nada sai pela metade ──')
+{
+  let semente = 20260818
+  const rnd = () => { semente = (semente * 1103515245 + 12345) % 2147483648; return semente / 2147483648 }
+  const escolher = (l) => l[Math.floor(rnd() * l.length)]
+  const VALORES = ['', null, 0, -1, 'abc', 1, 1200, 48_000, 3_800_000, 1e13, NaN, Infinity]
+  const v = () => escolher(VALORES)
+
+  const NUNCA_SAEM = ['capa', 'diagnostico', 'numero', 'plano', 'passos', 'fechamento']
+  let quebrou = null
+  let comPerfil = 0
+
+  for (let i = 0; i < 10_000 && !quebrou; i++) {
+    const plano = {
+      renda_mensal: v(), custo_vida_mensal: v(), dividas_total: v(), patrimonio_total: v(),
+      patrimonio_imoveis: v(), patrimonio_investimentos: v(), patrimonio_empresa: v(),
+      previdencia_saldo: v(), previdencia_aporte_mensal: v(),
+      previdencia_tipo: escolher(['VGBL', 'PGBL', 'Ambos', '', null]),
+      estado_civil: escolher(['Casado(a)', 'Solteiro(a)', 'União estável', '', null]),
+      regime_bens: escolher(['Comunhão parcial', 'Separação total', '', null]),
+      dependentes: escolher([[], null, [{ nome: 'A', idade: 3, custo_mensal: 900 }],
+        [{ nome: '', idade: 'x', custo_mensal: -5 }]]),
+      num_dependentes: escolher(['', 0, 2, -1]),
+      anos_protecao: escolher(['', 0, 10, 200]),
+      focos: escolher([[], null, ['renda'], ['sucessao', 'blindagem'], ['empresarial'],
+        ['aposentadoria'], ['educacao', 'dividas'], 'x']),
+      tipo_planejamento: escolher(['pf', 'pj', 'pf_pj', '', null]),
+      capital_invalidez: v(), capital_doencas_graves: v(), capital_cirurgias: v(),
+      dit_diaria: v(), dih_diaria: v(), capital_fraturas: v(), verba_sucessoria: v(),
+      cobertura_atual: v(), premio_estimado: v(), premio_anual: v(),
+      pj_valuation: v(), pj_participacao_pct: v(), pj_num_socios: v(),
+      pj_faturamento_anual: v(), pj_lucro_anual: v(), pj_divida_avalizada: v(),
+      idade_aposentadoria: escolher(['', 60, 65, 30]),
+      renda_desejada_aposentadoria: v(),
+      objetivos: escolher(['', null, 'Garantir a faculdade', 'x'.repeat(400)]),
+      uf: escolher(['SP', 'RJ', '', null, 'zz']),
+    }
+    const cliente = escolher([{}, { nome: '' }, { nome: 'Ana Paula Souza', profissao: 'Médica' },
+      { nome: 'Zé', idade: 71 }])
+    try {
+      const e = calcularEstudo(plano, { idade: escolher([null, 28, 42, 61, 79]) })
+      const d = diagnosticar(e, { cliente })
+      const r = montarRoteiro(e, {
+        diagnostico: d, cliente, objetivos: plano.objetivos,
+        objecoes: responderObjecoes(e, { diagnostico: d, cliente }),
+      })
+      if (!r) { quebrou = `caso ${i}: roteiro nulo com estudo válido`; break }
+      if (d?.perfil) comPerfil++
+
+      // a ordem continua sendo o deck inteiro, sem perder nem repetir
+      const unicos = new Set(r.ordem)
+      if (r.ordem.length !== ORDEM_BASE.length || unicos.size !== ORDEM_BASE.length) {
+        quebrou = `caso ${i}: ordem com ${r.ordem.length} capítulos (${unicos.size} únicos)`; break
+      }
+      if (r.ordemDe('capa') !== 1 || r.ordemDe('fechamento') !== ORDEM_BASE.length) {
+        quebrou = `caso ${i}: capa/fechamento fora das pontas`; break
+      }
+      // capítulo que sustenta a reunião nunca sai do caminho
+      const proibido = NUNCA_SAEM.find((s) => r.estaFora(s))
+      if (proibido) { quebrou = `caso ${i}: tirou o capítulo "${proibido}" da reunião`; break }
+      // todo motivo de exclusão é explicável em voz alta
+      for (const [slide, motivo] of r.fora) {
+        if (typeof motivo !== 'string' || motivo.length < 20) {
+          quebrou = `caso ${i}: "${slide}" saiu sem motivo escrito`; break
+        }
+      }
+      if (quebrou) break
+      // três cartões, sempre, sem repetição
+      if (r.cartoes.length !== 3 || new Set(r.cartoes).size !== 3) {
+        quebrou = `caso ${i}: cartões = ${r.cartoes.join(',')}`; break
+      }
+      // e as falas: nenhuma frase pela metade
+      for (const slide of ORDEM_BASE) {
+        const f = r.falaDe(slide)
+        if (!f) { quebrou = `caso ${i}: "${slide}" sem fala`; break }
+        if (!f.objetivo || !f.pergunte || f.diga.length === 0) {
+          quebrou = `caso ${i}: "${slide}" com nota incompleta`; break
+        }
+        const ruim = f.diga.concat(f.pergunte, f.cuidado ?? '')
+          .find((t) => /undefined|null|NaN|R\$\s*$|\[object/.test(t))
+        if (ruim) { quebrou = `caso ${i}: "${slide}" → ${ruim.slice(0, 90)}`; break }
+        const t = r.textoDe(slide)
+        if (t == null || typeof t !== 'object') { quebrou = `caso ${i}: texto de "${slide}"`; break }
+        if (Object.values(t).some((x) => typeof x === 'string' && /undefined|NaN/.test(x))) {
+          quebrou = `caso ${i}: texto de "${slide}" com buraco`; break
+        }
+      }
+      if (quebrou) break
+      // a proteção em vida nunca promete mais do que soma
+      const ev = protecaoEmVida(e)
+      if (ev && !(ev.maior <= ev.total + 1e-6 && ev.itens.length > 0)) {
+        quebrou = `caso ${i}: proteção em vida incoerente`; break
+      }
+    } catch (err) {
+      quebrou = `caso ${i}: ${err.message}`
+    }
+  }
+  ok(!quebrou, 'nenhum dos 10.000 roteiros quebra, some ou sai com frase pela metade', quebrou)
+  ok(comPerfil > 5000, 'e a maioria deles chega a ter um público classificado', `${comPerfil} de 10.000`)
 }
 
 console.log('\n── RESULTADO (apresentação) ──')

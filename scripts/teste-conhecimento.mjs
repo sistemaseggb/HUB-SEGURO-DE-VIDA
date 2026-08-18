@@ -145,6 +145,7 @@ console.log('\n── A subscrição nunca é otimista por engano ──')
   const simples = analisarSubscricao(estudoCom({
     capital_sugerido: 300_000, capital_invalidez: 0, capital_doencas_graves: 0,
     verba_sucessoria: 0, capital_morte_acidental: 0, capital_fraturas: 0,
+    capital_cirurgias: null,
     dit_diaria: 0, dih_diaria: 0, funeral_individual: 0, funeral_familiar: 0,
   }, 32), { ...planoBase(), profissao: 'Analista' })
   ok(simples.automatico === true, 'caso simples e jovem é reconhecido como automático')

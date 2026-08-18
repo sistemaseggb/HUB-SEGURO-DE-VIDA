@@ -336,13 +336,18 @@ const FALAS = {
 
   autonomia: ({ e }) => ({
     objetivo: 'Transformar "se algo acontecer" em um número de meses que ele não esperava.',
+    // CADA NÚMERO CITADO PRECISA EXISTIR. `mesesComPlano` e `mesesVendendoTudo`
+    // voltam nulos quando o estudo não consegue afirmar o prazo (sem custo de
+    // vida não há padrão de vida a sustentar), e uma frase montada com o
+    // primeiro número presente e o segundo nulo vira "a família se sustenta 0
+    // meses, com o plano null" — dito em voz alta, na frente do cliente.
     diga: [
-      e.mesesLiquidos != null
+      e.mesesLiquidos != null && e.mesesComPlano != null
         ? `Sem vender nada, a sua família se sustenta ${e.mesesLiquidos} ${e.mesesLiquidos === 1 ? 'mês' : 'meses'}. `
           + `Com o plano, ${e.mesesComPlano} — e o patrimônio fica inteiro.`
-        : e.mesesVendendoTudo != null
+        : e.mesesVendendoTudo != null && e.mesesComPlano != null
           ? `Vendendo tudo o que você construiu, a família mantém o padrão por ${e.mesesVendendoTudo} meses `
-            + '— e termina com zero de patrimônio.'
+            + `— e termina sem patrimônio nenhum. Com o plano, são ${e.mesesComPlano} meses sem vender nada.`
           : null,
       'O plano não substitui o que você construiu: ele impede que seja consumido.',
     ],

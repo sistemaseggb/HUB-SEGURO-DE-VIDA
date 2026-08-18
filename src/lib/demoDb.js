@@ -904,7 +904,14 @@ export function criarSupabaseDemo() {
         const c = db.clientes.find((x) => x.id === p.id_cliente)
         const plano = { ...p }
         delete plano.id; delete plano.id_cliente; delete plano.token_proposta
-        return { data: { cliente_nome: c?.nome ?? '', plano }, error: null }
+        // migração 028: a idade vai junto. Sem ela a proposta do cliente perde
+        // as três formas de fazer, o custo da espera e a aposentadoria — os
+        // três capítulos dependem de idade, e a tela sempre leu este campo.
+        const nasc = c?.data_nascimento ? new Date(c.data_nascimento) : null
+        const idade = nasc
+          ? Math.floor((Date.now() - nasc.getTime()) / (365.2425 * 24 * 3600 * 1000))
+          : null
+        return { data: { cliente_nome: c?.nome ?? '', cliente_idade: idade, plano }, error: null }
       }
       if (fn === 'fn_gerar_fila_diaria') return { data: 0, error: null }
       if (fn === 'fn_vincular_evento') return { data: true, error: null }

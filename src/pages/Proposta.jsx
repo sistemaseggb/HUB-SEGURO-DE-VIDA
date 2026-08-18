@@ -208,6 +208,12 @@ export default function Proposta({ publica = false }) {
   const [perguntando, setPerguntando] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [erroSalvar, setErroSalvar] = useState(null)
+  // Capítulos fora desta reunião, guardados por NOME e nunca por índice. A
+  // lista de capítulos é montada a partir do que está na tela, e o que está na
+  // tela pode mudar no meio da apresentação — a simulação ao vivo mexe em
+  // números que fazem capítulo inteiro aparecer e sumir. Guardado por índice, o
+  // "pular a sucessão" viraria "pular o que estiver na sétima posição", que
+  // depois da mudança é outro capítulo. Por nome, ele continua sendo o dele.
   const [pulados, setPulados] = useState(() => new Set())
   const [revelando, setRevelando] = useState(true)
   // A etapa é ANCORADA ao nome do capítulo, nunca guardada solta. A rolagem
@@ -247,9 +253,16 @@ export default function Proposta({ publica = false }) {
   // Tudo o que a navegação precisa saber vive numa referência: o ouvinte de
   // teclado é montado uma vez e leria valores congelados se dependesse do
   // fechamento — a seta pararia de andar depois do primeiro slide.
+  // `proximoCapitulo` raciocina em índices (é o que a navegação enxerga), e o
+  // estado guarda nomes: a tradução acontece aqui, uma vez por render, contra a
+  // lista de capítulos que está valendo agora.
+  const puladosPorIndice = new Set(
+    capitulos.map((c, i) => (pulados.has(c.slide) ? i : -1)).filter((i) => i >= 0),
+  )
+
   const navRef = useRef({})
   navRef.current = {
-    irPara, slideAtual, etapa, etapasDoSlide, revelando, pulados, totalSlides,
+    irPara, slideAtual, etapa, etapasDoSlide, revelando, pulados: puladosPorIndice, totalSlides,
     apresentando, capitulos, slideDoIndice,
   }
 
@@ -281,13 +294,27 @@ export default function Proposta({ publica = false }) {
   // daqui também — a lista é lida do DOM porque é o DOM que sabe quais
   // capítulos este cliente ganhou, e quantas etapas cada um tem.
   useEffect(() => {
-    setCapitulos(secoesEmOrdem().map((s) => ({
+    // A LISTA ACOMPANHA A TELA, e não só o carregamento. Os capítulos entram e
+    // saem conforme os números do estudo, e as alavancas da simulação mexem
+    // nesses números AO VIVO, na frente do cliente: derrubar a renda a zero
+    // pode fazer o capítulo da proteção em vida deixar de existir. Montada uma
+    // vez só, a lista ficaria descrevendo uma proposta que não está mais na
+    // tela — o índice mostraria um capítulo que sumiu, e a bolinha de navegação
+    // levaria ao slide errado. O observador refaz a lista quando isso acontece.
+    const remontar = () => setCapitulos(secoesEmOrdem().map((s) => ({
       slide: s.dataset.slide ?? '',
       titulo: TITULO_SLIDE[s.dataset.slide] ?? s.querySelector('h2')?.textContent?.trim() ?? 'Capítulo',
       // um bloco marcado para revelar tem uma etapa por filho, menos a
       // primeira, que já entra visível junto com o título
       etapas: Math.max(0, (s.querySelector('[data-revelar]')?.children.length ?? 1) - 1),
     })))
+    remontar()
+    const alvo = document.querySelector('.proposta')
+    // só a lista de filhos diretos: o observador não pode acordar a cada traço
+    // desenhado dentro de um slide, que é o que aconteceria observando a subárvore
+    const observador = alvo ? new MutationObserver(remontar) : null
+    observador?.observe(alvo, { childList: true })
+
     function atual() {
       const y = window.scrollY + window.innerHeight / 2
       return Math.max(secoesEmOrdem().findLastIndex((s) => s.offsetTop <= y), 0)
@@ -295,7 +322,10 @@ export default function Proposta({ publica = false }) {
     function onScroll() { setSlideAtual(atual()) }
     window.addEventListener('scroll', onScroll, { passive: true })
     onScroll()
-    return () => window.removeEventListener('scroll', onScroll)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      observador?.disconnect()
+    }
   }, [dados, secoesEmOrdem])
 
 
@@ -454,9 +484,7 @@ export default function Proposta({ publica = false }) {
     // precisa ouvir saem do caminho de avançar NESTA reunião — o estudo
     // continua inteiro, o índice mostra por que cada um saiu e um toque traz
     // qualquer um de volta. O PDF e o link do cliente nunca perdem nada.
-    setPulados(new Set(
-      capitulos.map((c, i) => (roteiro?.estaFora(c.slide) ? i : -1)).filter((i) => i >= 0),
-    ))
+    setPulados(new Set([...(roteiro?.fora.keys() ?? [])]))
   }
 
   function tentarSair() {
@@ -495,10 +523,12 @@ export default function Proposta({ publica = false }) {
   }
 
   function alternarPulado(i) {
+    const nome = capitulos[i]?.slide
+    if (!nome) return
     setPulados((p) => {
       const novo = new Set(p)
-      if (novo.has(i)) novo.delete(i)
-      else novo.add(i)
+      if (novo.has(nome)) novo.delete(nome)
+      else novo.add(nome)
       return novo
     })
   }
@@ -696,8 +726,8 @@ export default function Proposta({ publica = false }) {
 
           <BarraApresentacao
             slideAtual={slideAtual} totalSlides={totalSlides} irPara={irPara} avancar={avancar}
-            nomes={capitulos.map((c, i) => ({
-              ...c, anotado: (anotacoes[c.slide] ?? []).length > 0, pulado: pulados.has(i),
+            nomes={capitulos.map((c) => ({
+              ...c, anotado: (anotacoes[c.slide] ?? []).length > 0, pulado: pulados.has(c.slide),
               foraDoRoteiro: !!roteiro?.estaFora(c.slide),
               motivoFora: roteiro?.motivoFora(c.slide) ?? null,
               momento: roteiro?.momentoDe(c.slide) ?? null,

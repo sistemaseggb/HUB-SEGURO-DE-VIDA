@@ -214,6 +214,15 @@ await passo('Proposta pública pelo link (/p/<token>, sem login)', async () => {
   await anonima.goto(`${BASE}/p/demo-proposta-carlos`)
   await anonima.waitForSelector('text=Estudo preparado por', { timeout: 6000 })
   await anonima.waitForSelector('text=/estudo de sucessão patrimonial e empresarial/i', { timeout: 3000 })
+  // O CLIENTE VÊ O ESTUDO INTEIRO. A função pública nunca devolveu a idade que
+  // a tela lê (migração 028), e sem idade sumiam três capítulos justamente os
+  // que trabalham quando a consultora não está na sala: as três formas de
+  // fazer, o custo da espera e a aposentadoria. Nada quebrava — a proposta só
+  // abria menor, e ninguém percebia.
+  await anonima.waitForSelector('text=/formas de fazer isso/i', { timeout: 3000 })
+  await anonima.waitForSelector('text=/esperar tem preço/i', { timeout: 3000 })
+  const capitulosCliente = await anonima.locator('.proposta section').count()
+  if (capitulosCliente < 20) throw new Error(`o cliente recebeu só ${capitulosCliente} capítulos`)
   await anonima.screenshot({ path: 'e2e-shots/16-proposta-publica.png' })
   await anonima.context().close()
 })

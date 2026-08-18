@@ -502,6 +502,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 25. [`supabase/migrations/025_subscricao_e_beneficiarios.sql`](supabase/migrations/025_subscricao_e_beneficiarios.sql)
 26. [`supabase/migrations/026_assessor_na_apolice.sql`](supabase/migrations/026_assessor_na_apolice.sql)
 27. [`supabase/migrations/027_cirurgias.sql`](supabase/migrations/027_cirurgias.sql)
+28. [`supabase/migrations/028_proposta_publica_idade.sql`](supabase/migrations/028_proposta_publica_idade.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
