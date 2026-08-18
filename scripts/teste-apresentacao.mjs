@@ -24,6 +24,13 @@ import {
   pressaoDe, proximoCapitulo, refazerHist, registrar, sanitizarAnotacoes,
   simplificar, simulacaoAtiva, slidesAnotados, tracoAlcancado,
 } from '../src/lib/apresentacao.js'
+import { calcularEstudo, COBERTURAS_EM_VIDA } from '../src/lib/estudo.js'
+import { diagnosticar } from '../src/lib/diagnostico.js'
+import { responderObjecoes } from '../src/lib/objecoes.js'
+import {
+  ORDEM_BASE, PUBLICOS, montarRoteiro, ordemPara, protecaoEmVida, publicoPorId,
+} from '../src/lib/roteiroApresentacao.js'
+import { readFileSync } from 'node:fs'
 
 const falhas = []
 const ok = (cond, msg, extra) => {
@@ -432,6 +439,395 @@ console.log('\n── Dez mil traços aleatórios, incluindo os malucos ──')
     } catch (err) { quebrou = `${n} pontos → ${err.message}` }
   }
   ok(!quebrou, 'nenhum traço aleatório quebra a montagem, o JSON ou a borracha', quebrou)
+}
+
+// ── 15. O ROTEIRO POR PÚBLICO ───────────────────────────────────────────────
+// A apresentação passou a se adaptar a quem está do outro lado da mesa. O que
+// estes casos defendem é justamente o que ninguém percebe se quebrar — a
+// apresentação continua "funcionando", só que genérica de novo:
+//
+//   · o cliente de sucessão vê o inventário ANTES da autonomia da família;
+//   · quem não tem dependentes NÃO ouve falar do padrão de vida da família;
+//   · a ordem nunca perde nem duplica capítulo, em nenhum público;
+//   · nenhuma fala é gerada sem o número que a sustenta.
+//
+// Os planos abaixo são escritos à mão, com o resultado esperado conferido a
+// olho — teste que copia o retorno da implementação não prova nada.
+console.log('\n── Para quem esta apresentação está sendo montada ──')
+
+// Base comum: as chaves das migrações precisam existir, é por elas que o
+// estudo sabe quais coberturas pode oferecer.
+const PLANO_BASE = {
+  capital_invalidez: null, capital_doencas_graves: null, dit_diaria: null,
+  verba_sucessoria: null, cobertura_atual: 0, capital_cirurgias: null,
+  tipo_planejamento: 'pf', focos: [], dih_diaria: null, capital_fraturas: null,
+  funeral_individual: null, funeral_familiar: null, capital_morte_acidental: null,
+  anos_protecao: 10, custas_pct: 8,
+}
+
+const estudoDe = (extra) => calcularEstudo({ ...PLANO_BASE, ...extra }, { idade: 42 })
+const roteiroDe = (extra, cliente = { nome: 'Ana Paula Souza' }) => {
+  const e = estudoDe(extra)
+  const d = diagnosticar(e, { cliente })
+  return montarRoteiro(e, {
+    diagnostico: d, cliente, objecoes: responderObjecoes(e, { diagnostico: d, cliente }),
+    objetivos: extra.objetivos ?? null,
+  })
+}
+
+// O provedor: renda, casa, dois filhos pequenos.
+const PROVEDOR = {
+  renda_mensal: 18_000, custo_vida_mensal: 12_000, estado_civil: 'Casado(a)',
+  dependentes: [{ nome: 'Bento', idade: 4, custo_mensal: 1800 }],
+  focos: ['renda', 'educacao'], premio_estimado: 600,
+}
+// O patrimonial: patrimônio grande, ilíquido, e o inventário como assunto.
+const PATRIMONIAL = {
+  renda_mensal: 30_000, custo_vida_mensal: 18_000, estado_civil: 'Casado(a)',
+  regime_bens: 'Separação total', uf: 'RJ',
+  patrimonio_imoveis: 6_000_000, patrimonio_investimentos: 900_000,
+  focos: ['sucessao', 'blindagem'], premio_estimado: 2_400,
+}
+// Sem dependentes: mora sozinho, sem filhos, sem cônjuge.
+const SOZINHO = {
+  renda_mensal: 14_000, custo_vida_mensal: 7_000, estado_civil: 'Solteiro(a)',
+  dividas_total: 90_000, focos: [], premio_estimado: 320,
+}
+
+{
+  const provedor = roteiroDe(PROVEDOR)
+  const patrimonial = roteiroDe(PATRIMONIAL)
+  const sozinho = roteiroDe(SOZINHO)
+
+  ok(provedor.publico.id === 'provedor', 'pai de família com filho pequeno → público provedor',
+    provedor.publico.id)
+  ok(patrimonial.publico.id === 'patrimonial', 'patrimônio grande e foco em sucessão → público patrimonial',
+    patrimonial.publico.id)
+  ok(sozinho.publico.id === 'individual', 'sem cônjuge e sem filhos → público sem dependentes',
+    sozinho.publico.id)
+
+  // ── A ordem muda de verdade ───────────────────────────────────────────────
+  const antes = (r, a, b) => r.ordemDe(a) < r.ordemDe(b)
+  ok(antes(patrimonial, 'sucessao', 'autonomia'),
+    'PARA QUEM VEIO POR SUCESSÃO, O INVENTÁRIO VEM ANTES DA AUTONOMIA DA FAMÍLIA')
+  ok(antes(patrimonial, 'patrimonio', 'numero'),
+    'e o raio-X do patrimônio vem antes do número')
+  ok(antes(provedor, 'autonomia', 'sucessao'),
+    'para o provedor, a autonomia da família continua abrindo a consciência')
+  ok(antes(sozinho, 'em-vida', 'numero'),
+    'para quem mora sozinho, o que paga EM VIDA vem antes do capital de morte')
+
+  // O arco consultivo não muda com o público: preço depois do valor, sempre.
+  for (const r of [provedor, patrimonial, sozinho]) {
+    const nome = r.publico.id
+    ok(r.ordemDe('capa') === 1, `${nome}: a capa continua sendo o primeiro capítulo`)
+    ok(r.ordemDe('fechamento') === ORDEM_BASE.length, `${nome}: e o fechamento, o último`)
+    ok(antes(r, 'plano', 'investimento'), `${nome}: o preço vem depois do plano completo`)
+    ok(antes(r, 'diagnostico', 'numero'), `${nome}: o retrato vem antes da solução`)
+    ok(antes(r, 'investimento', 'passos'), `${nome}: os próximos passos fecham a reunião`)
+  }
+
+  // ── Nada se perde e nada se duplica ───────────────────────────────────────
+  for (const p of [...PUBLICOS, publicoPorId('inexistente')]) {
+    const ordem = ordemPara(p)
+    const unicos = new Set(ordem)
+    ok(ordem.length === ORDEM_BASE.length && unicos.size === ORDEM_BASE.length,
+      `${p.id}: a ordem tem todos os capítulos, sem repetir nenhum`, ordem.length)
+    ok(ORDEM_BASE.every((s) => unicos.has(s)),
+      `${p.id}: nenhum capítulo do deck desaparece da ordem`)
+  }
+
+  // ── O que sai da reunião ──────────────────────────────────────────────────
+  ok(sozinho.estaFora('autonomia'),
+    'SEM DEPENDENTES, O CAPÍTULO DO PADRÃO DE VIDA DA FAMÍLIA SAI DO CAMINHO')
+  ok((sozinho.motivoFora('autonomia') ?? '').length > 20,
+    'e sai com o motivo escrito, para ela decidir trazer de volta',
+    sozinho.motivoFora('autonomia'))
+  ok(!provedor.estaFora('autonomia'), 'para quem tem família, ele continua no roteiro')
+  ok(!sozinho.estaFora('capa') && !sozinho.estaFora('fechamento') && !sozinho.estaFora('plano'),
+    'a capa, o plano e o fechamento nunca saem, para nenhum público')
+
+  // Quem não investe nada não recebe três capítulos debatendo investimento —
+  // era a apresentação criando a objeção em vez de responder a ela.
+  ok(provedor.estaFora('cruzamento') && provedor.estaFora('dimensoes'),
+    'cliente que não investe não ganha o debate "investir ou proteger"')
+  const investidor = roteiroDe({ ...PROVEDOR, previdencia_aporte_mensal: 1_500, previdencia_saldo: 90_000 })
+  ok(!investidor.estaFora('cruzamento'),
+    'e quem aporta em previdência ganha o capítulo de volta, sem ela precisar pedir')
+
+  // ── Os cartões do reenquadramento ─────────────────────────────────────────
+  ok(patrimonial.cartoes.includes('sucessao'),
+    'o reenquadramento do cliente de sucessão fala de sucessão', patrimonial.cartoes.join(', '))
+  ok(!sozinho.cartoes.includes('educacao'),
+    'e o de quem não tem filhos não fala da educação deles', sozinho.cartoes.join(', '))
+  for (const r of [provedor, patrimonial, sozinho]) {
+    ok(r.cartoes.length === 3 && new Set(r.cartoes).size === 3,
+      `${r.publico.id}: são três cartões, sem repetição`, r.cartoes.join(', '))
+  }
+
+  // ── Os textos da tela mudam com o público ─────────────────────────────────
+  ok(/vida|renda e|saúde/i.test(patrimonial.textoDe('capa').etiqueta ?? '') === false
+    && /sucess/i.test(patrimonial.textoDe('capa').etiqueta ?? ''),
+    'a capa do cliente de sucessão anuncia um estudo de sucessão',
+    patrimonial.textoDe('capa').etiqueta)
+  ok(patrimonial.textoDe('reenquadramento').destaque !== provedor.textoDe('reenquadramento').destaque,
+    'o reenquadramento não abre com a mesma frase para os dois')
+  ok(/liquidez/i.test(patrimonial.textoDe('numero').etiqueta ?? ''),
+    'para ele, o número recomendado é de LIQUIDEZ, não de reposição de renda',
+    patrimonial.textoDe('numero').etiqueta)
+  ok((sozinho.textoDe('numero').legenda ?? '').includes('dívida')
+    || (sozinho.textoDe('numero').legenda ?? '').includes('conta aberta'),
+    'e para quem não tem dependentes o número é explicado pelas contas que ficam',
+    sozinho.textoDe('numero').legenda)
+}
+
+// ── 16. O QUE FALAR EM CADA MOMENTO ─────────────────────────────────────────
+console.log('\n── A fala de cada capítulo, com os números deste cliente ──')
+{
+  const r = roteiroDe({ ...PROVEDOR, objetivos: 'Garantir a faculdade do Bento' })
+
+  // Todo capítulo do deck tem fala: um slide sem nota é justamente onde a
+  // consultora fica sozinha na frente do cliente.
+  const semFala = ORDEM_BASE.filter((s) => !r.falaDe(s))
+  ok(semFala.length === 0, 'TODOS OS CAPÍTULOS TÊM O QUE DIZER', semFala.join(', '))
+
+  for (const slide of ORDEM_BASE) {
+    const f = r.falaDe(slide)
+    if (!f) continue
+    if (!(f.objetivo && f.objetivo.length > 15)) { ok(false, `${slide}: objetivo em uma linha`); break }
+    if (!(f.diga.length > 0)) { ok(false, `${slide}: pelo menos uma frase para dizer`); break }
+    if (f.diga.some((x) => /undefined|NaN|R\$ NaN/.test(x))) {
+      ok(false, `${slide}: fala com buraco no meio`, f.diga.join(' | ')); break
+    }
+    if (!f.pergunte) { ok(false, `${slide}: a pergunta que devolve a palavra ao cliente`); break }
+    if (!f.momento) { ok(false, `${slide}: o momento da reunião a que ele pertence`); break }
+  }
+  ok(ORDEM_BASE.every((s) => {
+    const f = r.falaDe(s)
+    return f && f.objetivo && f.diga.length > 0 && f.pergunte && f.momento
+      && !f.diga.some((x) => /undefined|NaN/.test(x))
+  }), 'e nenhuma delas sai com objetivo, pergunta, momento ou número faltando')
+
+  // A citação do cliente é dele, não inventada.
+  ok(r.falaDe('fechamento').diga.some((x) => x.includes('faculdade do Bento')),
+    'o fechamento cita a frase que o cliente disse na reunião')
+  const semObjetivo = roteiroDe(PROVEDOR)
+  ok(!semObjetivo.falaDe('fechamento').diga.some((x) => x.includes('"')),
+    'e quando ele não disse nada, nada é citado')
+
+  // A objeção chega no capítulo em que ela nasce, não no fim da reunião.
+  ok(r.falaDe('investimento').objecao?.id === 'preco',
+    'no capítulo do preço, a resposta pronta é a do "está caro"',
+    r.falaDe('investimento').objecao?.id)
+  // A do "já tenho seguro" só existe quando ele DE FATO tem alguma apólice —
+  // a resposta se monta com a carteira dele, e sem carteira não há resposta.
+  const comApolice = roteiroDe({
+    ...PROVEDOR,
+    cobertura_atual: 400_000,
+    seguros_existentes: [{ origem: 'empresa', descricao: 'Vida em grupo', capital: 400_000, custeio: 'empresa' }],
+  })
+  ok(comApolice.falaDe('gap').objecao?.id === 'ja_tem',
+    'no capítulo do que falta, a do "já tenho seguro"', comApolice.falaDe('gap').objecao?.id)
+  ok(r.falaDe('gap').objecao === null,
+    'e quem não tem apólice nenhuma não recebe resposta para uma objeção que não existe')
+  ok((r.falaDe('investimento').objecao?.argumentos?.length ?? 0) > 0,
+    'e ela vem com os argumentos já calculados para este cliente')
+
+  // Um estudo vazio não pode derrubar a apresentação no meio da reunião.
+  const vazio = montarRoteiro(calcularEstudo({}), { cliente: {} })
+  ok(vazio && vazio.publico.id === 'geral',
+    'estudo sem dados cai no público neutro em vez de quebrar', vazio?.publico?.id)
+  ok(vazio.fora.size === 0, 'e sem perfil nenhum capítulo é tirado da reunião')
+  ok(montarRoteiro(null) === null, 'sem estudo, sem roteiro')
+}
+
+// ── 17. A PROTEÇÃO EM VIDA (e a cobertura de cirurgias) ─────────────────────
+console.log('\n── O capítulo que responde ao "só serve depois que eu morro" ──')
+{
+  const e = estudoDe(PROVEDOR)
+
+  ok(e.valores.cirurgias > 0, 'o estudo passou a sugerir capital de cirurgias', e.valores.cirurgias)
+  ok(e.valores.cirurgias === Math.min(18_000 * 3, 50_000),
+    'três vezes a renda, respeitando o teto de mercado da tabela cirúrgica', e.valores.cirurgias)
+  ok(e.ativas.some((c) => c.id === 'cirurgias' && c.grupo === 'vida'),
+    'e ela entra no quadro da apólice, no grupo do que paga em vida')
+
+  const emVida = protecaoEmVida(e)
+  ok(emVida.itens.some((i) => i.id === 'cirurgias'), 'o capítulo da proteção em vida traz cirurgias',
+    emVida.itens.map((i) => i.id).join(', '))
+  ok(emVida.itens.every((i) => COBERTURAS_EM_VIDA.includes(i.id)),
+    'e só traz cobertura que paga com o cliente aqui')
+  ok(!emVida.itens.some((i) => ['morte', 'sucessao', 'funeral_individual'].includes(i.id)),
+    'morte, sucessão e funeral ficam de fora — por definição')
+  // A diária vale o LIMITE, não o valor de um dia: é o que a cobertura entrega
+  // de verdade quando o afastamento acontece.
+  const dit = emVida.itens.find((i) => i.id === 'dit')
+  ok(!dit || dit.totalEmDinheiro === dit.valor * dit.dias,
+    'a diária entra pelo total que ela pode pagar, não pelo valor de um dia')
+  ok(emVida.maior <= emVida.total, 'a maior indenização única nunca passa da soma')
+
+  // Sem a migração aplicada, a cobertura simplesmente não existe — e nada
+  // quebra: é o mesmo contrato das migrações 014 e 019.
+  const semColuna = { ...PROVEDOR, ...PLANO_BASE }
+  delete semColuna.capital_cirurgias
+  const antigo = calcularEstudo(semColuna, { idade: 42 })
+  ok(antigo.tem027 === false, 'banco sem a migração 027 não oferece cirurgias', antigo.tem027)
+  ok(!antigo.ativas.some((c) => c.id === 'cirurgias'),
+    'e o capítulo não promete o que o banco não consegue gravar')
+  ok(protecaoEmVida(antigo).itens.length > 0,
+    'o capítulo da proteção em vida continua de pé sem ela')
+}
+
+// ── 18. O DECK E O ROTEIRO NÃO PODEM DIVERGIR ───────────────────────────────
+// Este é o teste que protege quem mexer nisto depois de nós.
+//
+// Um capítulo novo no JSX sem entrada no roteiro não quebra nada e não avisa
+// nada: ele simplesmente vai parar DEPOIS do fechamento (a posição de quem não
+// é conhecido é 900), sem título no índice, sem momento e sem nota — e isso só
+// aparece na frente do cliente. O contrário também: uma entrada no roteiro
+// para um capítulo que não existe mais deixa um buraco na ordem.
+//
+// Por isso a conferência é feita contra o ARQUIVO da proposta, e não contra uma
+// lista escrita à mão aqui — lista à mão envelhece junto com o defeito.
+console.log('\n── O deck da proposta e o roteiro, conferidos um contra o outro ──')
+{
+  const fonte = readFileSync(new URL('../src/pages/Proposta.jsx', import.meta.url), 'utf8')
+  const naTela = [...fonte.matchAll(/<Slide\s+nome="([^"]+)"/g)].map((m) => m[1])
+  const titulos = (() => {
+    const bloco = fonte.match(/const TITULO_SLIDE = \{([\s\S]*?)\n\}/)?.[1] ?? ''
+    return new Set([...bloco.matchAll(/(?:^|[\s,{])'?([a-z-]+)'?\s*:/g)].map((m) => m[1]))
+  })()
+
+  ok(naTela.length >= 20, 'o arquivo da proposta foi lido e tem capítulos', naTela.length)
+  ok(new Set(naTela).size === naTela.length, 'nenhum capítulo aparece duas vezes no JSX')
+
+  const r = roteiroDe(PROVEDOR)
+  const semOrdem = naTela.filter((s) => r.ordemDe(s) >= 900)
+  ok(semOrdem.length === 0,
+    'TODO capítulo da tela tem posição no roteiro (senão ele cai depois do fechamento)',
+    semOrdem.join(', '))
+  const semMomento = naTela.filter((s) => !r.momentoDe(s))
+  ok(semMomento.length === 0, 'e todo capítulo pertence a um momento da reunião', semMomento.join(', '))
+  const semNota = naTela.filter((s) => !r.falaDe(s))
+  ok(semNota.length === 0, 'e todo capítulo tem a nota da consultora', semNota.join(', '))
+  const semTitulo = naTela.filter((s) => !titulos.has(s))
+  ok(semTitulo.length === 0, 'e todo capítulo tem nome curto para o índice', semTitulo.join(', '))
+
+  // E o contrário: nada de posição reservada para capítulo que não existe.
+  const fantasmas = ORDEM_BASE.filter((s) => !naTela.includes(s))
+  ok(fantasmas.length === 0, 'o roteiro não guarda lugar para capítulo que não existe mais',
+    fantasmas.join(', '))
+  ok(ORDEM_BASE.length === naTela.length,
+    'a ordem base tem exatamente os capítulos do deck', `${ORDEM_BASE.length} × ${naTela.length}`)
+}
+
+// ── 19. DEZ MIL CLIENTES AO ACASO PASSANDO PELO ROTEIRO ─────────────────────
+// O roteiro decide o que a consultora vai LER EM VOZ ALTA na frente de alguém.
+// Um campo vazio no meio de uma frase ("faltam R$ NaN de liquidez") não derruba
+// a tela e não aparece em teste de exemplo — aparece na reunião.
+//
+// Aqui o estudo é montado com lixo de propósito: números negativos, texto onde
+// devia ter valor, listas nulas, planos sem nada. Para cada um, o roteiro
+// inteiro é gerado e conferido contra as regras que ele promete cumprir.
+console.log('\n── Dez mil roteiros ao acaso: nada sai pela metade ──')
+{
+  let semente = 20260818
+  const rnd = () => { semente = (semente * 1103515245 + 12345) % 2147483648; return semente / 2147483648 }
+  const escolher = (l) => l[Math.floor(rnd() * l.length)]
+  const VALORES = ['', null, 0, -1, 'abc', 1, 1200, 48_000, 3_800_000, 1e13, NaN, Infinity]
+  const v = () => escolher(VALORES)
+
+  const NUNCA_SAEM = ['capa', 'diagnostico', 'numero', 'plano', 'passos', 'fechamento']
+  let quebrou = null
+  let comPerfil = 0
+
+  for (let i = 0; i < 10_000 && !quebrou; i++) {
+    const plano = {
+      renda_mensal: v(), custo_vida_mensal: v(), dividas_total: v(), patrimonio_total: v(),
+      patrimonio_imoveis: v(), patrimonio_investimentos: v(), patrimonio_empresa: v(),
+      previdencia_saldo: v(), previdencia_aporte_mensal: v(),
+      previdencia_tipo: escolher(['VGBL', 'PGBL', 'Ambos', '', null]),
+      estado_civil: escolher(['Casado(a)', 'Solteiro(a)', 'União estável', '', null]),
+      regime_bens: escolher(['Comunhão parcial', 'Separação total', '', null]),
+      dependentes: escolher([[], null, [{ nome: 'A', idade: 3, custo_mensal: 900 }],
+        [{ nome: '', idade: 'x', custo_mensal: -5 }]]),
+      num_dependentes: escolher(['', 0, 2, -1]),
+      anos_protecao: escolher(['', 0, 10, 200]),
+      focos: escolher([[], null, ['renda'], ['sucessao', 'blindagem'], ['empresarial'],
+        ['aposentadoria'], ['educacao', 'dividas'], 'x']),
+      tipo_planejamento: escolher(['pf', 'pj', 'pf_pj', '', null]),
+      capital_invalidez: v(), capital_doencas_graves: v(), capital_cirurgias: v(),
+      dit_diaria: v(), dih_diaria: v(), capital_fraturas: v(), verba_sucessoria: v(),
+      cobertura_atual: v(), premio_estimado: v(), premio_anual: v(),
+      pj_valuation: v(), pj_participacao_pct: v(), pj_num_socios: v(),
+      pj_faturamento_anual: v(), pj_lucro_anual: v(), pj_divida_avalizada: v(),
+      idade_aposentadoria: escolher(['', 60, 65, 30]),
+      renda_desejada_aposentadoria: v(),
+      objetivos: escolher(['', null, 'Garantir a faculdade', 'x'.repeat(400)]),
+      uf: escolher(['SP', 'RJ', '', null, 'zz']),
+    }
+    const cliente = escolher([{}, { nome: '' }, { nome: 'Ana Paula Souza', profissao: 'Médica' },
+      { nome: 'Zé', idade: 71 }])
+    try {
+      const e = calcularEstudo(plano, { idade: escolher([null, 28, 42, 61, 79]) })
+      const d = diagnosticar(e, { cliente })
+      const r = montarRoteiro(e, {
+        diagnostico: d, cliente, objetivos: plano.objetivos,
+        objecoes: responderObjecoes(e, { diagnostico: d, cliente }),
+      })
+      if (!r) { quebrou = `caso ${i}: roteiro nulo com estudo válido`; break }
+      if (d?.perfil) comPerfil++
+
+      // a ordem continua sendo o deck inteiro, sem perder nem repetir
+      const unicos = new Set(r.ordem)
+      if (r.ordem.length !== ORDEM_BASE.length || unicos.size !== ORDEM_BASE.length) {
+        quebrou = `caso ${i}: ordem com ${r.ordem.length} capítulos (${unicos.size} únicos)`; break
+      }
+      if (r.ordemDe('capa') !== 1 || r.ordemDe('fechamento') !== ORDEM_BASE.length) {
+        quebrou = `caso ${i}: capa/fechamento fora das pontas`; break
+      }
+      // capítulo que sustenta a reunião nunca sai do caminho
+      const proibido = NUNCA_SAEM.find((s) => r.estaFora(s))
+      if (proibido) { quebrou = `caso ${i}: tirou o capítulo "${proibido}" da reunião`; break }
+      // todo motivo de exclusão é explicável em voz alta
+      for (const [slide, motivo] of r.fora) {
+        if (typeof motivo !== 'string' || motivo.length < 20) {
+          quebrou = `caso ${i}: "${slide}" saiu sem motivo escrito`; break
+        }
+      }
+      if (quebrou) break
+      // três cartões, sempre, sem repetição
+      if (r.cartoes.length !== 3 || new Set(r.cartoes).size !== 3) {
+        quebrou = `caso ${i}: cartões = ${r.cartoes.join(',')}`; break
+      }
+      // e as falas: nenhuma frase pela metade
+      for (const slide of ORDEM_BASE) {
+        const f = r.falaDe(slide)
+        if (!f) { quebrou = `caso ${i}: "${slide}" sem fala`; break }
+        if (!f.objetivo || !f.pergunte || f.diga.length === 0) {
+          quebrou = `caso ${i}: "${slide}" com nota incompleta`; break
+        }
+        const ruim = f.diga.concat(f.pergunte, f.cuidado ?? '')
+          .find((t) => /undefined|null|NaN|R\$\s*$|\[object/.test(t))
+        if (ruim) { quebrou = `caso ${i}: "${slide}" → ${ruim.slice(0, 90)}`; break }
+        const t = r.textoDe(slide)
+        if (t == null || typeof t !== 'object') { quebrou = `caso ${i}: texto de "${slide}"`; break }
+        if (Object.values(t).some((x) => typeof x === 'string' && /undefined|NaN/.test(x))) {
+          quebrou = `caso ${i}: texto de "${slide}" com buraco`; break
+        }
+      }
+      if (quebrou) break
+      // a proteção em vida nunca promete mais do que soma
+      const ev = protecaoEmVida(e)
+      if (ev && !(ev.maior <= ev.total + 1e-6 && ev.itens.length > 0)) {
+        quebrou = `caso ${i}: proteção em vida incoerente`; break
+      }
+    } catch (err) {
+      quebrou = `caso ${i}: ${err.message}`
+    }
+  }
+  ok(!quebrou, 'nenhum dos 10.000 roteiros quebra, some ou sai com frase pela metade', quebrou)
+  ok(comPerfil > 5000, 'e a maioria deles chega a ter um público classificado', `${comPerfil} de 10.000`)
 }
 
 console.log('\n── RESULTADO (apresentação) ──')

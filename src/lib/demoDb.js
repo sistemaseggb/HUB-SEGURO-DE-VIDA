@@ -159,6 +159,8 @@ function semear() {
     pj_faturamento_anual: null, pj_lucro_anual: null, pj_divida_avalizada: null,
     capital_socios: null, capital_homem_chave: null, capital_aval: null,
     capital_morte_acidental: null, capital_fraturas: null,
+    // migração 027 — cirurgias: em branco, o estudo sugere 3× a renda com teto
+    capital_cirurgias: null,
     dih_diaria: 700, dih_dias: 30, dit_dias: 90, dit_franquia_dias: 15,
     funeral_individual: 15_000, funeral_familiar: 15_000,
     // anual com 5% de desconto sobre as 12 parcelas de R$ 480
@@ -210,6 +212,8 @@ function semear() {
     pj_faturamento_anual: 4_200_000, pj_lucro_anual: 900_000, pj_divida_avalizada: 350_000,
     capital_socios: null, capital_homem_chave: null, capital_aval: null,
     capital_morte_acidental: null, capital_fraturas: null,
+    // migração 027 — cirurgias entra pelo teto de mercado da tabela cirúrgica
+    capital_cirurgias: null,
     dih_diaria: 1600, dih_dias: 60, dit_dias: 180, dit_franquia_dias: 15,
     funeral_individual: 20_000, funeral_familiar: 20_000,
     // anual com 10% de desconto sobre as 12 parcelas de R$ 1.890
@@ -900,7 +904,14 @@ export function criarSupabaseDemo() {
         const c = db.clientes.find((x) => x.id === p.id_cliente)
         const plano = { ...p }
         delete plano.id; delete plano.id_cliente; delete plano.token_proposta
-        return { data: { cliente_nome: c?.nome ?? '', plano }, error: null }
+        // migração 028: a idade vai junto. Sem ela a proposta do cliente perde
+        // as três formas de fazer, o custo da espera e a aposentadoria — os
+        // três capítulos dependem de idade, e a tela sempre leu este campo.
+        const nasc = c?.data_nascimento ? new Date(c.data_nascimento) : null
+        const idade = nasc
+          ? Math.floor((Date.now() - nasc.getTime()) / (365.2425 * 24 * 3600 * 1000))
+          : null
+        return { data: { cliente_nome: c?.nome ?? '', cliente_idade: idade, plano }, error: null }
       }
       if (fn === 'fn_gerar_fila_diaria') return { data: 0, error: null }
       if (fn === 'fn_vincular_evento') return { data: true, error: null }

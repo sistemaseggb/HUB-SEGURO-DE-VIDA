@@ -5,7 +5,7 @@ import {
   Stethoscope, CalendarClock, Scale, ClipboardCheck, Search, FileSignature, Handshake,
   Hourglass, Coffee, Link2, Check, MessageCircle, ShieldCheck,
   BedDouble, Bone, Ambulance, Flower2, Building2, Briefcase, Landmark,
-  PiggyBank, Lock, Wallet, Users, Presentation, SlidersHorizontal,
+  PiggyBank, Lock, Wallet, Users, Presentation, SlidersHorizontal, Scissors,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brl, brlCompacto, whatsapp } from '../lib/format'
@@ -15,6 +15,8 @@ import {
 import { compararSeguroComInvestimento, DIMENSOES_COMPARACAO } from '../lib/comparador.js'
 import { montarNiveis, ancorarNaCotacao } from '../lib/niveis.js'
 import { diagnosticar } from '../lib/diagnostico.js'
+import { responderObjecoes } from '../lib/objecoes.js'
+import { montarRoteiro } from '../lib/roteiroApresentacao.js'
 import {
   TINTAS, agora, anotacoesIguais, aplicarSimulacao, comTracos, contarTracos,
   descreverSimulacao, desfazerHist, novoHistorico, podeDesfazer, podeRefazer,
@@ -24,7 +26,9 @@ import {
 import { entrarTelaCheia, manterAcordado, sairTelaCheia } from '../lib/telaDeApresentacao'
 import ComparadorCurvas from '../components/ComparadorCurvas'
 import QuadroDesenho from '../components/QuadroDesenho'
-import BarraApresentacao, { PainelSimulacao, PerguntaDesenhos } from '../components/BarraApresentacao'
+import BarraApresentacao, {
+  PainelSimulacao, PainelRoteiro, PerguntaDesenhos,
+} from '../components/BarraApresentacao'
 import { Spinner, Button } from '../components/ui'
 import LinhaProtecao from '../components/LinhaProtecao'
 import MapaPatrimonio from '../components/MapaPatrimonio'
@@ -90,6 +94,17 @@ function Revelar({ como: Elemento = 'div', className = '', children, ...resto })
   )
 }
 
+// A POSIÇÃO DE CADA CAPÍTULO VEM DO ROTEIRO, NÃO DO ARQUIVO.
+//
+// Quem veio tratar do inventário da holding não deve ver o capítulo da
+// autonomia da família antes do capítulo da sucessão — e reescrever este
+// arquivo inteiro para cada público seria produzir cinco apresentações
+// diferentes para manter.
+//
+// A saída é o `order` do flexbox: o JSX continua na ordem em que se lê melhor,
+// e `roteiroApresentacao.js` decide em que ordem os capítulos APARECEM. O
+// índice, as bolinhas e o avanço leem a ordem visual (por `offsetTop`), então
+// tudo continua concordando entre si.
 function Slide({ nome, className = '', children }) {
   const q = useContext(ContextoQuadro)
   const tracos = q?.anotacoes?.[nome]
@@ -97,7 +112,8 @@ function Slide({ nome, className = '', children }) {
   // ponteiro: é assim que o cliente vê, no link, o que foi rabiscado para ele.
   const ativo = !!q?.apresentando && q.slideAtivo === nome && q.ferramenta.tipo !== 'apontar'
   return (
-    <section data-slide={nome} className={`relative ${className}`}>
+    <section data-slide={nome} className={`relative ${className}`}
+      style={{ order: q?.ordemDe?.(nome) ?? 900 }}>
       <ContextoSlide.Provider value={nome}>{children}</ContextoSlide.Provider>
       {(ativo || (tracos && tracos.length > 0)) && (
         <QuadroDesenho
@@ -110,29 +126,33 @@ function Slide({ nome, className = '', children }) {
 
 // Gerador de proposta: transforma o estudo numa apresentação de tela cheia
 // para a reunião (ou PDF pela impressão — cada slide vira uma página A4
-// paisagem, com cores preservadas). O roteiro segue a ordem de uma reunião
-// consultiva: primeiro o cliente se enxerga, depois entende o risco, e só
-// então vê o preço.
+// paisagem, com cores preservadas).
 //
-//   capa → diagnóstico → reenquadramento → autonomia → o número →
-//   futuro dos filhos → raio-X do patrimônio → sucessão → linha do tempo do
-//   inventário → empresa (PJ) → aposentadoria → gap de cobertura → o plano
-//   completo → investimento → as três formas de fazer → investir ou proteger →
-//   o custo da espera → passos → fechamento
-//
-// Capítulos entram e saem conforme o perfil: o de empresa só com PJ, o de
+// ── O QUE ENTRA (e é o motor que decide) ─────────────────────────────────────
+// Capítulos entram e saem conforme os DADOS: o de empresa só com PJ, o de
 // aposentadoria só para quem marcou esse foco, o do custo da espera só com a
-// data de nascimento no cadastro, e o das três formas só com prêmio cotado —
-// os valores dos outros níveis são proporcionais à cotação real, e sem ela
-// seriam estimativa impressa ao lado do nome do cliente. E os três cartões do reenquadramento são
-// escolhidos pelos FOCOS do cliente — quem veio por sucessão não ouve primeiro
-// sobre a educação dos filhos.
+// data de nascimento no cadastro, o da proteção em vida só quando há cobertura
+// que paga com o cliente aqui, e o das três formas só com prêmio cotado — os
+// valores dos outros níveis são proporcionais à cotação real, e sem ela seriam
+// estimativa impressa ao lado do nome do cliente.
+//
+// ── EM QUE ORDEM, E O QUE SE FALA (e é o roteiro que decide) ─────────────────
+// A ordem, os títulos e as notas da consultora vêm de `roteiroApresentacao.js`,
+// a partir do PÚBLICO deste cliente (o perfil que o diagnóstico já classificava
+// e que a apresentação ignorava). O arco consultivo é sempre o mesmo — primeiro
+// o cliente se enxerga, depois entende o risco, e só então vê o preço —, mas
+// quem carrega a consciência muda: sucessão e patrimônio para uns, proteção em
+// vida para outros, a empresa para os sócios.
+//
+//   capa → diagnóstico → reenquadramento → [os capítulos da tese deste
+//   público] → o número → filhos → gap → o plano completo → investimento →
+//   as três formas → as provas → o custo da espera → passos → fechamento
 //
 // Todo número vem de calcularEstudo(): a tela do planejamento e o slide
 // mostram exatamente a mesma conta, sempre.
 const ICONE_COBERTURA = {
   morte: Heart, invalidez: Activity, doencas_graves: Stethoscope,
-  dit: CalendarClock, dih: BedDouble,
+  cirurgias: Scissors, dit: CalendarClock, dih: BedDouble,
   morte_acidental: Ambulance, fraturas: Bone,
   funeral_individual: Flower2, funeral_familiar: Flower2,
   sucessao: Scale, socios: Handshake, homem_chave: Briefcase, aval: Landmark,
@@ -143,6 +163,7 @@ const ICONE_COBERTURA = {
 // e num índice de 21 linhas isso vira parede de texto.
 const TITULO_SLIDE = {
   capa: 'Capa', diagnostico: 'Onde você está', reenquadramento: 'O que o plano resolve',
+  'em-vida': 'O que paga em vida',
   autonomia: 'Autonomia da família', numero: 'O número', filhos: 'Futuro dos filhos',
   patrimonio: 'Raio-X do patrimônio', sucessao: 'Sucessão',
   'linha-inventario': 'Linha do inventário', empresa: 'A empresa',
@@ -187,6 +208,12 @@ export default function Proposta({ publica = false }) {
   const [perguntando, setPerguntando] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [erroSalvar, setErroSalvar] = useState(null)
+  // Capítulos fora desta reunião, guardados por NOME e nunca por índice. A
+  // lista de capítulos é montada a partir do que está na tela, e o que está na
+  // tela pode mudar no meio da apresentação — a simulação ao vivo mexe em
+  // números que fazem capítulo inteiro aparecer e sumir. Guardado por índice, o
+  // "pular a sucessão" viraria "pular o que estiver na sétima posição", que
+  // depois da mudança é outro capítulo. Por nome, ele continua sendo o dele.
   const [pulados, setPulados] = useState(() => new Set())
   const [revelando, setRevelando] = useState(true)
   // A etapa é ANCORADA ao nome do capítulo, nunca guardada solta. A rolagem
@@ -197,6 +224,10 @@ export default function Proposta({ publica = false }) {
   // só a navegação que quer o contrário diz isso explicitamente.
   const [etapaPor, setEtapaPor] = useState({ slide: '', n: 0 })
   const [inicioReuniao, setInicioReuniao] = useState(null)
+  // O painel do roteiro: o que dizer neste capítulo, para este cliente. Começa
+  // FECHADO de propósito — a tela dela está compartilhada, e quem decide o que
+  // aparece nela é ela.
+  const [painelRoteiro, setPainelRoteiro] = useState(false)
 
   const anotacoes = agora(historico)
   const totalSlides = capitulos.length
@@ -204,19 +235,34 @@ export default function Proposta({ publica = false }) {
   const slideDoIndice = capitulos[slideAtual]?.slide ?? ''
   const etapa = etapaPor.slide === slideDoIndice ? Math.min(etapaPor.n, etapasDoSlide) : 0
 
+  // Os capítulos são reordenados pelo roteiro com o `order` do flexbox, então a
+  // ordem do DOM não é mais a ordem da tela. Tudo que navega — as setas, as
+  // bolinhas, o índice e a detecção de onde ela está — lê a ordem VISUAL, por
+  // `offsetTop`. Ler o DOM aqui faria a seta "avançar" pular para trás.
+  const secoesEmOrdem = useCallback(() => (
+    [...document.querySelectorAll('.proposta section')].sort((a, b) => a.offsetTop - b.offsetTop)
+  ), [])
+
   const irPara = useCallback((i) => {
-    const slides = [...document.querySelectorAll('.proposta section')]
+    const slides = secoesEmOrdem()
     if (slides.length === 0) return
     slides[Math.max(0, Math.min(i, slides.length - 1))]
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [])
+  }, [secoesEmOrdem])
 
   // Tudo o que a navegação precisa saber vive numa referência: o ouvinte de
   // teclado é montado uma vez e leria valores congelados se dependesse do
   // fechamento — a seta pararia de andar depois do primeiro slide.
+  // `proximoCapitulo` raciocina em índices (é o que a navegação enxerga), e o
+  // estado guarda nomes: a tradução acontece aqui, uma vez por render, contra a
+  // lista de capítulos que está valendo agora.
+  const puladosPorIndice = new Set(
+    capitulos.map((c, i) => (pulados.has(c.slide) ? i : -1)).filter((i) => i >= 0),
+  )
+
   const navRef = useRef({})
   navRef.current = {
-    irPara, slideAtual, etapa, etapasDoSlide, revelando, pulados, totalSlides,
+    irPara, slideAtual, etapa, etapasDoSlide, revelando, pulados: puladosPorIndice, totalSlides,
     apresentando, capitulos, slideDoIndice,
   }
 
@@ -248,23 +294,39 @@ export default function Proposta({ publica = false }) {
   // daqui também — a lista é lida do DOM porque é o DOM que sabe quais
   // capítulos este cliente ganhou, e quantas etapas cada um tem.
   useEffect(() => {
-    const slides = () => [...document.querySelectorAll('.proposta section')]
-    setCapitulos(slides().map((s) => ({
+    // A LISTA ACOMPANHA A TELA, e não só o carregamento. Os capítulos entram e
+    // saem conforme os números do estudo, e as alavancas da simulação mexem
+    // nesses números AO VIVO, na frente do cliente: derrubar a renda a zero
+    // pode fazer o capítulo da proteção em vida deixar de existir. Montada uma
+    // vez só, a lista ficaria descrevendo uma proposta que não está mais na
+    // tela — o índice mostraria um capítulo que sumiu, e a bolinha de navegação
+    // levaria ao slide errado. O observador refaz a lista quando isso acontece.
+    const remontar = () => setCapitulos(secoesEmOrdem().map((s) => ({
       slide: s.dataset.slide ?? '',
       titulo: TITULO_SLIDE[s.dataset.slide] ?? s.querySelector('h2')?.textContent?.trim() ?? 'Capítulo',
       // um bloco marcado para revelar tem uma etapa por filho, menos a
       // primeira, que já entra visível junto com o título
       etapas: Math.max(0, (s.querySelector('[data-revelar]')?.children.length ?? 1) - 1),
     })))
+    remontar()
+    const alvo = document.querySelector('.proposta')
+    // só a lista de filhos diretos: o observador não pode acordar a cada traço
+    // desenhado dentro de um slide, que é o que aconteceria observando a subárvore
+    const observador = alvo ? new MutationObserver(remontar) : null
+    observador?.observe(alvo, { childList: true })
+
     function atual() {
       const y = window.scrollY + window.innerHeight / 2
-      return Math.max(slides().findLastIndex((s) => s.offsetTop <= y), 0)
+      return Math.max(secoesEmOrdem().findLastIndex((s) => s.offsetTop <= y), 0)
     }
     function onScroll() { setSlideAtual(atual()) }
     window.addEventListener('scroll', onScroll, { passive: true })
     onScroll()
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [dados])
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      observador?.disconnect()
+    }
+  }, [dados, secoesEmOrdem])
 
 
   // Atalhos. Montados uma vez só e lendo tudo por referência.
@@ -418,6 +480,11 @@ export default function Proposta({ publica = false }) {
     setEscuro(false)
     setEtapaPor({ slide: '', n: 0 })
     setInicioReuniao(Date.now())
+    // O ROTEIRO SE APLICA AQUI, e só aqui. Os capítulos que este público não
+    // precisa ouvir saem do caminho de avançar NESTA reunião — o estudo
+    // continua inteiro, o índice mostra por que cada um saiu e um toque traz
+    // qualquer um de volta. O PDF e o link do cliente nunca perdem nada.
+    setPulados(new Set([...(roteiro?.fora.keys() ?? [])]))
   }
 
   function tentarSair() {
@@ -456,10 +523,12 @@ export default function Proposta({ publica = false }) {
   }
 
   function alternarPulado(i) {
+    const nome = capitulos[i]?.slide
+    if (!nome) return
     setPulados((p) => {
       const novo = new Set(p)
-      if (novo.has(i)) novo.delete(i)
-      else novo.add(i)
+      if (novo.has(nome)) novo.delete(nome)
+      else novo.add(nome)
       return novo
     })
   }
@@ -479,12 +548,34 @@ export default function Proposta({ publica = false }) {
   const mudancasSimuladas = descreverSimulacao(simulacao, plano)
 
   const e = calcularEstudo(planoEfetivo, { dataNascimento: cliente.data_nascimento, idade: cliente.idade })
+
+  // ── QUEM ESTÁ DO OUTRO LADO DA MESA ───────────────────────────────────────
+  // O diagnóstico já classificava o perfil deste cliente e a apresentação
+  // nunca usou isso para nada: o deck saía igual para o pai de família de 34
+  // anos e para o empresário de 61 que veio tratar do inventário. Aqui o perfil
+  // vira PÚBLICO, e o público decide a ordem dos capítulos, os títulos que o
+  // cliente lê e a fala de cada momento.
+  //
+  // As objeções entram no roteiro porque objeção tem HORA: "está caro" nasce no
+  // capítulo do investimento, "já tenho plano de saúde" nasce no da proteção em
+  // vida. A barra mostra a resposta já calculada para este cliente no capítulo
+  // em que a pergunta costuma aparecer — e não depois, quando ela já virou não.
+  const diag = diagnosticar(e, { cliente })
+  const objecoes = responderObjecoes(e, { diagnostico: diag, cliente })
+  const roteiro = montarRoteiro(e, {
+    diagnostico: diag, cliente, objecoes, objetivos: plano.objetivos,
+  })
+  const textoDe = (slide) => roteiro?.textoDe(slide) ?? {}
+
   const primeiroNome = cliente.nome.split(' ')[0]
   const temPatrimonio = e.patrimonioBruto > 0
   const temGap = e.tem014 && e.coberturaAtual > 0
   const temEmpresa = e.temPJ && e.capitalPJ > 0
   const temRaioX = e.tem019 && e.detalhado && temPatrimonio
   const inv = e.investimento
+  // O que a apólice paga com o cliente aqui — a lista vem do roteiro para o
+  // capítulo e a fala da consultora nunca discordarem sobre o que está na tela.
+  const emVida = roteiro?.emVida ?? null
 
   // O comparador só entra quando há capital e prêmio; a tabela de resgate é
   // opcional (sem ela a curva verde some, o resto continua valendo).
@@ -508,9 +599,7 @@ export default function Proposta({ publica = false }) {
   // os valores seriam estimativa por idade, e estimativa impressa ao lado do
   // nome do cliente é lida como preço. A proporção entre os níveis vem do
   // estimador; o valor absoluto, da seguradora.
-  const escada = ancorarNaCotacao(
-    montarNiveis(e, { perfil: diagnosticar(e, { cliente })?.perfil }), e,
-  )
+  const escada = ancorarNaCotacao(montarNiveis(e, { perfil: diag?.perfil }), e)
 
   // Coberturas agrupadas — o quadro da apólice, na ordem do catálogo
   const grupos = GRUPOS_COBERTURA
@@ -523,9 +612,10 @@ export default function Proposta({ publica = false }) {
   const rotuloSecao = 'text-sm font-medium uppercase tracking-[0.3em] text-gold-500'
 
   // O slide de reenquadramento fala do que ELE veio resolver. Os três cartões
-  // são escolhidos pelos focos marcados no planejamento — quem veio por
-  // sucessão não ouve primeiro sobre educação dos filhos. Sem foco marcado,
-  // ficam os três de sempre, na ordem que funciona para a maioria.
+  // são escolhidos pelos focos marcados no planejamento e, na falta deles, pelo
+  // eixo do público — quem veio por sucessão não ouve primeiro sobre educação
+  // dos filhos, e quem não tem dependentes não ouve sobre família nenhuma.
+  // A escolha mora no roteiro; aqui ficam só os textos.
   const CARTOES = {
     vida: { id: 'vida', icone: Activity, titulo: 'A maior parte paga em vida',
       texto: <>Invalidez, doenças graves, internação e afastamento pagam <strong className="text-slate-700">enquanto você está aqui</strong> — justamente quando os custos explodem e a renda para.</> },
@@ -544,19 +634,15 @@ export default function Proposta({ publica = false }) {
     aposentadoria: { id: 'aposentadoria', icone: PiggyBank, titulo: 'O plano de longo prazo sobrevive',
       texto: <>O aporte da aposentadoria sai da renda. Protegendo a renda, <strong className="text-slate-700">o plano de acúmulo continua</strong> mesmo se você não puder mais trabalhar.</> },
   }
-  const cartoesReenquadramento = (() => {
-    const escolhidos = e.focos.map((f) => CARTOES[f]).filter(Boolean)
-    // "paga em vida" abre bem qualquer conversa; entra sempre que sobra espaço
-    const complemento = [CARTOES.vida, CARTOES.renda, CARTOES.sucessao]
-    const vistos = new Set()
-    return [...escolhidos, ...complemento]
-      .filter((c) => (vistos.has(c.id) ? false : vistos.add(c.id)))
-      .slice(0, 3)
-  })()
+  const cartoesReenquadramento = (roteiro?.cartoes ?? ['vida', 'renda', 'sucessao'])
+    .map((id) => CARTOES[id]).filter(Boolean).slice(0, 3)
 
   return (
     <ContextoQuadro.Provider
-      value={{ apresentando, ferramenta, anotacoes, definirTracos, slideAtivo, revelando, etapa }}>
+      value={{
+        apresentando, ferramenta, anotacoes, definirTracos, slideAtivo, revelando, etapa,
+        ordemDe: (nome) => roteiro?.ordemDe(nome) ?? 900,
+      }}>
     <div className="proposta">
       {/* barra de ações — some na impressão e durante a apresentação */}
       <div className={`fixed left-0 right-0 top-0 z-20 flex flex-wrap items-center justify-between gap-2 bg-slate-900/95 px-4 py-2.5 backdrop-blur print:hidden ${apresentando ? 'hidden' : ''}`}>
@@ -640,10 +726,24 @@ export default function Proposta({ publica = false }) {
 
           <BarraApresentacao
             slideAtual={slideAtual} totalSlides={totalSlides} irPara={irPara} avancar={avancar}
-            nomes={capitulos.map((c, i) => ({
-              ...c, anotado: (anotacoes[c.slide] ?? []).length > 0, pulado: pulados.has(i),
+            nomes={capitulos.map((c) => ({
+              ...c, anotado: (anotacoes[c.slide] ?? []).length > 0, pulado: pulados.has(c.slide),
+              foraDoRoteiro: !!roteiro?.estaFora(c.slide),
+              motivoFora: roteiro?.motivoFora(c.slide) ?? null,
+              momento: roteiro?.momentoDe(c.slide) ?? null,
             }))}
             alternarPulado={alternarPulado}
+            publico={roteiro?.publico ?? null}
+            momento={roteiro?.momentoDe(slideAtivo) ?? null}
+            temRoteiro={!!roteiro?.falaDe(slideAtivo)}
+            roteiroAberto={painelRoteiro}
+            // Um painel por vez. Os dois abertos empilham e cobrem dois terços
+            // do slide — e ela usa um OU outro: ou está montando a frase que
+            // vai dizer, ou está mexendo no número na frente do cliente.
+            alternarRoteiro={() => {
+              setPainelRoteiro((v) => !v)
+              setPainelSimulacao(false)
+            }}
             etapa={etapa} etapasDoSlide={etapasDoSlide}
             revelando={revelando} alternarRevelacao={() => setRevelando((v) => !v)}
             inicioReuniao={inicioReuniao}
@@ -654,11 +754,19 @@ export default function Proposta({ publica = false }) {
             desenhosPendentes={desenhosPendentes && podeGuardar}
             guardarDesenhos={() => guardarDesenhos()}
             simulando={painelSimulacao || simulando}
-            alternarSimulacao={() => setPainelSimulacao((v) => !v)}
+            alternarSimulacao={() => {
+              setPainelSimulacao((v) => !v)
+              setPainelRoteiro(false)
+            }}
             escuro={escuro} alternarEscuro={() => setEscuro((v) => !v)}
             sair={tentarSair}>
             {erroSalvar && (
               <p className="mb-2 rounded-lg bg-red-600 px-4 py-2 text-sm text-white shadow-lg">{erroSalvar}</p>
+            )}
+            {painelRoteiro && !escuro && (
+              <PainelRoteiro fala={roteiro?.falaDe(slideAtivo)} publico={roteiro?.publico}
+                titulo={capitulos[slideAtual]?.titulo}
+                fechar={() => setPainelRoteiro(false)} />
             )}
             {painelSimulacao && !escuro && (
               <PainelSimulacao plano={plano} simulacao={simulacao}
@@ -684,8 +792,13 @@ export default function Proposta({ publica = false }) {
         <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-laranja-500/10 blur-3xl print:hidden" />
         <div className="pointer-events-none absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-gold-400/10 blur-3xl print:hidden" />
         <div className="relative"><Logo claro tamanho={64} /></div>
+        {/* A etiqueta diz, em cinco palavras, de que estudo se trata — e é a
+            primeira coisa que o cliente lê. Ela vem do público: "estudo de
+            sucessão" para quem veio por isso, "da sua renda e da sua saúde"
+            para quem não tem dependentes. */}
         <p className="relative mt-10 text-sm font-medium uppercase tracking-[0.3em] text-gold-400">
-          {e.temPJ ? 'Estudo de proteção pessoal e empresarial' : 'Estudo de proteção e blindagem patrimonial'}
+          {textoDe('capa').etiqueta
+            ?? (e.temPJ ? 'Estudo de proteção pessoal e empresarial' : 'Estudo de proteção e blindagem patrimonial')}
         </p>
         <h1 className="relative mt-4 max-w-3xl text-4xl font-semibold leading-tight tracking-tight md:text-5xl">
           Um plano feito para a vida de <span className="text-laranja-400">{primeiroNome}</span>
@@ -743,10 +856,16 @@ export default function Proposta({ publica = false }) {
 
       {/* 3 · REENQUADRAMENTO — o slide que muda a cabeça do cliente */}
       <Slide nome="reenquadramento" className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
-        <p className={rotuloSecao}>Antes de tudo, uma verdade</p>
+        <p className={rotuloSecao}>{textoDe('reenquadramento').etiqueta ?? 'Antes de tudo, uma verdade'}</p>
+        {/* O reenquadramento é o slide que muda a cabeça do cliente — e a frase
+            que faz isso depende de quem ele é. "Não é sobre morrer, é sobre
+            continuar cuidando" é perfeita para um provedor e vazia para quem
+            não tem quem cuidar. */}
         <h2 className="mt-3 max-w-3xl text-center text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">
-          Seguro de vida não é sobre morrer.<br />
-          <span className="text-laranja-600">É sobre continuar cuidando.</span>
+          {textoDe('reenquadramento').titulo ?? 'Seguro de vida não é sobre morrer.'}<br />
+          <span className="text-laranja-600">
+            {textoDe('reenquadramento').destaque ?? 'É sobre continuar cuidando.'}
+          </span>
         </h2>
         <Revelar className="mt-12 grid w-full max-w-4xl gap-5 md:grid-cols-3">
           {cartoesReenquadramento.map((c) => (
@@ -754,7 +873,8 @@ export default function Proposta({ publica = false }) {
           ))}
         </Revelar>
         <p className="mt-10 max-w-xl text-center text-lg text-slate-600">
-          É o único ativo que <strong className="text-slate-900">se multiplica exatamente na hora que você mais precisa</strong>.
+          {textoDe('reenquadramento').remate
+            ?? 'É o único ativo que se multiplica exatamente na hora que você mais precisa.'}
         </p>
       </Slide>
 
@@ -763,7 +883,8 @@ export default function Proposta({ publica = false }) {
         <Slide nome="autonomia" className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
           <p className={rotuloSecao}>A pergunta central</p>
           <h2 className="mt-3 max-w-2xl text-center text-3xl font-semibold tracking-tight text-slate-900">
-            Se a renda parasse hoje, por quanto tempo a família manteria o padrão de vida?
+            {textoDe('autonomia').titulo
+              ?? 'Se a renda parasse hoje, por quanto tempo a família manteria o padrão de vida?'}
           </h2>
           {/* Três cenários quando o patrimônio está detalhado por classe; sem
               isso não dá para separar o líquido do ilíquido e mostramos dois. */}
@@ -800,12 +921,75 @@ export default function Proposta({ publica = false }) {
         </Slide>
       )}
 
+      {/* 4b · A PROTEÇÃO EM VIDA — o capítulo que faltava.
+          A objeção mais comum da categoria ("isso só serve depois que eu
+          morro") nascia aqui e não tinha slide: as coberturas que pagam com o
+          cliente vivo só apareciam diluídas no quadro da apólice, entre outras
+          dez linhas. Reunidas, elas são a maior parte da apólice e a parte que
+          mais é acionada — e é onde a cobertura de CIRURGIAS mora, que é o
+          furo que este estudo tinha.
+
+          Só entra com pelo menos duas dessas coberturas: uma cobertura só não
+          sustenta um capítulo, e o quadro da apólice já a mostra. */}
+      {emVida && emVida.itens.length >= 2 && (
+        <Slide nome="em-vida" className="flex min-h-screen flex-col items-center justify-center bg-white p-5 sm:p-8 print:min-h-0 print:py-24">
+          <p className={rotuloSecao}>{textoDe('em-vida').etiqueta ?? 'Proteção em vida'}</p>
+          <h2 className="mt-3 max-w-3xl text-center text-3xl font-semibold tracking-tight text-slate-900">
+            {textoDe('em-vida').titulo ?? 'A maior parte deste plano paga com você aqui'}
+          </h2>
+          <p className="mt-3 max-w-2xl text-center text-slate-500">
+            Elas pagam <strong className="text-slate-700">no diagnóstico, na cirurgia, no dia de
+            afastamento</strong> — com você aqui para decidir o que fazer com o dinheiro.
+          </p>
+
+          <Revelar className={`mt-7 grid w-full gap-4 ${
+            emVida.itens.length >= 4 ? 'max-w-5xl md:grid-cols-3' : 'max-w-4xl md:grid-cols-2'}`}>
+            {emVida.itens.map((c) => {
+              const Icone = ICONE_COBERTURA[c.id] ?? Activity
+              return (
+                <div key={c.id} className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5">
+                  <div className="w-fit rounded-xl bg-white p-2.5 text-emerald-600 shadow-card"><Icone size={22} /></div>
+                  <h3 className="mt-3 font-semibold text-slate-900">{c.curto}</h3>
+                  <p className="mt-1 font-display text-2xl font-semibold tabular text-emerald-700">
+                    {c.tipo === 'diaria' ? `${brl(c.valor)}/dia` : brlCompacto(c.valor)}
+                  </p>
+                  {c.tipo === 'diaria' && c.dias > 0 && (
+                    <p className="text-xs text-emerald-800/70">
+                      até {c.dias} diárias · {brlCompacto(c.total)}
+                    </p>
+                  )}
+                  <p className="mt-2 text-sm text-slate-600">{c.descricao}</p>
+                </div>
+              )
+            })}
+          </Revelar>
+
+          <p className="mt-7 max-w-2xl text-center text-lg text-slate-600">
+            {textoDe('em-vida').remate}
+          </p>
+          {emVida.maior > 0 && (
+            <p className="mt-2.5 max-w-2xl text-center text-sm text-slate-400">
+              Somadas, estas coberturas alcançam {brlCompacto(emVida.total)} — e a maior indenização
+              única em vida é de {brlCompacto(emVida.maior)}. Elas se acionam por acontecimentos
+              diferentes, e mais de uma pode ser usada ao longo da vida da apólice.
+            </p>
+          )}
+        </Slide>
+      )}
+
       {/* 5 · O NÚMERO */}
       <Slide nome="numero" className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 text-center print:min-h-0 print:py-24">
-        <p className={rotuloSecao}>A proteção recomendada</p>
+        <p className={rotuloSecao}>{textoDe('numero').etiqueta ?? 'A proteção recomendada'}</p>
         <p className="mt-6 font-display text-6xl font-semibold tracking-tight text-slate-900 tabular md:text-8xl">{brlCompacto(e.valores.morte)}</p>
         <p className="mt-3 text-xl text-slate-400 tabular">{brl(e.valores.morte)}</p>
-        {e.mesesProtegidos > 0 && (
+        {/* Sem dependentes o motor NÃO projeta reposição de renda — o capital
+            cobre a dívida e o que a morte dele deixa em aberto. Dizer aqui
+            "sustenta a família por X meses" descreveria uma conta que o estudo
+            não fez, e o cliente que faz a conta de cabeça percebe. */}
+        {textoDe('numero').legenda && (
+          <p className="mt-8 max-w-lg text-lg text-slate-600">{textoDe('numero').legenda}</p>
+        )}
+        {e.mesesProtegidos > 0 && e.temDependentes && (
           <p className="mt-8 max-w-lg text-lg text-slate-600">
             Sustenta o padrão de vida da família por{' '}
             <strong className="font-semibold text-slate-900">{meses(e.mesesProtegidos)}</strong>
@@ -1134,7 +1318,7 @@ export default function Proposta({ publica = false }) {
 
       {/* 11 · O PLANO COMPLETO — o quadro da apólice, logo antes do preço */}
       <Slide nome="plano" className="flex min-h-screen flex-col items-center justify-center bg-canvas p-5 sm:p-8 print:min-h-0 print:py-24">
-        <p className={rotuloSecao}>Seu plano completo</p>
+        <p className={rotuloSecao}>{textoDe('plano').etiqueta ?? 'Seu plano completo'}</p>
         <h2 className="mt-3 text-center text-3xl font-semibold tracking-tight text-slate-900">
           Tudo que {primeiroNome} passa a ter
         </h2>
@@ -1625,8 +1809,10 @@ export default function Proposta({ publica = false }) {
         <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-gold-400/10 blur-3xl print:hidden" />
         <div className="relative mb-10"><Logo claro tamanho={52} /></div>
         <h2 className="relative max-w-2xl text-3xl font-semibold leading-snug tracking-tight md:text-4xl">
-          O melhor dia para proteger sua família foi ontem.<br />
-          <span className="text-gold-400">O segundo melhor é hoje.</span>
+          {textoDe('fechamento').titulo ?? 'O melhor dia para proteger sua família foi ontem.'}<br />
+          <span className="text-gold-400">
+            {textoDe('fechamento').destaque ?? 'O segundo melhor é hoje.'}
+          </span>
         </h2>
         {plano.objetivos && (
           <p className="relative mt-6 max-w-xl text-white/70">

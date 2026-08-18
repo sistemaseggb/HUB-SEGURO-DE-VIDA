@@ -65,7 +65,8 @@ export const BLOCOS_ROTEIRO = [
     tempo: '10 min',
     falas: [
       'Comece pelas essenciais: morte, invalidez e doenças graves.',
-      'Depois as que pagam no dia a dia: DIT (dia parado), diária de internação, fraturas e morte acidental.',
+      'Depois as que pagam no dia a dia: DIT (dia parado), diária de internação, cirurgias, fraturas e morte acidental.',
+      'Cirurgias é a que mais acontece: o plano de saúde cobre o procedimento e não cobre coparticipação, material fora do rol nem o tempo de recuperação sem faturar.',
       'Feche com as assistências: o funeral é acionado por telefone, em horas, sem a família gastar nada.',
       'Doenças graves e invalidez pagam EM VIDA — desmonta o "só serve se eu morrer".',
       'Reforce: o seguro não substitui o patrimônio, ele impede que seja consumido.',

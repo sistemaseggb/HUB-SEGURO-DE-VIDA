@@ -1,7 +1,7 @@
 -- ============================================================================
 -- HUB SEGURO DE VIDA — SETUP COMPLETO (arquivo único)
 --
--- Este arquivo junta TODAS as 25 migrações na ordem certa. Rode UMA vez, num
+-- Este arquivo junta TODAS as 28 migrações na ordem certa. Rode UMA vez, num
 -- projeto Supabase NOVO (vazio), colando tudo no SQL Editor e clicando em Run.
 -- Cria todas as tabelas, o cálculo de comissão, o bucket de documentos e tudo
 -- mais que o Hub precisa para funcionar.
@@ -3009,4 +3009,155 @@ alter table planejamentos
 alter table planejamentos
   add constraint planejamentos_beneficiarios_lista
   check (jsonb_typeof(beneficiarios) = 'array');
+
+
+-- ############################################################################
+-- ### 026_assessor_na_apolice.sql
+-- ####################################################################################
+
+-- ============================================================================
+-- 026 — O ASSESSOR PASSA A MORAR NA APÓLICE
+--
+-- Até aqui o assessor morava no CLIENTE, e a apólice herdava o dele. Duas
+-- coisas quebravam por causa disso, e as duas apareceram na planilha de
+-- julho/2026:
+--
+--   1. REIMPORTAR NÃO MOVIA NINGUÉM. O importador só define o assessor quando
+--      CRIA o cliente. Cliente que já existe ficava congelado no assessor da
+--      primeira carga — então a consultora subia a planilha do mês, os prêmios
+--      atualizavam, e o ranking dos GB Awards continuava igual. Parecia que o
+--      sistema não estava lendo a planilha; ele estava, só não movia a
+--      atribuição.
+--
+--   2. UM CLIENTE, DOIS ASSESSORES. A planilha traz o assessor por LINHA de
+--      apólice, não por cliente — e 4 clientes têm apólices de assessores
+--      diferentes (6 delas em 2026). Com um assessor só por cliente, um dos
+--      dois sempre perdia a produção dele.
+--
+-- A coluna é opcional de propósito: quando está vazia, tudo continua caindo no
+-- assessor do cliente, que é o comportamento antigo. Nenhuma tela quebra se
+-- esta migração ainda não tiver rodado.
+-- ============================================================================
+
+alter table public.apolices
+  add column if not exists id_assessor uuid references public.assessores(id) on delete set null;
+
+create index if not exists idx_apolices_assessor on public.apolices (id_assessor);
+
+comment on column public.apolices.id_assessor is
+  'Assessor DESTA apólice (vem da coluna ASSESSOR da planilha geral, linha a linha). '
+  'Quando nulo, vale o assessor do cliente — o comportamento anterior à migração 026.';
+
+-- Preenche o histórico com o que se sabe hoje: o assessor do cliente. A partir
+-- da próxima importação da planilha geral, cada apólice passa a carregar o
+-- assessor da própria linha.
+update public.apolices a
+   set id_assessor = c.id_assessor
+  from public.clientes c
+ where c.id = a.id_cliente
+   and a.id_assessor is null;
+
+
+-- ############################################################################
+-- ### 027_cirurgias.sql
+-- ####################################################################################
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 027 — CIRURGIAS: a cobertura que faltava no catálogo
+--
+-- O estudo cobria bem os dois extremos do "pagar em vida": a doença grave, que
+-- é o diagnóstico que muda a vida, e a diária, que repõe renda por dia parado.
+-- Faltava exatamente o que acontece no MEIO e é o mais frequente dos três: a
+-- cirurgia.
+--
+-- É a cobertura que resolve o buraco que o cliente conhece de perto — o plano
+-- de saúde cobre o procedimento e não cobre o resto: coparticipação, material
+-- fora do rol, o honorário do cirurgião de escolha dele, o acompanhante, o
+-- deslocamento e as semanas de recuperação sem faturar. Ela indeniza por
+-- procedimento, conforme a tabela cirúrgica da apólice, e paga com o segurado
+-- vivo, em dias.
+--
+-- Sem ela, o capítulo "a maior parte paga em vida" da apresentação tinha três
+-- linhas onde devia ter quatro — e a objeção "eu já tenho plano de saúde"
+-- ficava sem a resposta mais concreta que existe.
+--
+-- Como no resto do sistema: a coluna é opcional e as telas detectam se ela
+-- existe antes de oferecer a cobertura. Uma instalação que não aplicou esta
+-- migração continua funcionando, só sem Cirurgias.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+alter table planejamentos
+  -- Capital da tabela cirúrgica: é o TETO da cobertura, não o valor de cada
+  -- procedimento. A apólice paga um percentual dele por cirurgia, conforme o
+  -- porte do procedimento — por isso o estudo sugere ~3× a renda mensal e
+  -- respeita o teto de mercado (ver CIRURGIAS_TETO em src/lib/estudo.js).
+  add column if not exists capital_cirurgias numeric(14,2);
+
+comment on column planejamentos.capital_cirurgias is
+  'Cirurgias: capital máximo da tabela cirúrgica. A apólice indeniza um percentual dele por procedimento. Vazio = usar a sugestão do estudo.';
+
+
+-- ############################################################################
+-- ### 028_proposta_publica_idade.sql
+-- ####################################################################################
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 028 — O CLIENTE PERDIA TRÊS CAPÍTULOS AO ABRIR O PRÓPRIO LINK
+--
+-- A proposta pública (/p/<token>) existe para o cliente rever o estudo em casa
+-- e mostrar para a família. A tela sempre leu `cliente_idade` da resposta desta
+-- função — e a função nunca devolveu esse campo. Ninguém percebeu porque nada
+-- quebra: a proposta abre bonita, só que MENOR.
+--
+-- Sem a idade, três capítulos simplesmente não são montados, e são justamente
+-- os três que trabalham quando a consultora não está na sala:
+--
+--   · AS TRÊS FORMAS DE FAZER — a escada de planos, que troca a pergunta
+--     "aceita?" por "qual dos três?". É o capítulo que o cliente reabre quando
+--     senta com o cônjuge para decidir.
+--   · O CUSTO DA ESPERA — quanto a mesma apólice custa daqui a 1, 3 e 5 anos.
+--     É a resposta ao "depois eu vejo", e "depois" é exatamente o que acontece
+--     entre a reunião e a releitura em casa.
+--   · APOSENTADORIA — para quem veio por esse motivo, o capítulo do próprio
+--     motivo dele.
+--
+-- Os três dependem da idade porque prêmio de risco é idade. A função passa a
+-- devolvê-la calculada (nunca a data de nascimento em si, que não faz falta
+-- nenhuma na tela), e o link do cliente volta a mostrar o estudo inteiro.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+create or replace function public.fn_proposta_carregar(p_token uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r record;
+begin
+  select p.*, c.nome as cliente_nome,
+         -- idade em anos completos; nulo quando o cadastro não tem a data
+         case when c.data_nascimento is null then null
+              else extract(year from age(current_date, c.data_nascimento))::int
+         end as cliente_idade
+    into r
+    from public.planejamentos p
+    join public.clientes c on c.id = p.id_cliente
+   where p.token_proposta = p_token;
+
+  if not found then
+    return jsonb_build_object('erro', 'proposta_nao_encontrada');
+  end if;
+
+  return jsonb_build_object(
+    'cliente_nome', r.cliente_nome,
+    'cliente_idade', r.cliente_idade,
+    -- o plano inteiro, menos os identificadores internos
+    'plano', to_jsonb(r) - 'cliente_nome' - 'cliente_idade' - 'id' - 'id_cliente' - 'token_proposta'
+  );
+end;
+$$;
+
+revoke all on function public.fn_proposta_carregar(uuid) from public;
+grant execute on function public.fn_proposta_carregar(uuid) to anon, authenticated;
 

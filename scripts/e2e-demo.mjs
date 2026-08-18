@@ -181,8 +181,9 @@ await passo('Proposta (slides) com estudo completo', async () => {
   const url = page.url()
   const idCliente = url.match(/clientes\/([a-f0-9-]+)/)?.[1]
   await page.goto(`${BASE}/proposta/${idCliente}`)
-  // Carlos é um estudo PF + PJ: a capa muda de acordo com o tipo
-  await page.waitForSelector('text=/estudo de proteção pessoal e empresarial/i', { timeout: 6000 })
+  // Carlos é PF + PJ com patrimônio grande e foco em sucessão: a capa anuncia
+  // o estudo pelo PÚBLICO dele, sem esconder que a empresa entra na conta.
+  await page.waitForSelector('text=/estudo de sucessão patrimonial e empresarial/i', { timeout: 6000 })
   await shot('08-proposta-capa')
   await page.waitForSelector('text=/não é sobre morrer/i', { timeout: 3000 })
   await page.waitForSelector('text=/cada filho protegido até os 24/i', { timeout: 3000 })
@@ -212,7 +213,16 @@ await passo('Proposta pública pelo link (/p/<token>, sem login)', async () => {
   const anonima = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
   await anonima.goto(`${BASE}/p/demo-proposta-carlos`)
   await anonima.waitForSelector('text=Estudo preparado por', { timeout: 6000 })
-  await anonima.waitForSelector('text=/estudo de proteção pessoal e empresarial/i', { timeout: 3000 })
+  await anonima.waitForSelector('text=/estudo de sucessão patrimonial e empresarial/i', { timeout: 3000 })
+  // O CLIENTE VÊ O ESTUDO INTEIRO. A função pública nunca devolveu a idade que
+  // a tela lê (migração 028), e sem idade sumiam três capítulos justamente os
+  // que trabalham quando a consultora não está na sala: as três formas de
+  // fazer, o custo da espera e a aposentadoria. Nada quebrava — a proposta só
+  // abria menor, e ninguém percebia.
+  await anonima.waitForSelector('text=/formas de fazer isso/i', { timeout: 3000 })
+  await anonima.waitForSelector('text=/esperar tem preço/i', { timeout: 3000 })
+  const capitulosCliente = await anonima.locator('.proposta section').count()
+  if (capitulosCliente < 20) throw new Error(`o cliente recebeu só ${capitulosCliente} capítulos`)
   await anonima.screenshot({ path: 'e2e-shots/16-proposta-publica.png' })
   await anonima.context().close()
 })

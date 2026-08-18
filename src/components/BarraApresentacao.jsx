@@ -3,6 +3,7 @@ import {
   ChevronLeft, ChevronRight, PenLine, Highlighter, Eraser, MousePointer2,
   Undo2, Redo2, Trash2, LayoutGrid, SlidersHorizontal, EyeOff, Eye, X, Check,
   Minimize2, RotateCcw, Save, Hand, MoveUpRight, ListChecks, Timer,
+  MessageSquareQuote, HelpCircle, AlertTriangle, Target, Users,
 } from 'lucide-react'
 import { brl } from '../lib/format'
 import { ALAVANCAS, ESPESSURAS, TINTAS } from '../lib/apresentacao'
@@ -74,6 +75,14 @@ function Botao({ icone: Icone, rotulo, ativo, aviso, onClick, title, desabilitad
   )
 }
 
+// Momentos da reunião, para o índice agrupar os capítulos pelo que eles fazem
+// na conversa em vez de por um número de slide. Os ids batem com `MOMENTOS` de
+// roteiroApresentacao.js.
+const MOMENTO_ROTULO = {
+  abertura: 'Abertura', retrato: 'O retrato', consciencia: 'Consciência',
+  solucao: 'A solução', preco: 'O investimento', prova: 'A prova', decisao: 'A decisão',
+}
+
 export default function BarraApresentacao({
   slideAtual, totalSlides, nomes, irPara, avancar, alternarPulado,
   etapa, etapasDoSlide, revelando, alternarRevelacao, inicioReuniao,
@@ -81,6 +90,7 @@ export default function BarraApresentacao({
   desfazer, podeDesfazer, refazer, podeRefazer, limparSlide, temTracosNoSlide,
   desenhosPendentes, guardarDesenhos,
   simulando, alternarSimulacao,
+  publico, momento, temRoteiro, roteiroAberto, alternarRoteiro,
   escuro, alternarEscuro,
   sair, children,
 }) {
@@ -107,6 +117,19 @@ export default function BarraApresentacao({
           onClick={() => setIndice(false)}>
           <div className="mb-24 max-h-[70vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-slate-900 p-3 shadow-2xl"
             onClick={(ev) => ev.stopPropagation()}>
+            {/* O índice diz PARA QUEM este deck foi montado. Sem isso, os
+                capítulos que o roteiro tirou apareceriam riscados sem
+                explicação nenhuma — e capítulo sumido sem motivo é a coisa
+                que mais tira o chão de quem está apresentando. */}
+            {publico && (
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 pb-2 text-xs text-slate-300">
+                <Users size={13} className="text-gold-400" />
+                <span className="font-semibold text-gold-400">{publico.rotulo}</span>
+                <span className="text-slate-400">
+                  · {nomes.filter((n) => !n.pulado).length} de {nomes.length} capítulos nesta reunião
+                </span>
+              </p>
+            )}
             <p className="px-2 pb-2 text-xs text-slate-400">
               Toque para ir ao capítulo. No olho, você tira um capítulo desta reunião —
               nada é apagado do estudo, ele só deixa de aparecer ao avançar.
@@ -114,13 +137,20 @@ export default function BarraApresentacao({
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {nomes.map((n, i) => (
                 <div key={n.slide + i}
+                  title={n.foraDoRoteiro && n.motivoFora ? `Fora do roteiro: ${n.motivoFora}` : undefined}
                   className={`flex min-h-12 items-center gap-1 rounded-xl pr-1 transition-colors
                     ${i === slideAtual ? 'bg-laranja-500 text-white' : 'text-slate-300 hover:bg-white/10'}`}>
                   <button type="button" onClick={() => { irPara(i); setIndice(false) }}
                     className={`flex min-h-12 flex-1 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm
-                      ${n.pulado ? 'line-through opacity-40' : ''}`}>
+                      ${n.pulado ? 'opacity-40' : ''}`}>
                     <span className="w-6 shrink-0 text-xs tabular opacity-60">{i + 1}</span>
-                    <span className="flex-1 truncate">{n.titulo}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className={`block truncate ${n.pulado ? 'line-through' : ''}`}>{n.titulo}</span>
+                      <span className="block truncate text-[10px] uppercase tracking-wide opacity-50">
+                        {MOMENTO_ROTULO[n.momento] ?? ''}
+                        {n.foraDoRoteiro && ' · fora do roteiro'}
+                      </span>
+                    </span>
                     {n.anotado && <span className="h-2 w-2 shrink-0 rounded-full bg-gold-400" title="tem anotação" />}
                   </button>
                   {/* Nem todo cliente merece o deck inteiro: um solteiro sem
@@ -190,10 +220,20 @@ export default function BarraApresentacao({
             className="flex h-12 items-center gap-2 rounded-xl px-3 text-slate-200 hover:bg-white/10"
             title="Índice dos capítulos">
             <LayoutGrid size={18} />
-            <span className="text-sm tabular">
-              {slideAtual + 1}<span className="opacity-50">/{totalSlides}</span>
-              {revelando && etapasDoSlide > 0 && (
-                <span className="ml-1 text-[10px] opacity-60">·{etapa}/{etapasDoSlide}</span>
+            <span className="text-left leading-tight">
+              <span className="block text-sm tabular">
+                {slideAtual + 1}<span className="opacity-50">/{totalSlides}</span>
+                {revelando && etapasDoSlide > 0 && (
+                  <span className="ml-1 text-[10px] opacity-60">·{etapa}/{etapasDoSlide}</span>
+                )}
+              </span>
+              {/* Em que MOMENTO da reunião ela está. É a informação que evita o
+                  erro mais caro da apresentação: chegar ao preço antes de o
+                  cliente ter tomado consciência do risco. */}
+              {momento && (
+                <span className="hidden text-[10px] uppercase tracking-wide text-gold-400 sm:block">
+                  {MOMENTO_ROTULO[momento] ?? momento}
+                </span>
               )}
             </span>
           </button>
@@ -222,6 +262,9 @@ export default function BarraApresentacao({
           {/* a reunião */}
           <Botao icone={ListChecks} rotulo="Partes" ativo={revelando} onClick={alternarRevelacao}
             title="Revelar o capítulo por partes, no seu ritmo, em vez de abrir tudo de uma vez" />
+          <Botao icone={MessageSquareQuote} rotulo="Roteiro" ativo={roteiroAberto}
+            onClick={alternarRoteiro} desabilitado={!temRoteiro}
+            title="O que dizer neste capítulo, para este cliente — com a pergunta e a objeção da hora" />
           <Botao icone={SlidersHorizontal} rotulo="Simular" ativo={simulando} onClick={alternarSimulacao}
             title='Mexer nos números na frente do cliente — sem alterar o planejamento' />
           <Botao icone={escuro ? Eye : EyeOff} rotulo={escuro ? 'Voltar' : 'Apagar'} onClick={alternarEscuro}
@@ -239,6 +282,96 @@ export default function BarraApresentacao({
         </div>
       </div>
     </>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// O PAINEL DO ROTEIRO — o que dizer NESTE capítulo, para ESTE cliente.
+//
+// Era a única parte da reunião que o sistema não ajudava em nada. A proposta
+// mostrava vinte e dois capítulos corretos e silenciosos; o que dizer em cada
+// um vivia na cabeça da consultora, e mudava conforme o cliente — o que
+// funciona com um pai de família soa a discurso pronto para quem mora sozinho.
+//
+// Três decisões governam este painel:
+//
+// 1. ELE COMEÇA FECHADO, e some com um toque. A tela dela está compartilhada
+//    na reunião: quem decide o que o cliente vê é ela, nunca o programa.
+//
+// 2. O TEXTO É DIZÍVEL EM VOZ ALTA. Nada aqui é bastidor constrangedor — são
+//    as frases que ela diria mesmo, com os números deste cliente, e a pergunta
+//    que devolve a palavra a ele. Se o cliente ler por cima do ombro, lê uma
+//    consultora preparada.
+//
+// 3. UMA COISA POR VEZ. Objetivo, frase, pergunta, cuidado. Painel de reunião
+//    que exige leitura vira painel que ninguém abre.
+// ─────────────────────────────────────────────────────────────────────────────
+export function PainelRoteiro({ fala, publico, titulo, fechar }) {
+  if (!fala) return null
+  return (
+    <div className="mb-2 w-[min(64rem,calc(100vw-1rem))] rounded-2xl border border-white/10
+        bg-slate-900 p-3 shadow-2xl">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-semibold uppercase tracking-wider text-gold-400">
+            {titulo ?? 'Roteiro'}{publico ? ` · ${publico.rotulo}` : ''}
+          </p>
+          {fala.objetivo && (
+            <p className="mt-1 flex items-start gap-1.5 text-xs text-slate-400">
+              <Target size={13} className="mt-0.5 shrink-0" /> {fala.objetivo}
+            </p>
+          )}
+        </div>
+        <button type="button" onClick={fechar} aria-label="Fechar o roteiro"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-white">
+          <X size={18} />
+        </button>
+      </div>
+
+      <div className="mt-2 grid gap-2 lg:grid-cols-2">
+        {fala.diga.length > 0 && (
+          <div className="rounded-xl bg-white/5 p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Diga assim</p>
+            {fala.diga.map((f) => (
+              <p key={f} className="mt-1 text-sm leading-snug text-white">“{f}”</p>
+            ))}
+          </div>
+        )}
+        <div className="space-y-2">
+          {fala.pergunte && (
+            <div className="rounded-xl bg-emerald-500/10 p-3">
+              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
+                <HelpCircle size={12} /> Pergunte
+              </p>
+              <p className="mt-1 text-sm leading-snug text-emerald-50">“{fala.pergunte}”</p>
+            </div>
+          )}
+          {fala.cuidado && (
+            <div className="rounded-xl bg-amber-400/10 p-3">
+              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-400">
+                <AlertTriangle size={12} /> Cuidado
+              </p>
+              <p className="mt-1 text-sm leading-snug text-amber-50/90">{fala.cuidado}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* A objeção que costuma nascer NESTE capítulo, com a resposta já
+          calculada para este cliente. Objeção tem hora: "está caro" nasce no
+          slide do investimento, "já tenho plano de saúde" no da proteção em
+          vida. Chegar com a resposta pronta na hora certa é a diferença entre
+          responder e se defender. */}
+      {fala.objecao && (
+        <div className="mt-2 rounded-xl border border-white/10 bg-white/5 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            Costuma aparecer aqui · {fala.objecao.rotulo}
+            <span className="ml-1 opacity-60">({fala.objecao.nivelRotulo.toLowerCase()})</span>
+          </p>
+          <p className="mt-1 text-sm leading-snug text-slate-200">{fala.objecao.argumentos[0]}</p>
+        </div>
+      )}
+    </div>
   )
 }
 

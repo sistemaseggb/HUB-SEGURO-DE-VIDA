@@ -588,6 +588,16 @@ function gerarCenario() {
   const carteira = carteiraAleatoria(Number(plano.cobertura_atual) || 0)
   if (carteira) plano.seguros_existentes = carteira
 
+  // Cirurgias (migração 027). Em ~15% dos casos a coluna NÃO existe: é a
+  // instalação que ainda não rodou a migração, e o estudo tem que continuar
+  // inteiro sem ela. Nos outros, o valor às vezes vem da consultora e às
+  // vezes fica vazio para o estudo sugerir — os dois caminhos precisam passar
+  // pelas 10.000 revisões, senão o código novo escapa da rede que protege
+  // todo o resto do sistema.
+  if (!talvez(0.15)) {
+    plano.capital_cirurgias = talvez(0.25) ? redondo(entre(5_000, 80_000)) : null
+  }
+
   // Atividades de risco, IMC e indicação de beneficiários (migração 025). Sem
   // isso o código novo passaria batido pelo teste que mais protege o sistema.
   const ATIVIDADES = ['moto', 'aviacao', 'mergulho', 'altura', 'escalada',

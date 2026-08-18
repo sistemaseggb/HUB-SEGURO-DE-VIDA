@@ -62,7 +62,7 @@ function planoAleatorio() {
     pj_valuation: v(), pj_participacao_pct: escolher(PCTS), pj_num_socios: escolher(['', 0, 1, 4, -1]),
     pj_faturamento_anual: v(), pj_lucro_anual: v(), pj_divida_avalizada: v(),
     capital_socios: v(), capital_homem_chave: v(), capital_aval: v(),
-    capital_morte_acidental: v(), capital_fraturas: v(),
+    capital_morte_acidental: v(), capital_fraturas: v(), capital_cirurgias: v(),
     dih_diaria: v(), dih_dias: escolher(['', 0, 30, 365, 5000, -4]),
     dit_dias: escolher(['', 0, 30, 720, 9999, -4]), dit_franquia_dias: escolher(['', 0, 15, 400, -2]),
     funeral_individual: v(), funeral_familiar: v(),

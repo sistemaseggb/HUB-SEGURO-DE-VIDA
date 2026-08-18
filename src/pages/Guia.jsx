@@ -60,9 +60,9 @@ const JORNADA = [
     titulo: 'Apresente a proposta',
     onde: 'Cliente · botão Gerar proposta',
     para: '/clientes',
-    o_que: 'Abra a apresentação em tela cheia e conduza slide a slide. Ao final, envie o link para o cliente rever em casa, ou salve em PDF.',
-    porque: 'A proposta transforma números em significado. O cliente entende o valor — não o preço. E o link permite que ele mostre para a família.',
-    acoes: ['Gerar proposta → navegue com as setas', 'Copiar link do cliente ou Enviar ao cliente (WhatsApp)'],
+    o_que: 'Abra a apresentação em tela cheia e conduza slide a slide. A ordem dos capítulos e os títulos já vêm montados para o público deste cliente — sucessão, proteção em vida, empresa, família ou acúmulo. Ao final, envie o link para o cliente rever em casa, ou salve em PDF.',
+    porque: 'A proposta transforma números em significado. O cliente entende o valor — não o preço. E um estudo que abre pelo assunto que ELE veio resolver é lido como consultoria; o mesmo deck para todo mundo é lido como material de venda.',
+    acoes: ['Gerar proposta → navegue com as setas', 'Botão Roteiro: o que dizer neste capítulo, com os números dele e a objeção da hora', 'No índice, veja o que ficou fora desta reunião e traga de volta com um toque', 'Copiar link do cliente ou Enviar ao cliente (WhatsApp)'],
   },
   {
     n: 6, icone: FileSignature, cor: 'text-amber-600 bg-amber-50',

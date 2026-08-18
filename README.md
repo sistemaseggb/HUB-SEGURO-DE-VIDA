@@ -501,6 +501,8 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 24. [`supabase/migrations/024_estado_e_prazo_divida.sql`](supabase/migrations/024_estado_e_prazo_divida.sql)
 25. [`supabase/migrations/025_subscricao_e_beneficiarios.sql`](supabase/migrations/025_subscricao_e_beneficiarios.sql)
 26. [`supabase/migrations/026_assessor_na_apolice.sql`](supabase/migrations/026_assessor_na_apolice.sql)
+27. [`supabase/migrations/027_cirurgias.sql`](supabase/migrations/027_cirurgias.sql)
+28. [`supabase/migrations/028_proposta_publica_idade.sql`](supabase/migrations/028_proposta_publica_idade.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -571,6 +573,7 @@ npm run dev
 │   │   ├── premiacao.js          # GB Awards: maior emissor e maior prêmio do ano
 │   │   ├── transcricao.js        # Análise da gravação da reunião
 │   │   ├── apresentacao.js       # Traço da caneta, borracha e simulação
+│   │   ├── roteiroApresentacao.js# Para QUEM se fala: ordem, títulos e falas
 │   │   ├── telaDeApresentacao.js # Tela cheia e tela acesa (iPad/Safari)
 │   │   └── formularioConfig.js   # Perguntas do formulário de onboarding
 │   ├── components/               # Layout (sidebar) + componentes de UI
@@ -640,9 +643,13 @@ npm run dev
       dois) e focos; raio-X do patrimônio por classe, com previdência fora do
       inventário e o déficit de liquidez calculado; bloco empresarial com
       acordo de sócios, homem-chave e dívidas avalizadas
-- [x] **Apólice inteira no estudo**: morte acidental, fraturas, diária de
-      internação hospitalar (DIH) e assistência funeral individual e familiar,
-      além das diárias com limite de dias e franquia
+- [x] **Apólice inteira no estudo**: morte acidental, fraturas, **cirurgias**
+      (migração 027), diária de internação hospitalar (DIH) e assistência
+      funeral individual e familiar, além das diárias com limite de dias e
+      franquia. Cirurgias é a cobertura mais ACIONADA de todas e a que responde
+      ao "eu já tenho plano de saúde": o convênio cobre o procedimento e não
+      cobre a coparticipação, o material fora do rol, o cirurgião de escolha
+      dele nem as semanas de recuperação sem faturar
 - [x] **Prêmio mensal e anual** lado a lado: o desconto à vista aparece na
       proposta com a economia calculada, e o cliente escolhe a forma
 - [x] **Nada se perde durante a reunião**: o planejamento se grava sozinho
@@ -727,6 +734,49 @@ npm run dev
         S/E trocam a ferramenta, 1 a 5 trocam a tinta, B apaga a tela,
         Home/End vão às pontas.
       - **Cronômetro** da reunião e **tela preta** num toque.
+- [x] **A apresentação se adapta a quem está do outro lado da mesa**
+      (`roteiroApresentacao.js`) — o deck era correto e genérico: o mesmo
+      capítulo, na mesma ordem, com o mesmo título, para o pai de família de 34
+      anos e para o empresário de 61 que veio tratar do inventário da holding.
+      O perfil do cliente já era classificado pelo diagnóstico e a apresentação
+      nunca tinha usado essa informação para nada.
+      - **Cinco públicos, um por perfil**: provedor de família, sucessão e
+        patrimônio, sócio/empresário, sem dependentes, acúmulo e aposentadoria.
+        Cada um tem um EIXO — o assunto que carrega a reunião inteira.
+      - **A ordem muda, o arco não**: entender → tomar consciência → ver a
+        solução → ver o preço → decidir vale para todo mundo (mudar isso
+        produziria decks irreconhecíveis entre si). O que muda é quem abre a
+        consciência: quem veio por sucessão vê o inventário logo depois do
+        reenquadramento, e a autonomia da família vem depois; quem não tem
+        dependentes vê primeiro o que a apólice paga com ele VIVO.
+      - **Os títulos que o cliente lê mudam com ele**: "se a renda parasse
+        hoje, por quanto tempo a família manteria o padrão?" é uma pergunta
+        excelente para um provedor e sem sentido para quem mora sozinho — e um
+        cliente que lê uma pergunta sem sentido para ele conclui, corretamente,
+        que o estudo é de prateleira. A capa, o reenquadramento, o número, o
+        plano e o fechamento têm versão por eixo.
+      - **O que sai da reunião sai com o motivo escrito**: sem dependentes, o
+        capítulo do padrão de vida da família sai do caminho; quem não investe
+        nem aporta em previdência não recebe os três capítulos que debatem
+        "investir ou proteger" — era a apresentação criando a objeção em vez de
+        responder a ela. Nada é apagado: o índice mostra por quê, um toque traz
+        de volta, e o PDF e o link do cliente continuam inteiros.
+      - **Painel do roteiro** (botão *Roteiro*): para o capítulo em que ela
+        está, o objetivo em uma linha, a **frase pronta com os números deste
+        cliente**, a pergunta que devolve a palavra a ele, o cuidado a tomar e
+        a **objeção que costuma nascer ali** — com a resposta já calculada.
+        Objeção tem hora: "está caro" nasce no slide do investimento, "já tenho
+        plano de saúde" no da proteção em vida. Começa fechado, porque a tela
+        dela está compartilhada e quem decide o que aparece nela é ela.
+      - **Em que momento da reunião ela está** (abertura, retrato, consciência,
+        solução, investimento, prova, decisão) fica na barra, ao lado do número
+        do slide — é o que evita o erro mais caro: chegar ao preço antes de o
+        cliente ter tomado consciência do risco.
+- [x] **Capítulo da proteção em vida**: as coberturas que pagam com o cliente
+      aqui (invalidez, doenças graves, cirurgias, DIT, DIH, fraturas) deixaram
+      de aparecer diluídas entre outras dez linhas do quadro da apólice e
+      ganharam um capítulo. É a resposta com a lista na tela para "isso só
+      serve depois que eu morro" — a objeção mais comum da categoria.
 - [x] **Aposentadoria e acúmulo** deixa de ser só um foco na lista: meta de
       capital, o que a previdência atual entrega projetada e líquida, a renda
       que isso sustenta de verdade e quanto falta aportar por mês — com o elo

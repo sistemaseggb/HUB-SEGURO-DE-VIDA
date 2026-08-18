@@ -36,6 +36,8 @@
 // já calculada para aquele cliente.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { COBERTURAS_EM_VIDA } from './estudo.js'
+
 const m = (v) => `R$ ${Math.round(v).toLocaleString('pt-BR')}`
 const virg = (v) => String(v).replace('.', ',')
 
@@ -247,8 +249,7 @@ function objNaoRecebo({ e }) {
   const argumentos = [
     'Ele está certo sobre o seguro de vida tradicional, e negar isso destrói a credibilidade. O ponto é outro: seguro não é aplicação, é transferência de risco — como o seguro do carro, que ninguém quer usar.',
   ]
-  const emVida = ['invalidez', 'doencas_graves', 'dit', 'dih']
-    .filter((id) => e.valores[id] > 0)
+  const emVida = COBERTURAS_EM_VIDA.filter((id) => e.valores[id] > 0)
   if (emVida.length > 0) {
     argumentos.push(`E este plano não é só para depois: ${emVida.length} das coberturas pagam com ele VIVO — invalidez, doenças graves e diárias respondem pela maior parte dos sinistros da categoria.`)
     if (e.valores.doencas_graves > 0) {
@@ -263,6 +264,42 @@ function objNaoRecebo({ e }) {
     naoDiga: 'Não invente rentabilidade nem chame o seguro de investimento. Se ele descobrir '
       + 'depois que "investimento" era prêmio de risco, você perde o cliente e a indicação.',
     pergunta: 'Você faz seguro do carro esperando bater? A lógica aqui é a mesma — com a diferença de que boa parte deste plano paga com você aqui.',
+  }
+}
+
+// "Eu já tenho plano de saúde" — a objeção que aparece exatamente no capítulo
+// da proteção em vida, e a única que se responde mostrando o que o plano de
+// saúde NÃO paga. Ele cobre o procedimento; não cobre o que a vida cobra em
+// volta dele.
+function objPlanoDeSaude({ e }) {
+  const emVida = COBERTURAS_EM_VIDA.filter((id) => e.valores[id] > 0)
+  if (emVida.length === 0) return null
+
+  const argumentos = [
+    'Ele está certo, e o plano de saúde é indispensável — só que ele paga HOSPITAL, não paga VIDA. '
+    + 'Nenhum plano de saúde repõe um real de renda, e é a renda que para.',
+  ]
+  if (e.valores.cirurgias > 0) {
+    argumentos.push(`Cirurgias: ${m(e.valores.cirurgias)} por procedimento, em dinheiro na conta dele. `
+      + 'É o que cobre coparticipação, material fora do rol, o honorário do cirurgião que ele escolher '
+      + 'e o tempo de recuperação — tudo que o plano de saúde manda para o boleto do associado.')
+  }
+  if (e.valores.dih > 0) {
+    const d = e.diariaPorId?.dih
+    argumentos.push(`Internado, o plano de saúde paga o leito e a casa continua cobrando: ${m(e.valores.dih)} `
+      + `por dia${d?.dias ? `, até ${d.dias} diárias` : ''} entram para isso.`)
+  }
+  if (e.valores.doencas_graves > 0) {
+    argumentos.push(`E no diagnóstico de uma doença grave o plano de saúde autoriza o tratamento; `
+      + `${m(e.valores.doencas_graves)} caem na conta dele para o resto — que é a maior parte do custo real.`)
+  }
+  return {
+    argumentos,
+    naoDiga: 'Não diga que o plano de saúde dele é ruim nem sugira trocar um pelo outro. São produtos '
+      + 'diferentes e ele sabe disso; a frase que funciona é "um paga o hospital, o outro paga a sua vida '
+      + 'enquanto você se recupera".',
+    pergunta: 'Se você precisasse operar amanhã e ficar seis semanas sem trabalhar, o plano de saúde '
+      + 'resolveria a cirurgia. Quem resolveria as seis semanas?',
   }
 }
 
@@ -362,6 +399,18 @@ const CATALOGO = [
     probabilidade: ({ e }) => {
       const emVida = ['invalidez', 'doencas_graves', 'dit', 'dih'].some((id) => e.valores[id] > 0)
       return emVida ? POSSIVEL : PROVAVEL
+    },
+  },
+  {
+    id: 'plano_saude', rotulo: 'Já tenho plano de saúde',
+    comoSoa: '"Meu plano cobre tudo", "tenho o melhor convênio", "para isso eu tenho saúde"',
+    montar: objPlanoDeSaude,
+    // Quanto mais o estudo aposta nas coberturas em vida, mais certo é que a
+    // objeção apareça — ela nasce justamente do capítulo que as apresenta.
+    probabilidade: ({ e }) => {
+      const emVida = COBERTURAS_EM_VIDA.filter((id) => e.valores[id] > 0).length
+      if (emVida >= 3) return PROVAVEL
+      return emVida > 0 ? POSSIVEL : IMPROVAVEL
     },
   },
   {

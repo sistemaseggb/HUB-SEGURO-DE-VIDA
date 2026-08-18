@@ -114,6 +114,41 @@
 }
 
 /* ============================================================================
+   A ORDEM DOS CAPÍTULOS VEM DO ROTEIRO, NÃO DO ARQUIVO.
+
+   Cada público tem uma ordem própria: quem veio por sucessão vê o inventário
+   logo depois do reenquadramento; quem não tem dependentes vê primeiro o que
+   a apólice paga com ele vivo. Reescrever o JSX da proposta para cada um seria
+   manter cinco apresentações diferentes.
+
+   Com o `.proposta` em coluna flex, `roteiroApresentacao.js` só precisa dizer
+   um número por capítulo (`order`), e o JSX continua escrito na ordem em que
+   se lê melhor. Elementos `fixed` (a barra de ações, as bolinhas) saem do
+   fluxo e não viram itens flex — a barra continua exatamente onde estava.
+
+   Vale também na impressão: o PDF sai na ordem que o cliente viu na reunião.
+   ============================================================================ */
+.proposta {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── A BARRA NÃO PODE COMER O TÍTULO DO CAPÍTULO ─────────────────────────────
+   Fora da apresentação, a proposta tem uma barra fixa no topo (voltar, enviar,
+   imprimir). Ao clicar numa bolinha de navegação — que é como o CLIENTE folheia
+   o estudo no link que recebe — o capítulo encosta no alto da janela e os
+   primeiros 24px (computador) a 64px (celular) ficam atrás dessa barra:
+   justamente o rótulo da seção e a primeira linha do título.
+
+   `scroll-padding-top` reserva essa faixa para qualquer rolagem programada, sem
+   mexer no layout. Não vale durante a apresentação: ali a barra de cima não
+   existe e o encaixe do slide precisa ser exato, no zero. */
+html:not(.apresentando) { scroll-padding-top: 4rem; }
+@media (max-width: 640px) {
+  html:not(.apresentando) { scroll-padding-top: 5.5rem; }
+}
+
+/* ============================================================================
    MODO APRESENTAÇÃO — o iPad na mão, compartilhando a tela na reunião.
 
    A classe entra no <html> enquanto a apresentação está ligada, e faz três
@@ -188,6 +223,33 @@ html.apresentando .proposta section {
 
   html, body { background: #fff !important; }
 
+  /* ── O QUE NÃO CABIA NA PÁGINA ────────────────────────────────────────────
+     A tela tem rolagem; a folha não. Em A4 paisagem de verdade (1123 × 794px
+     a 96dpi) cinco capítulos passavam da altura da página — o pior deles, as
+     três formas de fazer, por 110px — e o `overflow: hidden` cortava o que
+     sobrava. Como esses capítulos são centralizados, o corte acontecia NOS
+     DOIS lados: sumia o rótulo da seção em cima e a nota de rodapé embaixo,
+     que é justamente onde está escrito "estimativa, não cotação". O cliente
+     recebia um PDF decepado sem ninguém perceber.
+
+     (Vale registrar como o defeito escapou: `scrollHeight` não enxerga corte
+     no TOPO, só embaixo. Medido por ele, três capítulos pareciam ter um
+     probleminha de 30px; medido pelos limites reais do conteúdo, eram cinco
+     capítulos e até 110px.)
+
+     A correção é de proporção, não de conteúdo: a folha imprime com a régua
+     menor (13px de base em vez de 16) e margem mais estreita. Medido nas duas
+     propostas do demonstrativo, sobram ~30px no pior capítulo de cada uma —
+     folga suficiente para um cliente com uma linha a mais de cobertura. Mexer
+     no conteúdo de cada capítulo resolveria um cliente e voltaria a estourar
+     no próximo.
+
+     A régua menor vale só na folha E só quando o que está sendo impresso é a
+     proposta (`:has(.proposta)`): apertar Ctrl+P em qualquer outra tela do
+     sistema não tem por que sair menor. Onde o `:has()` não existir, a regra
+     inteira é ignorada e a impressão volta a ser a de antes — nunca pior. */
+  html:has(.proposta) { font-size: 13px; }
+
   /* Garante que gradientes e fundos coloridos saiam no PDF */
   .proposta, .proposta * {
     -webkit-print-color-adjust: exact !important;
@@ -204,7 +266,7 @@ html.apresentando .proposta section {
     justify-content: center;
     height: 100vh;
     min-height: 0 !important;
-    padding: 1.6cm !important;
+    padding: 0.7cm !important;
     overflow: hidden;
   }
   .proposta section:last-of-type { break-after: auto; }
