@@ -7,6 +7,7 @@ import {
   Users2, Wallet, Shield, Landmark, Sparkles, Plus, Baby, Archive, TrendingDown, TrendingUp,
   ListChecks, Lightbulb, MessageSquareQuote, Clock3,
   Building2, PiggyBank, Coins, HeartPulse, Ambulance, AlertTriangle, Stethoscope,
+  Link2, ChevronDown,
 } from 'lucide-react'
 import { ETAPAS_FORM, ROTULOS_FORM } from '../lib/formularioConfig'
 import { supabase } from '../lib/supabase'
@@ -25,6 +26,7 @@ import { montarNiveis, planoQueCabe } from '../lib/niveis'
 import { analisarSubscricao, ATIVIDADES_RISCO } from '../lib/subscricao'
 import { responderObjecoes } from '../lib/objecoes'
 import { analisarBeneficiarios } from '../lib/beneficiarios'
+import { resumoRespostas } from '../lib/planejamentoPublico'
 import { ABAS_CLIENTE } from '../lib/navegacao'
 import { registrarVisita } from '../lib/recentes'
 import PainelDiagnostico from '../components/PainelDiagnostico'
@@ -1045,6 +1047,9 @@ function AbaPlanejamento({ idCliente, cliente }) {
         )}
       </div>
 
+      {/* Para quem não quer reunião: o cliente preenche o estudo sozinho. */}
+      <LinkPlanejamento idCliente={idCliente} cliente={cliente} />
+
       {/* A leitura do estudo: perfil, o que fazer e o que ainda perguntar.
           Fica logo abaixo da prontidão porque é a primeira coisa que a
           consultora precisa ler ao abrir o cliente antes de uma reunião. */}
@@ -2039,6 +2044,155 @@ function AbaPlanejamento({ idCliente, cliente }) {
         </div>
       </form>
     </Card>
+  )
+}
+
+// ─── O LINK PARA O CLIENTE PREENCHER SOZINHO ────────────────────────────────
+// Nem todo cliente vai a reunião. Alguns compram — só não sentam 40 minutos
+// numa call. Para eles, este bloco gera o link `/pl/<token>`: o mesmo
+// planejamento, virado do avesso, respondido no celular à hora que der.
+//
+// Quando o cliente termina, as respostas viram ESTE formulário (a RPC grava
+// direto nas colunas do planejamento) e nasce uma tarefa de conferência. A
+// consultora abre a aba e encontra o estudo montado, pronto para revisar e
+// precificar — que é a parte que continua sendo dela.
+function LinkPlanejamento({ idCliente, cliente }) {
+  const toast = useToast()
+  // A resposta carrega o cliente que a originou: trocar de cliente volta a
+  // mostrar o carregando em vez do link do cliente anterior por um instante.
+  const [lido, setLido] = useState({ id: null, dados: undefined })
+  const [versao, setVersao] = useState(0)
+  const [gerando, setGerando] = useState(false)
+  const [copiado, setCopiado] = useState(false)
+  const [abrirRespostas, setAbrirRespostas] = useState(false)
+
+  useEffect(() => {
+    let vivo = true
+    supabase.from('formularios_planejamento').select('*').eq('id_cliente', idCliente)
+      .order('enviado_em', { ascending: false }).limit(1)
+      // `false` = a tabela existe e este cliente ainda não tem link;
+      // `null`  = a migração 029 não foi rodada neste banco.
+      .then(({ data, error }) => { if (vivo) setLido({ id: idCliente, dados: error ? null : (data?.[0] ?? false) }) })
+    return () => { vivo = false }
+  }, [idCliente, versao])
+
+  const form = lido.id === idCliente ? lido.dados : undefined
+
+  async function gerar() {
+    setGerando(true)
+    const { error } = await supabase.from('formularios_planejamento').insert({ id_cliente: idCliente })
+    setGerando(false)
+    if (error) return toast.erro(`Não consegui gerar o link: ${error.message}`)
+    toast.ok('Link criado — é só enviar.')
+    setVersao((v) => v + 1)
+  }
+
+  function copiar(url) {
+    navigator.clipboard?.writeText(url)
+    setCopiado(true)
+    setTimeout(() => setCopiado(false), 2000)
+  }
+
+  if (form === undefined) return null
+  // Migração 029 ainda não rodou: não escondemos o recurso, explicamos.
+  if (form === null) {
+    return (
+      <p className="mb-5 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
+        Rode a migração <strong>029_planejamento_por_link.sql</strong> no Supabase para poder mandar
+        o planejamento por link ao cliente que não quer reunião.
+      </p>
+    )
+  }
+
+  const url = form ? `${window.location.origin}/pl/${form.token}` : null
+  const concluido = form && form.status === 'concluido'
+  const blocos = concluido ? resumoRespostas(form.respostas ?? {}) : []
+  const tom = { pendente: 'slate', em_andamento: 'yellow', concluido: 'green' }
+  const rotulo = {
+    pendente: 'Link enviado — aguardando', em_andamento: 'Cliente preenchendo',
+    concluido: 'Preenchido pelo cliente ✓',
+  }
+
+  return (
+    <div className="mb-5 rounded-2xl border border-slate-200/70 bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 rounded-xl bg-laranja-50 p-2 text-laranja-600"><Link2 size={16} /></span>
+          <div>
+            <p className="font-semibold text-slate-900">O cliente prefere preencher sozinho?</p>
+            <p className="text-xs text-slate-500">
+              Mande o link e ele responde o estudo pelo celular, no tempo dele. Quando terminar,
+              o planejamento aparece aqui preenchido.
+            </p>
+          </div>
+        </div>
+        {!form && (
+          <Button type="button" onClick={gerar} disabled={gerando}>
+            <ClipboardList size={16} /> {gerando ? 'Gerando…' : 'Gerar link'}
+          </Button>
+        )}
+      </div>
+
+      {form && (
+        <>
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+            <Badge tom={tom[form.status]}>{rotulo[form.status]}</Badge>
+            <code className="min-w-0 flex-1 truncate rounded bg-slate-50 px-2 py-1 text-xs text-slate-500">{url}</code>
+            <Button type="button" variant="secondary" onClick={() => copiar(url)}>
+              {copiado ? <><Check size={15} /> Copiado!</> : <><Copy size={15} /> Copiar</>}
+            </Button>
+            {whatsapp(cliente?.telefone) && (
+              <a target="_blank" rel="noreferrer"
+                href={whatsapp(cliente.telefone,
+                  `Olá ${(cliente.nome ?? '').split(' ')[0]}! Para eu montar seu planejamento sem precisar marcar reunião, `
+                  + `é só responder por aqui — leva uns 10 minutos e salva sozinho: ${url}`)}>
+                <Button type="button" variant="success"><MessageCircle size={15} /> Enviar</Button>
+              </a>
+            )}
+            <Button type="button" variant="secondary" onClick={gerar} disabled={gerando}
+              title="Cria um link novo — o anterior deixa de ser o mais recente">
+              <RefreshCw size={15} /> Novo
+            </Button>
+          </div>
+
+          {form.erro_aplicacao && (
+            <p className="mt-3 flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 p-3 text-xs text-red-700">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <span>
+                O cliente terminou, mas as respostas <strong>não entraram no estudo</strong> — passe os
+                dados à mão pelas respostas abaixo. Motivo técnico: {form.erro_aplicacao}
+              </span>
+            </p>
+          )}
+
+          {concluido && blocos.length > 0 && (
+            <div className="mt-3">
+              <button type="button" onClick={() => setAbrirRespostas((v) => !v)}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700">
+                <ChevronDown size={14} className={`transition-transform ${abrirRespostas ? 'rotate-180' : ''}`} />
+                {abrirRespostas ? 'Esconder' : 'Ver'} o que o cliente respondeu
+                {form.concluido_em && <span className="font-normal text-slate-400">· {dataBR(form.concluido_em)}</span>}
+              </button>
+              {abrirRespostas && (
+                <div className="mt-2 grid gap-3 rounded-xl bg-slate-50 p-3 md:grid-cols-2">
+                  {blocos.map((b) => (
+                    <div key={b.etapa}>
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{b.titulo}</p>
+                      {b.linhas.map(([r, v], i) => (
+                        <p key={i} className="flex justify-between gap-3 text-xs">
+                          <span className="text-slate-400">{r}</span>
+                          <span className="text-right font-medium text-slate-700">{v}</span>
+                        </p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
   )
 }
 

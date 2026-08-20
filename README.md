@@ -73,6 +73,43 @@ Tudo isso nasce de um arquivo só, [`src/lib/navegacao.js`](src/lib/navegacao.js
 menu, barra do celular, paleta e ajuda de atalhos leem do mesmo mapa, então uma
 tela nova nunca fica inalcançável por esquecimento.
 
+## 📝 O cliente que não quer reunião
+
+Existe um cliente que compra e não senta 40 minutos numa call. Ele responde no
+WhatsApp às onze da noite, resolve tudo por link e some da agenda por três
+semanas se a próxima etapa for "vamos marcar". Para ele, o Hub não tinha
+caminho: o planejamento só existia dentro da aba da consultora, preenchida ao
+vivo. Sem reunião não havia estudo, e sem estudo não havia proposta — a venda
+morria de agenda, não de preço.
+
+O link `/pl/<token>` é o planejamento virado do avesso: as mesmas perguntas,
+escritas para serem respondidas sozinho, no celular. Doze blocos curtos, salvos
+sozinhos, com **revisão final** antes de enviar.
+
+Três decisões sustentam o desenho:
+
+> **Ele preenche o diagnóstico, não a apólice.** Família, renda, custo de vida,
+> dívidas, cada classe do patrimônio, a empresa, o que já tem de seguro e quem
+> quer proteger — isso só ele sabe. Capital, coberturas e prêmio continuam saindo
+> do motor e da cotação: pedir que o cliente escolha o próprio capital seria pedir
+> que ele fizesse a consultoria, e é por não querer fazer isso que ele contrata
+> alguém.
+
+> **Branco não apaga.** A consultora pode ter anotado a renda numa ligação antes
+> de mandar o link. Cada coluna é gravada como `coalesce(<respondido>, <atual>)`:
+> o cliente só acrescenta, nunca zera o trabalho dela.
+
+> **Nada segue com erro.** Cada bloco é conferido antes de avançar e o envio
+> reconfere tudo de novo — não há ninguém ao lado para explicar mensagem de erro,
+> e um formulário que falha no último clique é um cliente que não volta. Números
+> fora de faixa são aparados **dentro** do que o banco aceita antes de chegar
+> nele, e se ainda assim a gravação falhar, as respostas ficam salvas e a
+> consultora recebe uma tarefa avisando.
+
+Quando ele envia, as respostas viram o planejamento de verdade (a RPC grava nas
+colunas do estudo) e nasce a tarefa de conferência. A consultora abre o cliente e
+encontra o estudo montado — falta só revisar e precificar, que é a parte dela.
+
 ## 🧠 A inteligência do planejamento
 
 O motor responde **quanto**. O [diagnóstico](src/lib/diagnostico.js) responde as
@@ -240,7 +277,8 @@ pode ser deliberado, e por isso é pergunta e não acusação.
   **Central do Dia** (tarefas, atrasos, aniversários e leads estagnados).
 - **Pipeline** — Kanban com arrastar-e-soltar, dias parados com alerta
   amarelo/vermelho configurável, motivo obrigatório ao perder um cliente.
-- **Clientes** — perfil 360º com abas: Planejamento (dados da reunião),
+- **Clientes** — perfil 360º com abas: Planejamento (dados da reunião — ou
+  preenchidos pelo próprio cliente, pelo link),
   **Comparador** (seguro resgatável × previdência, com o gráfico do cruzamento),
   Roteiro, **Transcrição** (análise da gravação do Tactiq), Reuniões, Apólices,
   **Documentos** (anexos no Storage), Formulário de onboarding, Tarefas e
@@ -263,6 +301,18 @@ pode ser deliberado, e por isso é pergunta e não acusação.
   etapas curtas, progresso salvo automaticamente (o cliente pode parar e voltar),
   sem login, seguro por token via RPC. Campos configuráveis em
   `src/lib/formularioConfig.js`.
+- **Planejamento por link** (`/pl/<token>`) — **para o cliente que não gosta de
+  reunião**. O mesmo estudo da aba Planejamento, virado do avesso: doze blocos
+  curtos que ele responde pelo celular, no horário dele. Cobre família, filhos e
+  quanto custam, renda e custo de vida, dívidas, o **raio-X do patrimônio por
+  classe**, previdência, empresa (só aparece se houver PJ), aposentadoria, os
+  seguros que ele já tem, perfil de risco e beneficiários. Termina numa **tela de
+  revisão** com botão de editar em cada bloco — o zero a mais na renda é pego ali,
+  e não na apresentação. Ao enviar, as respostas **viram o planejamento** (a RPC
+  grava direto nas colunas do estudo) e nasce uma tarefa de conferência: a
+  consultora abre o cliente e encontra o estudo montado, pronto para revisar e
+  precificar. O link é gerado no topo da aba Planejamento, com envio por WhatsApp
+  em um clique.
 - **Pós-Venda** — carteira de apólices ativas + Régua de Relacionamento.
 - **Agenda** — reuniões agrupadas por dia (atrasadas em destaque), confirmação
   por WhatsApp e mudança de status em 1 clique.
@@ -311,7 +361,8 @@ npm run build && npm test        # lint + motor + ponta a ponta
 ```
 
 Ou em separado: os que não precisam de navegador — `npm run test:motor`,
-`npm run test:planejamento`, `npm run test:premio`, `npm run test:premiacao`,
+`npm run test:planejamento`, `npm run test:plano-publico`, `npm run test:premio`,
+`npm run test:premiacao`,
 `npm run test:conhecimento`,
 `npm run test:transcricao`, `npm run test:comparador`, `npm run test:apresentacao`
 — e `npm run test:e2e`.
@@ -503,6 +554,7 @@ No painel do projeto → **SQL Editor**, rode **na ordem**:
 26. [`supabase/migrations/026_assessor_na_apolice.sql`](supabase/migrations/026_assessor_na_apolice.sql)
 27. [`supabase/migrations/027_cirurgias.sql`](supabase/migrations/027_cirurgias.sql)
 28. [`supabase/migrations/028_proposta_publica_idade.sql`](supabase/migrations/028_proposta_publica_idade.sql)
+29. [`supabase/migrations/029_planejamento_por_link.sql`](supabase/migrations/029_planejamento_por_link.sql)
 
 > Para a fila de mensagens se abastecer sozinha todo dia às 8h, habilite a
 > extensão **pg_cron** antes de rodar a 003 (painel → Database → Extensions →
@@ -575,11 +627,13 @@ npm run dev
 │   │   ├── apresentacao.js       # Traço da caneta, borracha e simulação
 │   │   ├── roteiroApresentacao.js# Para QUEM se fala: ordem, títulos e falas
 │   │   ├── telaDeApresentacao.js # Tela cheia e tela acesa (iPad/Safari)
-│   │   └── formularioConfig.js   # Perguntas do formulário de onboarding
+│   │   ├── formularioConfig.js   # Perguntas do formulário de onboarding (DPS)
+│   │   └── planejamentoPublico.js# Perguntas do planejamento que o cliente preenche
 │   ├── components/               # Layout (sidebar) + componentes de UI
 │   └── pages/                    # Dashboard, Pipeline, Clientes, Cliente 360º,
 │                                 # Pós-Venda, Cadastros, Proposta, Login,
-│                                 # Formulário público (/f/<token>)
+│                                 # Formulário público (/f/<token>) e
+│                                 # Planejamento por link (/pl/<token>)
 ```
 
 ## 🧭 Roadmap

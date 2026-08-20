@@ -26,6 +26,7 @@ const PosVenda = lazy(() => import('./pages/PosVenda'))
 const Cadastros = lazy(() => import('./pages/Cadastros'))
 const Proposta = lazy(() => import('./pages/Proposta'))
 const FormularioPublico = lazy(() => import('./pages/FormularioPublico'))
+const PlanejamentoPublico = lazy(() => import('./pages/PlanejamentoPublico'))
 const Agenda = lazy(() => import('./pages/Agenda'))
 const AssessorDetalhe = lazy(() => import('./pages/AssessorDetalhe'))
 const Mensagens = lazy(() => import('./pages/Mensagens'))
@@ -50,8 +51,10 @@ export default function App() {
           da sessão, então a troca de rota não muda de aparência. */}
       <Suspense fallback={<Spinner />}>
       <Routes>
-        {/* Rotas PÚBLICAS: formulário e proposta do cliente, sem login */}
+        {/* Rotas PÚBLICAS: formulário, planejamento e proposta do cliente, sem login */}
         <Route path="/f/:token" element={<FormularioPublico />} />
+        {/* O cliente que não quer reunião preenche o próprio planejamento aqui */}
+        <Route path="/pl/:token" element={<PlanejamentoPublico />} />
         <Route path="/p/:token" element={<Proposta publica />} />
 
         {/* Rotas internas: exigem login */}
