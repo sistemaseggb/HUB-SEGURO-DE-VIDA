@@ -3213,6 +3213,18 @@ grant execute on function public.fn_proposta_carregar(uuid) to anon, authenticat
 -- Como usar: rode APÓS a 028, colando o arquivo inteiro no SQL Editor.
 -- ============================================================================
 
+-- ── TUDO OU NADA ────────────────────────────────────────────────────────────
+-- Esta migração cria uma tabela E as funções que a fazem funcionar. Se ela
+-- parar no meio — porque falta uma migração anterior, porque a conexão caiu,
+-- porque alguém colou só metade — o estado que sobra é o PIOR de todos: a
+-- tabela existe, as funções não, e o Hub passa a mostrar o painel do link para
+-- a consultora enquanto o cliente que abre esse link recebe "inválido ou
+-- expirado". Parece que funcionou, e não funcionou.
+--
+-- O `begin`/`commit` fecha essa porta: ou o banco termina com tudo, ou termina
+-- exatamente como estava.
+begin;
+
 -- ── 0. Conferência de pré-requisitos ────────────────────────────────────────
 -- As migrações são aplicadas à mão no SQL Editor, e pular uma é fácil. Este
 -- formulário grava em colunas que nasceram da 014 à 027: sem elas, a função
@@ -3870,4 +3882,6 @@ revoke all on function public.fn_plan_ids(jsonb, text, text[]) from public;
 revoke all on function public.fn_plan_filhos(jsonb) from public;
 revoke all on function public.fn_plan_seguros(jsonb) from public;
 revoke all on function public.fn_plan_beneficiarios(jsonb) from public;
+
+commit;
 

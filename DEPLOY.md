@@ -163,6 +163,10 @@ Toda alteração enviada para a branch publicada faz a Vercel **republicar
 sozinha**. Se a mudança incluir uma **nova migração** (arquivo novo em
 `supabase/migrations/`), rode-a no SQL Editor como na Parte A2.
 
+> **Não sabe o que já rodou neste banco?** Cole
+> **`supabase/diagnostico.sql`** no SQL Editor e rode. Ele não altera nada:
+> só lista, migração por migração, o que já está no banco e o que falta.
+
 > **Ordem que evita susto:** rode a migração **antes** de publicar o site. Nos
 > dois sentidos nada quebra — o Hub avisa na tela quando falta uma coluna, e
 > uma migração rodada antes do deploy simplesmente fica esperando —, mas
