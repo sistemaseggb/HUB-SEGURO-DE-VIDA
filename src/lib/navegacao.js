@@ -115,7 +115,9 @@ export const ABAS_CLIENTE = [
     slug: 'planejamento', nome: 'Planejamento', icone: ChartPie, grupo: 'Reunião',
     descricao: 'O estudo: renda, patrimônio, coberturas e o prêmio',
     termos: ['estudo', 'capital', 'coberturas', 'calculo', 'numeros', 'apolice sugerida',
-      'preco', 'premio', 'niveis', 'objecoes', 'beneficiarios', 'subscricao'],
+      'preco', 'premio', 'niveis', 'objecoes', 'beneficiarios', 'subscricao',
+      // é aqui que mora o link para o cliente preencher o estudo sozinho
+      'link do cliente', 'sem reuniao', 'preencher sozinho', 'formulario do planejamento'],
   },
   {
     slug: 'comparador', nome: 'Comparador', icone: Scale, grupo: 'Reunião',

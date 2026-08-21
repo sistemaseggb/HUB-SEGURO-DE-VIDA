@@ -23,7 +23,7 @@ Vercel e (C) o teste final. Reserve ~30 minutos na primeira vez.
 **Jeito fácil (recomendado, 1 minuto):** No Supabase, abra **SQL Editor** →
 **New query**. Abra o arquivo **`supabase/setup_completo.sql`** deste
 repositório, copie **tudo**, cole no editor e clique em **Run**. Esse arquivo já
-junta as 28 migrações na ordem certa — pronto. *(Use este caminho num projeto
+junta as 29 migrações na ordem certa — pronto. *(Use este caminho num projeto
 Supabase novo/vazio.)*
 
 **Jeito manual (se preferir, ou se o de cima der erro):** rode um arquivo de
@@ -54,6 +54,11 @@ cada vez, na **ordem**, copiando o conteúdo de cada um da pasta
 22. `022_comparador.sql`
 23. `023_apresentacao.sql`
 24. `024_estado_e_prazo_divida.sql`
+25. `025_subscricao_e_beneficiarios.sql`
+26. `026_assessor_na_apolice.sql`
+27. `027_cirurgias.sql`
+28. `028_proposta_publica_idade.sql`
+29. `029_planejamento_por_link.sql` *(o link do planejamento para o cliente)*
 
 > **Como saber se deu certo?** Cada Run deve terminar com "Success". Em
 > **Table Editor** você verá as tabelas (clientes, apólices, planejamentos…).
@@ -116,8 +121,9 @@ No Supabase → **Authentication → URL Configuration**:
 - **Site URL**: cole o endereço da Vercel.
 - **Redirect URLs**: adicione também o endereço da Vercel.
 
-Isso faz o login e os links públicos (`/f/...` do formulário e `/p/...` da
-proposta) funcionarem no domínio publicado.
+Isso faz o login e os links públicos funcionarem no domínio publicado:
+`/f/...` (formulário de DPS), `/pl/...` (planejamento preenchido pelo cliente)
+e `/p/...` (proposta).
 
 ---
 
@@ -156,6 +162,14 @@ mostra uma prévia e importa sem duplicar quem já existe.
 Toda alteração enviada para a branch publicada faz a Vercel **republicar
 sozinha**. Se a mudança incluir uma **nova migração** (arquivo novo em
 `supabase/migrations/`), rode-a no SQL Editor como na Parte A2.
+
+> **Ordem que evita susto:** rode a migração **antes** de publicar o site. Nos
+> dois sentidos nada quebra — o Hub avisa na tela quando falta uma coluna, e
+> uma migração rodada antes do deploy simplesmente fica esperando —, mas
+> migrando primeiro a consultora nunca vê um botão novo que ainda não funciona.
+
+Migrações já rodadas **não precisam ser rodadas de novo**: rode apenas o
+arquivo novo. E rodar duas vezes por engano não duplica nem apaga nada.
 
 ## Custo
 Os planos **gratuitos** da Vercel e do Supabase atendem tranquilamente o uso de

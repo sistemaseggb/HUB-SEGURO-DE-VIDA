@@ -11,6 +11,8 @@
 // Nada é persistido: recarregou a página, os dados demo voltam ao início.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { aplicarAoPlano } from './planejamentoPublico.js'
+
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
   : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = Math.random() * 16 | 0
@@ -92,7 +94,7 @@ function semear() {
       motivo: 'Achou o investimento alto no momento',
     }),
   ]
-  const [carlos, fernanda, rodrigo, beatriz, , , gustavo] = clientes
+  const [carlos, fernanda, rodrigo, beatriz, , ana, gustavo] = clientes
 
   const apolice = (cliente, seg, premio, capital, pct, extras = {}) => {
     const comissao = Math.round(premio * 12 * pct) / 100
@@ -314,6 +316,16 @@ function semear() {
     respostas: {}, enviado_em: iso(diasAtras(2)), iniciado_em: null, concluido_em: null, updated_at: iso(diasAtras(2)),
   }]
 
+  // Planejamento por link (migração 029): o cliente que não quer reunião
+  // preenche o próprio estudo em /pl/<token>. Um link ainda em branco, para a
+  // demonstração (e os testes) percorrerem o formulário do começo.
+  const formularios_planejamento = [{
+    id: idDemo(), id_cliente: ana.id, token: 'demo-plano-aberto', status: 'pendente',
+    etapa_atual: 0, respostas: {}, enviado_em: iso(diasAtras(1)),
+    iniciado_em: null, concluido_em: null, aplicado_em: null, erro_aplicacao: null,
+    updated_at: iso(diasAtras(1)),
+  }]
+
   // Comissões importadas: 3 competências, várias seguradoras, Nati × Bruno
   const m0 = mesTrunc(mesAtras(0)), m1 = mesTrunc(mesAtras(1)), m2 = mesTrunc(mesAtras(2))
   const com = (competencia, seguradora, cliente, valor, extras = {}) => ({
@@ -406,7 +418,7 @@ function semear() {
   return {
     assessores, seguradoras, clientes, apolices, planejamentos, reunioes, interacoes, tarefas,
     transcricoes,
-    formularios_onboarding: formularios, comissoes_importadas, fila_mensagens, historico_funil,
+    formularios_onboarding: formularios, formularios_planejamento, comissoes_importadas, fila_mensagens, historico_funil,
     documentos: [], agenda_externa: [],
     configuracoes: [{
       id: 1, split_natalia_pct: 40, split_assessor_pct: 30, split_escritorio_pct: 30,
@@ -897,6 +909,51 @@ export function criarSupabaseDemo() {
           if (args.p_concluido) f.concluido_em = iso(hoje())
         }
         return { data: true, error: null }
+      }
+      // ── Planejamento por link (migração 029) ─────────────────────────────
+      // Mesmo contrato das RPCs do banco. A aplicação das respostas no
+      // planejamento usa `aplicarAoPlano()` — a MESMA regra que a função
+      // `fn_plan_aplicar` implementa em SQL, para o modo demonstração mostrar
+      // exatamente o que acontece em produção.
+      if (fn === 'fn_plan_carregar') {
+        const f = db.formularios_planejamento.find((x) => x.token === args.p_token)
+        if (!f) return { data: { erro: 'planejamento_nao_encontrado' }, error: null }
+        const c = db.clientes.find((x) => x.id === f.id_cliente)
+        if (f.status === 'pendente') { f.status = 'em_andamento'; f.iniciado_em = iso(hoje()) }
+        return {
+          data: {
+            primeiro_nome: c?.nome?.split(' ')[0] ?? '', respostas: f.respostas,
+            status: f.status, etapa_atual: f.etapa_atual,
+          }, error: null,
+        }
+      }
+      if (fn === 'fn_plan_salvar') {
+        const f = db.formularios_planejamento.find((x) => x.token === args.p_token)
+        if (!f || f.status === 'concluido') {
+          return { data: { erro: 'planejamento_nao_encontrado_ou_concluido' }, error: null }
+        }
+        f.respostas = args.p_respostas ?? {}
+        f.etapa_atual = Math.max(Number(args.p_etapa) || 0, 0)
+        f.status = args.p_concluido ? 'concluido' : 'em_andamento'
+        f.iniciado_em ??= iso(hoje())
+        if (!args.p_concluido) return { data: { ok: true }, error: null }
+
+        f.concluido_em = iso(hoje())
+        const alvo = db.planejamentos.find((x) => x.id_cliente === f.id_cliente)
+        const campos = aplicarAoPlano(f.respostas)
+        if (alvo) Object.assign(alvo, campos)
+        else db.planejamentos.push({ id: uuid(), id_cliente: f.id_cliente, token_proposta: uuid(),
+          anos_protecao: 10, dividas_total: 0, focos: [], dependentes: [], seguros_existentes: [],
+          atividades_risco: [], beneficiarios: [], roteiro: {}, ...campos,
+          created_at: iso(hoje()), updated_at: iso(hoje()) })
+        f.aplicado_em = iso(hoje())
+        db.tarefas.push({
+          id: uuid(), id_cliente: f.id_cliente, tipo: 'planejamento', automatica: true,
+          titulo: 'Planejamento preenchido pelo cliente: conferir os números e montar a proposta',
+          data_vencimento: dia(hoje()), concluida: false, concluida_em: null,
+          created_at: iso(hoje()),
+        })
+        return { data: { ok: true, aplicado: true }, error: null }
       }
       if (fn === 'fn_proposta_carregar') {
         const p = db.planejamentos.find((x) => x.token_proposta === args.p_token)
