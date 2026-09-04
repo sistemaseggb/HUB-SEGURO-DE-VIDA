@@ -1031,7 +1031,8 @@ export default function Relatorios() {
                             <span className="font-medium text-slate-800">{cliente}</span>
                             <span className="text-xs text-slate-500">{c.n} lançamento(s) · {brl(c.total)}</span>
                             <div className="ml-auto w-60">
-                              <Select defaultValue="" onChange={(e) => e.target.value && vincularAssessor(cliente, e.target.value)}>
+                              <Select defaultValue="" onChange={(e) => e.target.value && vincularAssessor(cliente, e.target.value)}
+                                aria-label={`Vincular um assessor aos lançamentos de ${cliente}`}>
                                 <option value="">Vincular assessor...</option>
                                 {assessoresLista.map((a) => (
                                   <option key={a.id} value={a.id}>{a.nome}{a.codigo ? ` (${a.codigo})` : ''}</option>

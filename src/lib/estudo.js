@@ -595,6 +595,57 @@ const CAMPOS_CONTAGEM = {
   peso_kg: (v) => `${String(v).replace('.', ',')} kg`,
 }
 
+// ─── O NOME QUE A CONSULTORA USA ─────────────────────────────────────────────
+// As mensagens da conferência são lidas com o cliente na sala. Citar a coluna
+// do banco ("o campo custo_vida_mensal está negativo") entrega o encanamento
+// para quem só quer saber qual número corrigir. Coberturas já sabem o próprio
+// nome no catálogo; o resto mora aqui, do lado de `CAMPOS_CONTAGEM`, porque é
+// a mesma natureza de conhecimento: o que este campo É.
+const NOME_DO_CAMPO = {
+  renda_mensal: 'renda mensal',
+  custo_vida_mensal: 'custo de vida mensal',
+  dividas_total: 'total de dívidas',
+  dividas_prazo_anos: 'prazo restante da dívida',
+  patrimonio_total: 'patrimônio total',
+  patrimonio_imoveis: 'patrimônio em imóveis',
+  patrimonio_investimentos: 'patrimônio em investimentos',
+  patrimonio_empresa: 'participação na empresa',
+  patrimonio_veiculos: 'patrimônio em veículos',
+  patrimonio_outros: 'outros bens',
+  previdencia_saldo: 'saldo da previdência',
+  previdencia_aporte_mensal: 'aporte mensal na previdência',
+  renda_desejada_aposentadoria: 'renda desejada na aposentadoria',
+  idade_aposentadoria: 'idade de aposentadoria',
+  cobertura_atual: 'cobertura que ele já tem',
+  anos_protecao: 'anos de proteção',
+  num_dependentes: 'número de dependentes',
+  itcmd_pct: 'alíquota do ITCMD',
+  custas_pct: 'custas e honorários',
+  premio_estimado: 'prêmio mensal',
+  premio_anual: 'prêmio anual',
+  pj_valuation: 'valuation da empresa',
+  pj_participacao_pct: 'participação societária',
+  pj_lucro_anual: 'lucro anual da empresa',
+  pj_faturamento_anual: 'faturamento anual da empresa',
+  pj_divida_avalizada: 'dívida avalizada',
+  pj_num_socios: 'número de sócios',
+  peso_kg: 'peso',
+  altura_cm: 'altura',
+}
+
+export function rotuloDoCampo(campo) {
+  if (NOME_DO_CAMPO[campo]) return NOME_DO_CAMPO[campo]
+  const cob = COBERTURAS.find((c) => c.campo === campo)
+  if (cob) return `capital de ${(cob.curto ?? cob.rotulo).toLowerCase()}`
+  // Acrônimo não se escreve em minúscula: "limite de diárias — Renda diária
+  // (DIT)" lê melhor que "limite de diárias de renda diária (dit)".
+  const dias = COBERTURAS.find((c) => c.campoDias === campo)
+  if (dias) return `limite de diárias — ${dias.curto ?? dias.rotulo}`
+  const fr = COBERTURAS.find((c) => c.campoFranquia === campo)
+  if (fr) return `franquia — ${fr.curto ?? fr.rotulo}`
+  return campo
+}
+
 // Como escrever o valor sugerido para um campo do planejamento. Dinheiro é o
 // padrão porque é o caso comum; a exceção é declarada acima.
 export function valorDoCampo(campo, valor) {
@@ -954,9 +1005,25 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
   // não espera o óbito — e a empresa perde quem a fazia girar do mesmo jeito.
   // Deixar a invalidez fora do estudo empresarial cobre metade do risco e
   // cobra o prêmio inteiro.
+  //
+  // E O FILHO NÃO CUSTA PARA SEMPRE. O capital de morte já sabia disso: ele
+  // projeta o padrão de vida SEM os filhos pelo horizonte inteiro e soma o
+  // gasto de cada um só até os 24 (`capitalReposicaoRenda`). A invalidez
+  // repetia a conta errada que a morte já tinha corrigido — multiplicava o
+  // custo de vida CHEIO, filhos incluídos, por todos os anos de proteção. Um
+  // cliente com dois filhos pequenos saía com invalidez 40% acima da morte,
+  // sem que nada no estudo explicasse a diferença: `porqueCobertura` continua
+  // dizendo "o mesmo capital da morte", a apresentação repete a frase, e o
+  // prêmio a mais recai justo na cobertura que o cliente entende menos e é a
+  // primeira que ele manda cortar.
+  //
+  // Com dependentes, a régua é a mesma da morte. Sem dependentes ela continua
+  // sendo o custo de vida cheio: aí não há filho na conta, e o dinheiro é para
+  // ele próprio viver sem trabalhar — que é exatamente o ponto do parágrafo
+  // acima.
   const capitalInvalidezSugerido = tipo === 'pj'
     ? q(plano.pj_divida_avalizada)
-    : custoVida * 12 * anos + dividas
+    : (temDependentes ? capitalReposicaoRenda : custoVida * 12 * anos) + dividas
 
   // ── Bloco empresarial ─────────────────────────────────────────────────────
   const pjValuation = q(plano.pj_valuation)
@@ -1370,6 +1437,50 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
   // Cada item é um aviso acionável. É o que impede a apresentação de mostrar
   // um número que não fecha na frente do cliente.
   const inconsistencias = []
+
+  // ── O NEGATIVO QUE VIRAVA ZERO EM SILÊNCIO ────────────────────────────────
+  // `q()` apara todo valor negativo para 0 — e isso está certo: um "-5" não
+  // pode virar capital negativo na proposta do cliente. O que estava errado era
+  // o silêncio. O cabeçalho deste arquivo promete que "o que sai errado é
+  // sinalizado na conferência, não escondido", e não era: quem colasse
+  // "-1.500.000" de uma planilha (onde parênteses e sinal marcam estorno) via o
+  // campo preenchido na tela e o estudo tratando aquilo como ZERO. Pior no
+  // capital de morte, porque `definido()` aceita o número: o estudo não cai na
+  // sugestão, ele adota o zero. A apólice sai sem a cobertura principal e nada
+  // na conferência diz por quê.
+  //
+  // Aqui o sinal é devolvido. Um por campo, com o valor lido, porque a
+  // consultora precisa saber QUAL número ela precisa digitar de novo.
+  const camposNumericos = [
+    ...COBERTURAS.map((c) => c.campo),
+    ...COBERTURAS.map((c) => c.campoDias).filter(Boolean),
+    ...COBERTURAS.map((c) => c.campoFranquia).filter(Boolean),
+    ...CLASSES_PATRIMONIO.map((c) => c.campo),
+    'renda_mensal', 'custo_vida_mensal', 'dividas_total', 'patrimonio_total',
+    'cobertura_atual', 'anos_protecao', 'dividas_prazo_anos', 'num_dependentes',
+    'itcmd_pct', 'custas_pct', 'premio_estimado', 'premio_anual',
+    'previdencia_aporte_mensal', 'renda_desejada_aposentadoria', 'idade_aposentadoria',
+    'pj_valuation', 'pj_participacao_pct', 'pj_lucro_anual', 'pj_faturamento_anual',
+    'pj_divida_avalizada', 'pj_num_socios', 'peso_kg', 'altura_cm',
+  ]
+  const negativos = [...new Set(camposNumericos)]
+    .filter((campo) => campo in plano && definido(plano[campo]) && Number(plano[campo]) < 0)
+  for (const campo of negativos) {
+    // O destino do valor negativo depende do tipo do campo, e dizer o destino
+    // errado seria trocar um defeito por outro: dinheiro é aparado para ZERO
+    // por `q()`, enquanto contagens e percentuais são aparados para o MÍNIMO
+    // aceito por `inteiro()` e `pctVal()` — anos de proteção viram 1, não 0.
+    const contagem = campo in CAMPOS_CONTAGEM || campo.endsWith('_pct')
+    inconsistencias.push({
+      grave: true, corrigir: campo, valor: Math.abs(Math.round(n(plano[campo]))),
+      texto: `O campo "${rotuloDoCampo(campo)}" está com um valor negativo `
+        + `(${valorDoCampo(campo, n(plano[campo]))}). O estudo não usa número negativo: `
+        + (contagem
+          ? 'este campo entra na conta aparado para o mínimo aceito, que não é o que está na tela. '
+          : 'este campo entra na conta como zero, embora pareça preenchido na tela. ')
+        + 'Confira o número antes de apresentar.',
+    })
+  }
   if (renda > 0 && custoVida > renda) {
     inconsistencias.push({
       grave: true,
@@ -1559,6 +1670,21 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
     inconsistencias.push({
       grave: false,
       texto: 'O plano só paga se o cliente morrer. Sem invalidez, doenças graves ou DIT, o "isso só serve depois que eu morro" fica sem resposta — e essas coberturas respondem por boa parte dos sinistros.',
+    })
+  }
+  // A REGRA DA SUBSCRIÇÃO VALE PARA O NÚMERO QUE VAI À SEGURADORA, NÃO SÓ PARA
+  // A SUGESTÃO. Nenhuma companhia cobre mais o adoecer do que o morrer, e o
+  // estudo já respeitava isso — mas só ao SUGERIR: `tetoDG` compara com o
+  // capital de morte SUGERIDO. Assim que a consultora digitava os dois campos,
+  // a trava sumia. Baixar a morte para 500 mil e deixar doenças graves em 2 mi
+  // passava sem uma palavra, ia para a cotação e voltava recusado — depois de o
+  // cliente já ter visto o número. A conferência existe exatamente para essa
+  // recusa acontecer aqui, e não lá.
+  if (valores.doencas_graves > 0 && valores.morte > 0
+    && valores.doencas_graves > valores.morte) {
+    inconsistencias.push({
+      grave: true, corrigir: 'capital_doencas_graves', valor: Math.round(valores.morte),
+      texto: `Doenças graves (${Math.round(valores.doencas_graves).toLocaleString('pt-BR')}) está acima do capital de morte (${Math.round(valores.morte).toLocaleString('pt-BR')}). A seguradora não cobre mais o adoecer do que o morrer: do jeito que está, a proposta volta da subscrição com a cobertura reduzida ou recusada — e o cliente já terá visto o número maior.`,
     })
   }
   // Aval é executado na invalidez também: o banco não espera o óbito.

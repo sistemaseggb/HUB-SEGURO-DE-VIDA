@@ -111,6 +111,57 @@ console.log('\n── A subscrição nunca é otimista por engano ──')
 }
 
 {
+  // ── QUEM NUNCA SAIU DA CADEIRA NÃO PODE SAIR COMO RISCO ALTO ──────────────
+  // A lista de risco alto é feita de palavras, e duas delas pegavam gente de
+  // escritório: "aplicativo" (mirando o motorista de app) classificava quem
+  // PROGRAMA aplicativos, e "segurança" (mirando o vigilante) classificava
+  // quem cuida de segurança da informação. Os dois saíam com agravo de 1,6,
+  // aviso de possível recusa e o caso marcado como não automático — numa
+  // carteira em que profissional liberal e sócio de empresa de tecnologia são
+  // o cliente típico.
+  //
+  // O falso positivo custa nos dois sentidos: combina prazo e preço errados
+  // com um cliente de risco baixo, e gasta o crédito do aviso para quando ele
+  // for verdadeiro. Por isso os dois lados são cobrados aqui.
+  const naoEhAlto = [
+    'Desenvolvedor de aplicativos',
+    'Desenvolvedora de aplicativos móveis',
+    'Gerente de segurança da informação',
+    'Coordenador de segurança do trabalho',
+    'Analista de segurança da informação',
+  ]
+  let todosBaixos = true
+  for (const p of naoEhAlto) {
+    const c = classificarProfissao(p)
+    if (c?.id === 'alto') { todosBaixos = false; console.log(`   ✗ "${p}" → alto`) }
+  }
+  ok(todosBaixos, 'trabalho de escritório nunca cai na classe de risco ocupacional alto')
+
+  // E o que a lista existe para pegar continua sendo pego.
+  const ehAlto = [
+    'Motorista de aplicativo', 'Entregador de aplicativo', 'Motoboy',
+    'Vigilante noturno', 'Segurança patrimonial', 'Agente de segurança',
+    'Guarda municipal', 'Piloto de avião', 'Comissário de bordo',
+    'Policial militar', 'Caminhoneiro', 'Pedreiro', 'Mergulhador profissional',
+  ]
+  let todosAltos = true
+  for (const p of ehAlto) {
+    const c = classificarProfissao(p)
+    if (c?.id !== 'alto') { todosAltos = false; console.log(`   ✗ "${p}" → ${c?.id ?? 'null'}`) }
+  }
+  ok(todosAltos, 'e o risco ocupacional de verdade continua sendo classificado como alto')
+
+  // O agravo entra na subscrição: um desenvolvedor não pode sair com caso
+  // "não automático" por causa do nome da profissão dele.
+  const dev = analisarSubscricao(
+    estudoCom({ capital_sugerido: 400_000, capital_invalidez: 0, capital_doencas_graves: 0,
+      verba_sucessoria: 0, dit_diaria: 0, premio_estimado: 300 }, 30),
+    { ...planoBase(), profissao: 'Desenvolvedor de aplicativos' })
+  ok(!dev.fatores.some((f) => f.id.startsWith('profissao-')),
+    'e a profissão dele não entra como fator de agravo na subscrição')
+}
+
+{
   // A restrição é o pior tipo de surpresa: precisa aparecer SEMPRE que a
   // atividade excluir a cobertura de acidente.
   let todasAvisadas = true

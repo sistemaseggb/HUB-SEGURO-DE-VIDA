@@ -1,6 +1,14 @@
 // Parser de CSV tolerante: detecta o separador (; , ou tab), respeita aspas
 // e devolve { cabecalho: [...], linhas: [[...], ...] }
 export function parseCSV(texto) {
+  // A PORTA DE ENTRADA DE TODA PLANILHA DO SISTEMA. O que chega aqui vem de
+  // `FileReader`, de colagem no textarea e da leitura de .xlsx — três caminhos
+  // que devolvem string quase sempre, e `null` quando a leitura falha. Quando
+  // isso acontecia, a tela de Importar quebrava com "Cannot read properties of
+  // null" em vez de dizer que o arquivo não deu para ler. Planilha vazia e
+  // planilha ilegível são a mesma resposta para quem está importando: não veio
+  // nada. `planilhaGeral.js`, que é o leitor irmão deste, já tratava assim.
+  if (typeof texto !== 'string') return { cabecalho: [], linhas: [] }
   const limpo = texto.replace(/^﻿/, '').trim()
   if (!limpo) return { cabecalho: [], linhas: [] }
 
@@ -45,6 +53,10 @@ export const normalizar = (s) =>
 
 // Acha o índice da coluna cujo cabeçalho contém um dos apelidos
 export function acharColuna(cabecalho, apelidos) {
+  // Cabeçalho ausente é "não achei a coluna", não uma exceção: quem chama já
+  // trata o -1, e a planilha sem cabeçalho precisa cair na mensagem de coluna
+  // faltando, que é a que explica o problema para quem está importando.
+  if (!Array.isArray(cabecalho) || !Array.isArray(apelidos)) return -1
   const norm = cabecalho.map(normalizar)
   for (const apelido of apelidos) {
     const i = norm.findIndex((h) => h.includes(apelido))

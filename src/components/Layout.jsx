@@ -175,7 +175,8 @@ export default function Layout() {
         <div className="flex items-center justify-between px-4 pb-4 pt-5">
           <Link to="/" className="flex items-center gap-3">
             <span className="inline-flex items-center rounded-xl bg-white px-2 py-1.5 shadow-sm">
-              <img src="/logo-gb.png" alt="GB" style={{ height: 30 }} />
+              <img src="/logo-gb.png" srcSet="/logo-gb-96.png 96w, /logo-gb-192.png 192w, /logo-gb.png 800w" sizes="30px"
+                alt="GB" style={{ height: 30 }} />
             </span>
             <span>
               <span className="block font-display text-[0.95rem] font-semibold leading-tight text-white">Hub Seguros</span>
@@ -283,7 +284,7 @@ export default function Layout() {
               menu, e o espaço aqui vale mais para a trilha e o selo de demo. */}
           <Link to="/guia"
             className="hidden shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-laranja-300 hover:text-laranja-700 sm:inline-flex"
-            title="Guia passo a passo: como usar o Hub do começo ao fim">
+            title="Guia da consultoria: o método, e de onde sai cada número do estudo">
             <LifeBuoy size={15} /> Ajuda
           </Link>
           {/* O selo de demonstração NUNCA se esconde, nem no celular: ele é o

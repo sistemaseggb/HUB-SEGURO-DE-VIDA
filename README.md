@@ -360,14 +360,45 @@ mesmo com `.env`, use `VITE_DEMO=1 npm run dev`.
 npm run build && npm test        # lint + motor + ponta a ponta
 ```
 
-Ou em separado: os que não precisam de navegador — `npm run test:motor`,
+Ou em separado: os que não precisam de navegador — `npm run test:formato`,
+`npm run test:tutorial`, `npm run test:motor`,
 `npm run test:planejamento`, `npm run test:plano-publico`, `npm run test:premio`,
 `npm run test:premiacao`,
 `npm run test:conhecimento`,
 `npm run test:transcricao`, `npm run test:comparador`, `npm run test:apresentacao`
-— e `npm run test:e2e`.
+— e `npm run test:e2e`, que agora **constrói sozinho** antes de rodar (antes
+falhava num clone novo dizendo que faltava o `dist/`, e só a CI acertava porque
+buildava antes).
 A suíte de navegador sobe o servidor de preview sozinha
 (e reaproveita um que já esteja rodando), então basta um terminal.
+
+**`test:formato`** — as funções mais vistas do sistema e as últimas a ganhar
+teste. `format.js` não calcula nada: só decide como cada número e cada data
+**aparecem** — e por isso nenhum defeito ali quebra uma tela, todos apenas
+fazem a tela dizer a coisa errada com naturalidade. Foi assim que passaram
+despercebidos um `tempoRelativo` que virava "ontem" a partir das 21h (a mesma
+virada de dia que o próprio arquivo já corrigira duas vezes, em `hojeLocal` e
+`mesLocal`), um "há NaN ano(s)" escrito por extenso quando a data era inválida,
+e um "R$ 1.000 mil" para tudo entre R$ 999.500 e R$ 999.999. O teste fixa
+`TZ=America/Sao_Paulo` antes do primeiro `Date` e **confere que fixou**: rodando
+em UTC, como roda a CI, o defeito do fuso não existe e o teste passaria sem
+provar nada. O que se confere é o fuso de quem usa o sistema, não o da máquina
+que roda o teste.
+
+**`test:tutorial`** — o Guia não pode mentir sobre o motor. Ele ensina a
+consultora a **defender** os números do estudo (de onde sai o capital de morte,
+por que o filho some da conta aos 24, por que a apólice da empresa não abate o
+gap), e ela repete isso na frente do cliente. Um manual escrito à mão começaria
+certo e envelheceria sozinho — alguém ajusta uma regra e o texto segue ensinando
+a conta antiga com toda a confiança de quem foi escrito uma vez. Por isso o Guia
+**roda `calcularEstudo()` de verdade** sobre um cliente de exemplo, e por isso
+este teste existe: ele confere que as AFIRMAÇÕES do guia continuam verdadeiras
+no motor — que as três parcelas ainda somam o capital de morte, que a invalidez
+ainda acompanha a morte quando há dependentes, que o salto entre `gap` e
+`gapPortavel` ainda é a vida em grupo mais a prestamista. São 60 conferências, e
+a primeira execução reprovou numa: eu tinha escrito que o salto era só o capital
+que evapora, e são as **duas** coisas. O teste pegou a imprecisão antes de ela
+chegar à consultora.
 
 **`test:motor`** — `calcularEstudo()` é a única fonte dos números do
 planejamento *e* da proposta: se ele erra, a consultora apresenta o erro para
@@ -469,7 +500,7 @@ colhida da própria implementação: a alíquota certa em cada faixa da regressi
 VGBL tributando só o ganho e PGBL o total, a dedução do PGBL limitada aos 12%
 da renda, e o ano do cruzamento numa conta redonda.
 
-**`test:e2e`** — cinco suítes. A **principal** navega o sistema inteiro
+**`test:e2e`** — seis suítes. A **principal** navega o sistema inteiro
 nas duas visões — consultora (login, dashboard, pipeline, cliente 360 com o
 planejamento completo, transcrição da reunião, apólices, DPS, proposta,
 relatórios com fechamento, pós-venda, agenda, mensagens, cadastros) e cliente
@@ -496,6 +527,55 @@ quatro estados — do lead recém-cadastrado (sem nada preenchido) ao PF+PJ
 completo, mais um cliente perdido. Em cada parada cobra que não haja erro de
 console, NaN/Infinity/undefined na tela, tela em branco nem rolagem horizontal
 a 375px — apontando o elemento culpado quando falha. Capturas em `e2e-shots/`.
+
+A de **acessibilidade** cobra o que sobra da tela quando o conteúdo dela some,
+que é a situação de quem usa leitor de tela: todo controle com nome, todo campo
+com rótulo, toda imagem com alt e exatamente um `h1` por página. Ela audita o
+**DOM depois do React montar**, não o JSX — um `aria-label` que a build
+derrubasse não passaria —, e passa por 11 rotas no computador, as 13 abas do
+Cliente 360 e as mesmas 11 rotas no celular, onde a barra inferior e a busca são
+outros controles. O retrato inicial era melhor do que parecia (nenhum botão sem
+nome, nenhuma imagem sem alt), e o buraco estava todo nos campos: as dez caixas
+da lista de tarefas anunciadas só como "caixa de seleção" — dez chances de
+concluir a errada —, as catorze coberturas do planejamento soando todas iguais
+("R$, campo de edição", porque em `CampoCobertura` o rótulo é um `<p>` e não um
+`<label>`) e o seletor de etapa do funil, mudo no topo das treze abas. Onde o
+controle vive numa lista de linhas iguais, o nome carrega o dado da linha
+("Situação da reunião de 13/03/26", "Concluir: Revisão anual da apólice") — um
+rótulo genérico deixaria dez controles indistinguíveis do mesmo jeito. A régua é
+**zero**, não "poucos": um controle sem nome não incomoda um pouco, ele não é
+utilizável — e zero é a única régua que não afrouxa sozinha com o tempo.
+
+### Peso da página
+
+Os originais da marca são de impressão: 1400×520 e 800×800, ~100 kB cada. Na
+tela eles nunca passam de 64 px de altura — o navegador baixava **200 kB para
+desenhar um logo do tamanho de uma unha**, em toda página do sistema (o
+monograma mora na barra lateral) e, o que importa mais, nas páginas do
+**cliente**, que ele abre no celular, à noite, no 4G: o formulário e o
+planejamento por link começam pelo logo, antes de qualquer outra coisa.
+
+`srcSet` resolve sem tirar nada de ninguém: versões pequenas atendem a tela e o
+original continua disponível para retina e para a proposta impressa. O
+navegador baixa uma só, e `sizes` diz qual — convertido pela proporção, porque
+a marca é dimensionada pela ALTURA e o `sizes` é declarado em largura. Nenhum
+arquivo foi re-encodado; os originais estão intactos.
+
+| | antes | depois |
+|---|---|---|
+| Login | 97 kB | **9 kB** |
+| Qualquer tela do sistema | ~200 kB | **15 kB** |
+| Login em retina (2×) | 97 kB | **31 kB** |
+
+A escolha depende do **meio**, não só do tamanho: `srcSet` não sabe que a
+página está indo para o papel, e o PDF da proposta saía com a versão de 256 px
+num logo de ~35 mm — cerca de 186 dpi, no documento que fecha a venda. Um
+`<picture>` com `media="print"` devolve o original de 1400 px ao papel
+(~1000 dpi) sem tirar a leveza da tela. Conferido gerando o PDF de verdade.
+
+O motor do estudo, que recalcula a cada tecla digitada no planejamento, leva
+**0,073 ms** por chamada — medido, não estimado. Não há memoização em volta
+dele de propósito: seria complexidade para resolver um problema que não existe.
 
 ### Marca
 

@@ -108,6 +108,7 @@ export default function Clientes() {
             <input
               className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none"
               placeholder="Buscar por cliente ou assessor..."
+              aria-label="Buscar por cliente ou assessor"
               value={busca} onChange={(e) => setBusca(e.target.value)}
             />
           </div>

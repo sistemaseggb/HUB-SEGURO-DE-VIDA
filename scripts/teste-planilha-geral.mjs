@@ -22,6 +22,8 @@
 
 import * as XLSX from 'xlsx'
 import { lerPlanilhaGeral, conferir, TOLERANCIA_PREMIO } from '../src/lib/planilhaGeral.js'
+import { parseCSV, acharColuna } from '../src/lib/csv.js'
+import { limparCodigo } from '../src/lib/planilhasComissao.js'
 import { apurarPremiacao } from '../src/lib/premiacao.js'
 
 let falhas = 0
@@ -204,6 +206,61 @@ console.log('\n── conferir() sozinha, sem planilha ──')
   ok(vazio.premioIncoerente.length === 0 && vazio.codigoCompartilhado.length === 0,
     'lista vazia não inventa problema nenhum')
   ok(conferir().semAssessor.length === 0, 'e chamar sem argumento nenhum também não quebra')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n── A porta de entrada aguenta o que chega errado ──')
+// ─────────────────────────────────────────────────────────────────────────────
+// `parseCSV` e `acharColuna` recebem o que vier de três caminhos diferentes:
+// `FileReader`, colagem no textarea e leitura de .xlsx. Os três devolvem
+// string quase sempre — e `null` quando a leitura falha. Aí a tela de Importar
+// quebrava com "Cannot read properties of null" em vez de dizer que o arquivo
+// não deu para ler. Para quem está importando, planilha vazia e planilha
+// ilegível são a mesma resposta: não veio nada.
+{
+  let semQuebrar = true
+  for (const lixo of [null, undefined, 0, -1, NaN, true, false, {}, [], 1e20]) {
+    try {
+      const r = parseCSV(lixo)
+      if (!Array.isArray(r?.cabecalho) || !Array.isArray(r?.linhas)) {
+        semQuebrar = false
+        console.log(`   ✗ parseCSV(${JSON.stringify(lixo)}) devolveu ${JSON.stringify(r)}`)
+      }
+    } catch (e) {
+      semQuebrar = false
+      console.log(`   ✗ parseCSV(${JSON.stringify(lixo)}) explodiu: ${e.message}`)
+    }
+  }
+  ok(semQuebrar, 'parseCSV devolve planilha vazia em vez de explodir com o que não é texto')
+
+  let colunaOk = true
+  for (const lixo of [null, undefined, '', 'abc', 0, {}, 1e20]) {
+    try {
+      if (acharColuna(lixo, ['nome']) !== -1) colunaOk = false
+      if (acharColuna(['Nome'], lixo) !== -1) colunaOk = false
+    } catch (e) {
+      colunaOk = false
+      console.log(`   ✗ acharColuna(${JSON.stringify(lixo)}) explodiu: ${e.message}`)
+    }
+  }
+  ok(colunaOk, 'acharColuna responde "não achei" (-1) em vez de explodir')
+
+  // e o caminho normal continua funcionando
+  const { cabecalho, linhas } = parseCSV('Nome;Prêmio\nMaria;R$ 500,00\nJoão;R$ 300,00')
+  ok(cabecalho.length === 2 && linhas.length === 2, 'o CSV de verdade continua sendo lido')
+  ok(acharColuna(cabecalho, ['premio']) === 1, 'e a coluna continua sendo achada pelo apelido')
+}
+
+{
+  // `??` só apara null e undefined: um NaN atravessava e virava o código
+  // literal "NaN". No agrupamento por assessor, isso junta linhas de gente
+  // diferente sob um código que não existe — e o troféu vai para ninguém.
+  ok(limparCodigo(NaN) === '', 'código NaN vira vazio, não o texto "NaN"')
+  ok(limparCodigo(Infinity) === '', 'e infinito também')
+  ok(limparCodigo(null) === '' && limparCodigo(undefined) === '', 'nulo continua virando vazio')
+  ok(limparCodigo({}) === '' && limparCodigo([]) === '', 'objeto não vira "[object Object]"')
+  ok(limparCodigo(' CS8868 ') === 'CS8868', 'e o código de verdade continua saindo limpo')
+  ok(limparCodigo('12345.0') === '12345', 'o ".0" que o Excel gruda continua sendo tirado')
 }
 
 console.log('\n── RESULTADO (leitor da planilha geral) ──')
