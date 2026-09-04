@@ -27,7 +27,14 @@ export function paraValor(v) {
 }
 
 // "473522.0" → "473522" (códigos que viraram float no Excel)
-export const limparCodigo = (v) => String(v ?? '').trim().replace(/\.0$/, '')
+// `??` só apara null e undefined: um NaN atravessava e virava o código
+// literal "NaN", que depois agrupa linhas sob um assessor que não existe.
+// Código não numérico e não textual simplesmente não é código.
+export const limparCodigo = (v) => {
+  if (v == null || (typeof v === 'number' && !Number.isFinite(v))) return ''
+  if (typeof v === 'object') return ''
+  return String(v).trim().replace(/\.0$/, '')
+}
 
 const limparNome = (v) => String(v ?? '').replace(/\s+/g, ' ').trim()
 
