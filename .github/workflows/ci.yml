@@ -40,6 +40,13 @@ jobs:
       # segundos contra minutos, e é onde mora a prova de que os NÚMEROS estão
       # certos. Um erro de cálculo não aparece como tela quebrada — aparece
       # como afirmação falsa numa reunião, que é bem pior.
+      # As funções de formato são as menores do sistema e as mais vistas: elas
+      # decidem como todo número e toda data APARECEM. Nenhum defeito ali
+      # quebra uma tela — só faz a tela dizer a coisa errada com naturalidade,
+      # que é o motivo de valerem um teste próprio.
+      - name: Formato de números e datas
+        run: npm run test:formato
+
       - name: Motor do estudo (fuzz de 4.000 entradas)
         run: npm run test:motor
 
