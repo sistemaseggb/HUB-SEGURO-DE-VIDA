@@ -552,6 +552,12 @@ arquivo foi re-encodado; os originais estão intactos.
 | Qualquer tela do sistema | ~200 kB | **15 kB** |
 | Login em retina (2×) | 97 kB | **31 kB** |
 
+A escolha depende do **meio**, não só do tamanho: `srcSet` não sabe que a
+página está indo para o papel, e o PDF da proposta saía com a versão de 256 px
+num logo de ~35 mm — cerca de 186 dpi, no documento que fecha a venda. Um
+`<picture>` com `media="print"` devolve o original de 1400 px ao papel
+(~1000 dpi) sem tirar a leveza da tela. Conferido gerando o PDF de verdade.
+
 O motor do estudo, que recalcula a cada tecla digitada no planejamento, leva
 **0,073 ms** por chamada — medido, não estimado. Não há memoização em volta
 dele de propósito: seria complexidade para resolver um problema que não existe.
