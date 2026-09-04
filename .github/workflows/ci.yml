@@ -90,6 +90,9 @@ jobs:
         id: chrome
         uses: browser-actions/setup-chrome@v1
 
+      # A varredura de acessibilidade roda junto das outras suítes de tela
+      # (npm run test:e2e). Ela cobra o que sobra da tela quando o conteúdo
+      # some: todo controle com nome, todo campo com rótulo. A régua é zero.
       - name: Rodar os testes ponta-a-ponta (modo demo)
         env:
           CHROMIUM_PATH: ${{ steps.chrome.outputs.chrome-path }}
