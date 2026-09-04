@@ -141,9 +141,37 @@ Abra o link da Vercel e confirme, na ordem:
 5. **Roteiro** → marque um bloco e salve.
 6. **Apólices → Registrar venda** → confirme que a comissão é calculada.
 7. **Documentos** → envie um PDF de teste (valida o Storage).
-8. Abra o **Guia passo a passo** (menu Ajuda) — é o manual da consultora.
+8. Abra o **Guia da consultoria** (menu Ajuda). Ele calcula o próprio exemplo
+   com o motor do sistema: se a seção "De onde saiu esse número" mostrar o
+   capital de morte somando as três parcelas, o motor está rodando de verdade
+   no ar — e não só a tela abrindo.
 
 Passou nos 8? Está **100% no ar**. 🚀
+
+### C2. A conferência automática (30 segundos, e diz o que falta)
+
+Os 8 passos acima confirmam que o sistema funciona. Só que uma migração
+esquecida **não quebra nada** — ela encolhe o sistema em silêncio: a cobertura
+de cirurgias some do estudo, o link do planejamento não abre, o assessor da
+apólice volta a ser o do cliente. Tudo continua parecendo certo, e a consultora
+só descobre quando procura um botão que deveria estar ali.
+
+No **SQL Editor**, cole o arquivo **`supabase/conferir_instalacao.sql`** e clique
+em **Run**. Ele não altera nada — só olha e responde, linha a linha:
+
+| # | SITUACAO | ARQUIVO_A_RODAR | O QUE ESTA MIGRACAO TRAZ |
+|---|---|---|---|
+| 26 | ✅ OK | — | O assessor na APÓLICE (decide o GB Awards) |
+| 27 | ❌ FALTA | `027_cirurgias.sql` | A cobertura de cirurgias |
+
+Onde disser **FALTA**, rode aquele arquivo de `supabase/migrations/` — só ele,
+na ordem em que aparecem. Rodar as 29 de novo "por garantia" também funciona
+(são seguras de repetir), mas leva bem mais tempo e não diz o que estava
+faltando.
+
+O segundo bloco do arquivo confere as três coisas que **não são migração** e
+também precisam estar de pé: o bucket `documentos`, o usuário de acesso da
+consultora e o `pg_cron` das mensagens automáticas (este último é opcional).
 
 ### C1. Limpar seus testes antes de entregar (visão de ADM)
 Depois de testar à vontade, deixe o banco limpo para a Natália começar do zero:
