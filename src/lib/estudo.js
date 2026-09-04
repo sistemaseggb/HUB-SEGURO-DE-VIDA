@@ -595,6 +595,57 @@ const CAMPOS_CONTAGEM = {
   peso_kg: (v) => `${String(v).replace('.', ',')} kg`,
 }
 
+// ─── O NOME QUE A CONSULTORA USA ─────────────────────────────────────────────
+// As mensagens da conferência são lidas com o cliente na sala. Citar a coluna
+// do banco ("o campo custo_vida_mensal está negativo") entrega o encanamento
+// para quem só quer saber qual número corrigir. Coberturas já sabem o próprio
+// nome no catálogo; o resto mora aqui, do lado de `CAMPOS_CONTAGEM`, porque é
+// a mesma natureza de conhecimento: o que este campo É.
+const NOME_DO_CAMPO = {
+  renda_mensal: 'renda mensal',
+  custo_vida_mensal: 'custo de vida mensal',
+  dividas_total: 'total de dívidas',
+  dividas_prazo_anos: 'prazo restante da dívida',
+  patrimonio_total: 'patrimônio total',
+  patrimonio_imoveis: 'patrimônio em imóveis',
+  patrimonio_investimentos: 'patrimônio em investimentos',
+  patrimonio_empresa: 'participação na empresa',
+  patrimonio_veiculos: 'patrimônio em veículos',
+  patrimonio_outros: 'outros bens',
+  previdencia_saldo: 'saldo da previdência',
+  previdencia_aporte_mensal: 'aporte mensal na previdência',
+  renda_desejada_aposentadoria: 'renda desejada na aposentadoria',
+  idade_aposentadoria: 'idade de aposentadoria',
+  cobertura_atual: 'cobertura que ele já tem',
+  anos_protecao: 'anos de proteção',
+  num_dependentes: 'número de dependentes',
+  itcmd_pct: 'alíquota do ITCMD',
+  custas_pct: 'custas e honorários',
+  premio_estimado: 'prêmio mensal',
+  premio_anual: 'prêmio anual',
+  pj_valuation: 'valuation da empresa',
+  pj_participacao_pct: 'participação societária',
+  pj_lucro_anual: 'lucro anual da empresa',
+  pj_faturamento_anual: 'faturamento anual da empresa',
+  pj_divida_avalizada: 'dívida avalizada',
+  pj_num_socios: 'número de sócios',
+  peso_kg: 'peso',
+  altura_cm: 'altura',
+}
+
+export function rotuloDoCampo(campo) {
+  if (NOME_DO_CAMPO[campo]) return NOME_DO_CAMPO[campo]
+  const cob = COBERTURAS.find((c) => c.campo === campo)
+  if (cob) return `capital de ${(cob.curto ?? cob.rotulo).toLowerCase()}`
+  // Acrônimo não se escreve em minúscula: "limite de diárias — Renda diária
+  // (DIT)" lê melhor que "limite de diárias de renda diária (dit)".
+  const dias = COBERTURAS.find((c) => c.campoDias === campo)
+  if (dias) return `limite de diárias — ${dias.curto ?? dias.rotulo}`
+  const fr = COBERTURAS.find((c) => c.campoFranquia === campo)
+  if (fr) return `franquia — ${fr.curto ?? fr.rotulo}`
+  return campo
+}
+
 // Como escrever o valor sugerido para um campo do planejamento. Dinheiro é o
 // padrão porque é o caso comum; a exceção é declarada acima.
 export function valorDoCampo(campo, valor) {
@@ -1415,11 +1466,19 @@ export function calcularEstudo(plano, { dataNascimento = null, idade: idadeDada 
   const negativos = [...new Set(camposNumericos)]
     .filter((campo) => campo in plano && definido(plano[campo]) && Number(plano[campo]) < 0)
   for (const campo of negativos) {
+    // O destino do valor negativo depende do tipo do campo, e dizer o destino
+    // errado seria trocar um defeito por outro: dinheiro é aparado para ZERO
+    // por `q()`, enquanto contagens e percentuais são aparados para o MÍNIMO
+    // aceito por `inteiro()` e `pctVal()` — anos de proteção viram 1, não 0.
+    const contagem = campo in CAMPOS_CONTAGEM || campo.endsWith('_pct')
     inconsistencias.push({
       grave: true, corrigir: campo, valor: Math.abs(Math.round(n(plano[campo]))),
-      texto: `O campo "${campo}" está com um valor negativo (${valorDoCampo(campo, n(plano[campo]))}). `
-        + 'O estudo o está tratando como zero — o campo parece preenchido na tela e não entra em '
-        + 'conta nenhuma. Confira o número antes de apresentar.',
+      texto: `O campo "${rotuloDoCampo(campo)}" está com um valor negativo `
+        + `(${valorDoCampo(campo, n(plano[campo]))}). O estudo não usa número negativo: `
+        + (contagem
+          ? 'este campo entra na conta aparado para o mínimo aceito, que não é o que está na tela. '
+          : 'este campo entra na conta como zero, embora pareça preenchido na tela. ')
+        + 'Confira o número antes de apresentar.',
     })
   }
   if (renda > 0 && custoVida > renda) {

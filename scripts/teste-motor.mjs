@@ -16,7 +16,7 @@
 //
 // Roda com `npm run test:motor` (e junto do e2e em `npm run test`).
 // ─────────────────────────────────────────────────────────────────────────────
-import { calcularEstudo, CLASSES_PATRIMONIO, porqueCobertura } from '../src/lib/estudo.js'
+import { calcularEstudo, CLASSES_PATRIMONIO, porqueCobertura, rotuloDoCampo } from '../src/lib/estudo.js'
 import { compararSeguroComInvestimento, normalizarResgates } from '../src/lib/comparador.js'
 import { analisarTranscricao } from '../src/lib/transcricao.js'
 
@@ -361,6 +361,44 @@ const casoBase = {
   const avisou = e.inconsistencias.some(
     (i) => i.corrigir === 'capital_sugerido' && i.grave === true && /negativ/i.test(i.texto))
   if (!avisou) registrar('neg', 'valor negativo virou zero sem nenhum aviso na conferência')
+}
+
+// 2b. E a mensagem precisa falar a língua da consultora: ela lê a conferência
+//     com o cliente na sala, e "o campo custo_vida_mensal está negativo"
+//     entrega o encanamento para quem só quer saber qual número corrigir.
+{
+  const e = calcularEstudo({
+    ...casoBase, renda_mensal: -20_000, custo_vida_mensal: -10_000,
+    capital_sugerido: -500_000, patrimonio_imoveis: -900_000, itcmd_pct: -4,
+    dit_dias: -30, anos_protecao: -5, pj_valuation: -1000,
+  })
+  const avisos = e.inconsistencias.filter((i) => /valor negativo/.test(i.texto))
+  if (avisos.length < 5) registrar('neg', `só ${avisos.length} campos negativos acusados`)
+  for (const a of avisos) {
+    // nome de coluna vaza como palavra_com_underline entre aspas
+    if (/"[a-z]+_[a-z_]+"/.test(a.texto)) {
+      registrar('neg', `mensagem cita o nome da coluna: ${a.texto.slice(0, 70)}`)
+    }
+  }
+  // e o destino do valor precisa ser dito CERTO: dinheiro vira zero, contagem
+  // é aparada para o mínimo (anos de proteção viram 1, não 0)
+  const doDinheiro = avisos.find((a) => a.corrigir === 'capital_sugerido')
+  const daContagem = avisos.find((a) => a.corrigir === 'anos_protecao')
+  if (!/como zero/.test(doDinheiro?.texto ?? '')) {
+    registrar('neg', 'campo de dinheiro deveria ser descrito como indo a zero')
+  }
+  if (!/mínimo aceito/.test(daContagem?.texto ?? '')) {
+    registrar('neg', 'campo de contagem deveria ser descrito como aparado ao mínimo')
+  }
+  if (e.anos !== 1) registrar('neg', `anos_protecao negativo virou ${e.anos}, esperava o mínimo 1`)
+
+  // O nome humano precisa existir para TODO campo que a conferência pode
+  // citar — inclusive os que alguém acrescentar depois. Sem esta cobrança, um
+  // campo novo passa a vazar o nome da coluna e ninguém percebe.
+  for (const campo of avisos.map((a) => a.corrigir)) {
+    const nome = rotuloDoCampo(campo)
+    if (!nome || nome === campo) registrar('neg', `campo "${campo}" não tem nome humano`)
+  }
 }
 
 // 3. O capital de morte para de contar o filho aos 24; a invalidez projetava o
