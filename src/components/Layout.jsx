@@ -175,7 +175,8 @@ export default function Layout() {
         <div className="flex items-center justify-between px-4 pb-4 pt-5">
           <Link to="/" className="flex items-center gap-3">
             <span className="inline-flex items-center rounded-xl bg-white px-2 py-1.5 shadow-sm">
-              <img src="/logo-gb.png" alt="GB" style={{ height: 30 }} />
+              <img src="/logo-gb.png" srcSet="/logo-gb-96.png 96w, /logo-gb-192.png 192w, /logo-gb.png 800w" sizes="30px"
+                alt="GB" style={{ height: 30 }} />
             </span>
             <span>
               <span className="block font-display text-[0.95rem] font-semibold leading-tight text-white">Hub Seguros</span>

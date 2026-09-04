@@ -100,7 +100,8 @@ export default function FormularioPublico() {
     return (
       <TelaCentro>
         <div className="rounded-3xl bg-gradient-to-br from-brand-500 to-brand-700 p-5 text-white shadow-lg shadow-brand-200">
-          <img src="/logo.png" alt="GB | XP" className="h-12 object-contain" />
+          <img src="/logo.png" srcSet="/logo-256.png 256w, /logo-512.png 512w, /logo.png 1400w" sizes="130px"
+            alt="GB | XP" className="h-12 object-contain" />
         </div>
         <p className="mt-6 text-xs font-semibold uppercase tracking-[0.25em] text-brand-600">Natália Maschendorf · Seguro de Vida</p>
         <h1 className="mt-3 font-display text-4xl font-semibold tracking-tight text-slate-900">
@@ -131,7 +132,8 @@ export default function FormularioPublico() {
       {/* barra superior com marca + progresso */}
       <div className="sticky top-0 z-10 border-b border-slate-100 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-xl items-center gap-2 px-4 pt-3">
-          <img src="/logo-gb.png" alt="GB" className="h-6 w-6 object-contain" />
+          <img src="/logo-gb.png" srcSet="/logo-gb-96.png 96w, /logo-gb-192.png 192w, /logo-gb.png 800w" sizes="24px"
+            alt="GB" className="h-6 w-6 object-contain" />
           <span className="font-display text-sm font-semibold text-slate-800">Hub Seguros</span>
           <span className="text-xs text-slate-400">· Natália Maschendorf</span>
         </div>

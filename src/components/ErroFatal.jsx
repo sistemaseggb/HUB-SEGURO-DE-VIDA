@@ -21,7 +21,8 @@ export default class ErroFatal extends Component {
     if (!this.state.erro) return this.props.children
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-canvas p-8 text-center">
-        <img src="/logo-gb.png" alt="GB" className="h-14 opacity-90" />
+        <img src="/logo-gb.png" srcSet="/logo-gb-96.png 96w, /logo-gb-192.png 192w, /logo-gb.png 800w" sizes="56px"
+          alt="GB" className="h-14 opacity-90" />
         <h1 className="font-display text-xl font-semibold text-slate-900">Algo deu errado por aqui</h1>
         <p className="max-w-sm text-sm text-slate-500">
           Aconteceu um erro inesperado. Seus dados estão seguros — recarregue a

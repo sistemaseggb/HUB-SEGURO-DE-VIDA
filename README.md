@@ -531,6 +531,31 @@ rótulo genérico deixaria dez controles indistinguíveis do mesmo jeito. A rég
 **zero**, não "poucos": um controle sem nome não incomoda um pouco, ele não é
 utilizável — e zero é a única régua que não afrouxa sozinha com o tempo.
 
+### Peso da página
+
+Os originais da marca são de impressão: 1400×520 e 800×800, ~100 kB cada. Na
+tela eles nunca passam de 64 px de altura — o navegador baixava **200 kB para
+desenhar um logo do tamanho de uma unha**, em toda página do sistema (o
+monograma mora na barra lateral) e, o que importa mais, nas páginas do
+**cliente**, que ele abre no celular, à noite, no 4G: o formulário e o
+planejamento por link começam pelo logo, antes de qualquer outra coisa.
+
+`srcSet` resolve sem tirar nada de ninguém: versões pequenas atendem a tela e o
+original continua disponível para retina e para a proposta impressa. O
+navegador baixa uma só, e `sizes` diz qual — convertido pela proporção, porque
+a marca é dimensionada pela ALTURA e o `sizes` é declarado em largura. Nenhum
+arquivo foi re-encodado; os originais estão intactos.
+
+| | antes | depois |
+|---|---|---|
+| Login | 97 kB | **9 kB** |
+| Qualquer tela do sistema | ~200 kB | **15 kB** |
+| Login em retina (2×) | 97 kB | **31 kB** |
+
+O motor do estudo, que recalcula a cada tecla digitada no planejamento, leva
+**0,073 ms** por chamada — medido, não estimado. Não há memoização em volta
+dele de propósito: seria complexidade para resolver um problema que não existe.
+
 ### Marca
 
 A identidade visual segue a logo oficial **GB | XP** (grafite + laranja):
