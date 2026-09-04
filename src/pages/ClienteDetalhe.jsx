@@ -214,6 +214,10 @@ export default function ClienteDetalhe() {
               num visor de 375 e empurrava a página inteira para o lado */}
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <Select
+              // Sem nome, o leitor de tela anuncia só o valor atual
+              // ("Fechado") — e este seletor está no topo de todas as 13 abas
+              // do cliente, então o mesmo silêncio se repetia em cada uma.
+              aria-label={`Etapa de ${cliente.nome} no funil`}
               value={cliente.status_funil}
               onChange={async (e) => {
                 await supabase.from('clientes').update({ status_funil: e.target.value }).eq('id', id)
@@ -470,7 +474,12 @@ function CampoCobertura({ cob, estudo, plano, setPlano }) {
     <div className="rounded-xl border border-slate-200/70 bg-white p-4">
       <p className="font-medium text-slate-800">{cob.rotulo}</p>
       <p className="mb-3 mt-0.5 text-xs text-slate-400">{cob.descricao}</p>
+      {/* O rótulo desta cobertura é o <p> acima, que não é um <label> — então
+          o campo precisa carregar o próprio nome. São catorze coberturas no
+          formulário mais usado do sistema, e sem isto todas elas soam igual:
+          "R$, campo de edição". */}
       <InputMoeda value={valorForm ?? ''}
+        aria-label={`Capital de ${cob.rotulo}`}
         placeholder={sugestao > 0 ? Math.round(sugestao).toLocaleString('pt-BR') : '0'}
         onChange={(e) => mudar(cob.campo, e.target.value)} />
 
@@ -2379,6 +2388,7 @@ function AbaRoteiro({ idCliente, cliente }) {
                   )}
 
                   <Textarea rows={2} className="mt-3" placeholder={`Anote o que o cliente disse em "${b.titulo}"...`}
+                    aria-label={`Anotações do bloco "${b.titulo}"`}
                     value={estado.nota ?? ''} onChange={(e) => setBloco(b.id, 'nota', e.target.value)} />
                 </div>
               </div>
@@ -2588,7 +2598,8 @@ function AbaReunioes({ idCliente, onMudanca }) {
             {reunioes.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center gap-3 py-3">
                 <span className="w-32 text-sm font-medium text-slate-800">{dataHoraBR(r.data_hora)}</span>
-                <Select value={r.status} onChange={(e) => mudarStatus(r, e.target.value)} style={{ width: 'auto' }}>
+                <Select value={r.status} onChange={(e) => mudarStatus(r, e.target.value)} style={{ width: 'auto' }}
+                  aria-label={`Situação da reunião de ${dataHoraBR(r.data_hora)}`}>
                   {STATUS_REUNIAO.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                 </Select>
                 <span className="min-w-0 flex-1 truncate text-sm text-slate-500">{r.notas}</span>
@@ -2926,7 +2937,8 @@ function AbaDocumentos({ idCliente }) {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <p className="text-sm text-slate-500">Guarde aqui a apólice, documentos do cliente e propostas.</p>
         <div className="ml-auto flex items-center gap-2">
-          <Select value={categoria} onChange={(e) => setCategoria(e.target.value)} style={{ width: 'auto' }}>
+          <Select value={categoria} onChange={(e) => setCategoria(e.target.value)} style={{ width: 'auto' }}
+            aria-label="Categoria do arquivo a enviar">
             {CATEGORIAS_DOC.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
           </Select>
           <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white ${enviando ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'}`}>
@@ -3295,7 +3307,11 @@ function AbaTarefas({ idCliente }) {
             {tarefas.map((t) => (
               <li key={t.id} className={`group flex items-center gap-3 rounded-lg border p-3 ${
                 t.concluida ? 'border-slate-100 opacity-50' : 'border-slate-200'}`}>
+                {/* Numa lista de dez tarefas, dez caixas anunciadas apenas
+                    como "caixa de seleção" são dez chances de concluir a
+                    errada. O nome da tarefa precisa vir junto. */}
                 <input type="checkbox" checked={t.concluida} onChange={() => alternar(t)}
+                  aria-label={t.concluida ? `Reabrir "${t.titulo}"` : `Concluir "${t.titulo}"`}
                   className="h-4 w-4 accent-blue-600" />
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
                   {(() => { const Ic = ICONE_TAREFA[t.tipo] ?? CheckCircle2; return <Ic size={15} /> })()}

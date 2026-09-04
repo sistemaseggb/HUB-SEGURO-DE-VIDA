@@ -366,6 +366,7 @@ export default function AbaTranscricao({ idCliente, cliente }) {
             onDrop={(e) => { e.preventDefault(); abrirArquivo(e.dataTransfer.files?.[0]) }}
             rows={texto ? 8 : 6}
             spellCheck={false}
+            aria-label="Transcrição da reunião"
             placeholder={'Cole aqui a transcrição do Tactiq — ou arraste o arquivo para esta área.\n\n'
               + 'Funciona com os formatos:\n'
               + '  00:01:23 Natália Maschendorf: Qual a sua renda hoje?\n'

@@ -9,7 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "pretest:e2e": "npm run build",
-    "test:e2e": "mkdir -p e2e-shots && node scripts/e2e-demo.mjs && node scripts/e2e-erros.mjs && node scripts/e2e-navegacao.mjs && node scripts/e2e-planejamento.mjs && node scripts/e2e-planejamento-publico.mjs && node scripts/e2e-apresentacao.mjs && node scripts/e2e-varredura.mjs",
+    "test:e2e": "mkdir -p e2e-shots && node scripts/e2e-demo.mjs && node scripts/e2e-erros.mjs && node scripts/e2e-navegacao.mjs && node scripts/e2e-planejamento.mjs && node scripts/e2e-planejamento-publico.mjs && node scripts/e2e-apresentacao.mjs && node scripts/e2e-acessibilidade.mjs && node scripts/e2e-varredura.mjs",
     "test:motor": "node scripts/teste-motor.mjs",
     "test:formato": "node scripts/teste-formato.mjs",
     "test": "npm run lint && npm run test:formato && npm run test:motor && npm run test:planejamento && npm run test:plano-publico && npm run test:premio && npm run test:premiacao && npm run test:planilha && npm run test:conhecimento && npm run test:transcricao && npm run test:comparador && npm run test:apresentacao && npm run test:e2e",

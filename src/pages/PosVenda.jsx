@@ -196,10 +196,12 @@ export default function PosVenda() {
                   <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
                   <input value={busca} onChange={(e) => setBusca(e.target.value)}
                     placeholder="Buscar cliente, seguradora ou nº..."
+                    aria-label="Buscar apólice por cliente, seguradora ou número"
                     className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-laranja-400 focus:outline-none sm:w-56" />
                 </div>
                 {nomesSeg.length > 1 && (
-                  <Select value={filtroSeg} onChange={(e) => setFiltroSeg(e.target.value)} style={{ width: 'auto' }}>
+                  <Select value={filtroSeg} onChange={(e) => setFiltroSeg(e.target.value)} style={{ width: 'auto' }}
+                    aria-label="Filtrar apólices por seguradora">
                     <option value="">Todas as seguradoras</option>
                     {nomesSeg.map((n) => <option key={n} value={n}>{n}</option>)}
                   </Select>

@@ -124,7 +124,8 @@ export default function Agenda() {
                   <p className="truncate text-sm font-medium text-slate-800">{ev.assunto || '(sem assunto)'}</p>
                   <p className="text-xs text-slate-400">{dataHoraBR(ev.inicio)}{ev.organizador && ` · ${ev.organizador}`}</p>
                 </div>
-                <Select defaultValue="" onChange={(e) => vincular(ev, e.target.value)} style={{ width: 'auto' }}>
+                <Select defaultValue="" onChange={(e) => vincular(ev, e.target.value)} style={{ width: 'auto' }}
+                  aria-label={`Vincular a reunião "${ev.assunto || 'sem assunto'}" a um cliente`}>
                   <option value="">Vincular ao cliente…</option>
                   {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
                 </Select>
@@ -168,7 +169,8 @@ export default function Agenda() {
                         {r.notas && ` · ${r.notas}`}
                       </p>
                     </div>
-                    <Select value={r.status} onChange={(e) => mudarStatus(r, e.target.value)} style={{ width: 'auto' }}>
+                    <Select value={r.status} onChange={(e) => mudarStatus(r, e.target.value)} style={{ width: 'auto' }}
+                      aria-label={`Situação da reunião com ${r.nome_cliente}`}>
                       {STATUS_REUNIAO.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                     </Select>
                     {whatsapp(r.telefone) && (
