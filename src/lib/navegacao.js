@@ -86,10 +86,15 @@ export const DESTINOS = [
     termos: ['configuracao', 'ajustes', 'seguradoras', 'assessores', 'metas', 'preferencias'],
   },
   {
-    secao: 'Ajuda', para: '/guia', rotulo: 'Guia passo a passo', icone: GraduationCap,
+    secao: 'Ajuda', para: '/guia', rotulo: 'Guia da consultoria', icone: GraduationCap,
     atalho: 'g',
-    descricao: 'Como usar o Hub do começo ao fim',
-    termos: ['ajuda', 'tutorial', 'manual', 'como fazer', 'duvida', 'aprender'],
+    descricao: 'O método, e de onde sai cada número do estudo',
+    // A paleta acha pelo nome que a consultora usa, e ela não procura por
+    // "guia da consultoria" quando está com dúvida — procura pelo problema.
+    // Os termos novos são as perguntas que trazem alguém até aqui.
+    termos: ['ajuda', 'tutorial', 'manual', 'como fazer', 'duvida', 'aprender',
+      'guia', 'passo a passo', 'de onde saiu', 'como calcula', 'treinamento',
+      'objecao', 'objeções', 'metodo', 'capital de morte'],
   },
 ]
 

@@ -86,6 +86,15 @@ jobs:
           npm run test:comparador
           npm run test:apresentacao
 
+      # O Guia ensina a consultora a DEFENDER os números do estudo, e ela vai
+      # repetir isso na frente do cliente. Ele roda o motor de verdade sobre um
+      # cliente de exemplo justamente para não envelhecer; este teste confere
+      # que as AFIRMAÇÕES dele continuam verdadeiras no motor. Mudou uma regra
+      # de um jeito que desminta o guia, isto quebra — em vez de a consultora
+      # descobrir na reunião.
+      - name: O guia não pode mentir sobre o motor
+        run: npm run test:tutorial
+
       - name: Instalar o Chromium (para os testes de tela)
         id: chrome
         uses: browser-actions/setup-chrome@v1

@@ -361,7 +361,7 @@ npm run build && npm test        # lint + motor + ponta a ponta
 ```
 
 Ou em separado: os que não precisam de navegador — `npm run test:formato`,
-`npm run test:motor`,
+`npm run test:tutorial`, `npm run test:motor`,
 `npm run test:planejamento`, `npm run test:plano-publico`, `npm run test:premio`,
 `npm run test:premiacao`,
 `npm run test:conhecimento`,
@@ -384,6 +384,21 @@ e um "R$ 1.000 mil" para tudo entre R$ 999.500 e R$ 999.999. O teste fixa
 em UTC, como roda a CI, o defeito do fuso não existe e o teste passaria sem
 provar nada. O que se confere é o fuso de quem usa o sistema, não o da máquina
 que roda o teste.
+
+**`test:tutorial`** — o Guia não pode mentir sobre o motor. Ele ensina a
+consultora a **defender** os números do estudo (de onde sai o capital de morte,
+por que o filho some da conta aos 24, por que a apólice da empresa não abate o
+gap), e ela repete isso na frente do cliente. Um manual escrito à mão começaria
+certo e envelheceria sozinho — alguém ajusta uma regra e o texto segue ensinando
+a conta antiga com toda a confiança de quem foi escrito uma vez. Por isso o Guia
+**roda `calcularEstudo()` de verdade** sobre um cliente de exemplo, e por isso
+este teste existe: ele confere que as AFIRMAÇÕES do guia continuam verdadeiras
+no motor — que as três parcelas ainda somam o capital de morte, que a invalidez
+ainda acompanha a morte quando há dependentes, que o salto entre `gap` e
+`gapPortavel` ainda é a vida em grupo mais a prestamista. São 60 conferências, e
+a primeira execução reprovou numa: eu tinha escrito que o salto era só o capital
+que evapora, e são as **duas** coisas. O teste pegou a imprecisão antes de ela
+chegar à consultora.
 
 **`test:motor`** — `calcularEstudo()` é a única fonte dos números do
 planejamento *e* da proposta: se ele erra, a consultora apresenta o erro para

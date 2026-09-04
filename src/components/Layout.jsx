@@ -284,7 +284,7 @@ export default function Layout() {
               menu, e o espaço aqui vale mais para a trilha e o selo de demo. */}
           <Link to="/guia"
             className="hidden shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-laranja-300 hover:text-laranja-700 sm:inline-flex"
-            title="Guia passo a passo: como usar o Hub do começo ao fim">
+            title="Guia da consultoria: o método, e de onde sai cada número do estudo">
             <LifeBuoy size={15} /> Ajuda
           </Link>
           {/* O selo de demonstração NUNCA se esconde, nem no celular: ele é o

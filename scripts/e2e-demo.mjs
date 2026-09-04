@@ -227,10 +227,17 @@ await passo('Proposta pública pelo link (/p/<token>, sem login)', async () => {
   await anonima.context().close()
 })
 
-await passo('Guia passo a passo abre e mostra a jornada', async () => {
+await passo('Guia da consultoria abre, com o exemplo JÁ CALCULADO', async () => {
   await page.goto(BASE + '/guia')
-  await page.waitForSelector('text=A jornada completa do cliente', { timeout: 6000 })
-  await page.waitForSelector('text=Conduza a reunião com o roteiro', { timeout: 3000 })
+  await page.waitForSelector('text=As sete etapas', { timeout: 6000 })
+  await page.waitForSelector('text=De onde saiu esse número', { timeout: 3000 })
+  // O guia roda `calcularEstudo()` de verdade sobre o cliente do exemplo. Se
+  // isso parar de funcionar, a página ainda abre e o título ainda aparece —
+  // só que sem número nenhum, que é justamente o que ela existe para ensinar.
+  // Por isso o teste cobra o RESULTADO da conta, e não o cabeçalho dela.
+  const capital = await page.locator('text=/R\\$ 7\\.015\\.200/').count()
+  if (capital === 0) throw new Error('o capital de morte do exemplo não foi calculado na página')
+  await page.waitForSelector('text=/Alice/', { timeout: 3000 })
   await shot('15-guia')
 })
 
