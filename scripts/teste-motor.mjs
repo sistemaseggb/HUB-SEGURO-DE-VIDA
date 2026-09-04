@@ -316,6 +316,78 @@ for (let i = 0; i < Math.floor(CASOS / 2); i++) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TRÊS DEFEITOS QUE O FUZZ NÃO PEGA
+//
+// O sorteio acima cobra invariantes de FORMA: nada é NaN, nada é negativo,
+// nada estoura o teto. Os três casos abaixo passavam por tudo isso com nota
+// máxima e ainda assim estavam errados — porque o defeito não estava na forma
+// do número, estava no número. É o tipo de erro que só aparece quando alguém
+// senta e pergunta "e se...", e por isso ele fica escrito aqui, com o caso
+// exato que o revela.
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\nTrês conferências dirigidas (não sorteadas)')
+
+const casoBase = {
+  capital_invalidez: null, capital_doencas_graves: null, capital_cirurgias: null,
+  tipo_planejamento: 'pf', estado_civil: 'Casado(a)',
+}
+
+// 1. A seguradora não cobre mais o adoecer do que o morrer — e a trava valia
+//    só para a SUGESTÃO. Com os dois campos digitados, doenças graves passava
+//    o capital de morte sem uma palavra e a recusa só aparecia na cotação.
+{
+  const e = calcularEstudo({
+    ...casoBase, renda_mensal: 100_000, custo_vida_mensal: 40_000, anos_protecao: 10,
+    capital_sugerido: 500_000, capital_doencas_graves: 2_000_000,
+  })
+  if (!(e.valores.doencas_graves > e.valores.morte)) {
+    registrar('dg', 'o caso não reproduz: doenças graves precisa ficar acima da morte')
+  }
+  const avisou = e.inconsistencias.some(
+    (i) => i.corrigir === 'capital_doencas_graves' && i.grave === true)
+  if (!avisou) registrar('dg', 'doenças graves acima do capital de morte passou sem aviso grave')
+}
+
+// 2. Um valor negativo colado de planilha era aparado para zero em silêncio: o
+//    campo aparecia preenchido na tela e o estudo tratava como zero. No capital
+//    de morte isso apaga a cobertura principal sem nada explicar.
+{
+  const e = calcularEstudo({
+    ...casoBase, renda_mensal: 20_000, custo_vida_mensal: 10_000,
+    capital_sugerido: -500_000,
+  })
+  if (e.valores.morte !== 0) registrar('neg', 'o caso não reproduz: a morte deveria estar zerada')
+  const avisou = e.inconsistencias.some(
+    (i) => i.corrigir === 'capital_sugerido' && i.grave === true && /negativ/i.test(i.texto))
+  if (!avisou) registrar('neg', 'valor negativo virou zero sem nenhum aviso na conferência')
+}
+
+// 3. O capital de morte para de contar o filho aos 24; a invalidez projetava o
+//    gasto dele pelo horizonte inteiro. Dois números que o estudo chama de
+//    iguais ("o mesmo capital da morte") e saíam 40% diferentes.
+{
+  const e = calcularEstudo({
+    ...casoBase, renda_mensal: 50_000, custo_vida_mensal: 30_000, anos_protecao: 20,
+    dependentes: [{ nome: 'A', idade: 22, custo_mensal: 10_000 }],
+  })
+  if (!(e.temDependentes && e.custoFilhosMensal > 0)) {
+    registrar('inv', 'o caso não reproduz: precisa de dependente com custo mensal')
+  }
+  if (e.sugestoes.invalidez !== e.sugestoes.morte) {
+    registrar('inv', `com dependentes a invalidez deveria acompanhar a morte: `
+      + `${e.sugestoes.invalidez} contra ${e.sugestoes.morte}`)
+  }
+  // e sem dependentes a régua continua sendo outra, de propósito
+  const solteiro = calcularEstudo({
+    ...casoBase, estado_civil: 'Solteiro(a)',
+    renda_mensal: 50_000, custo_vida_mensal: 30_000, anos_protecao: 20,
+  })
+  if (!(solteiro.sugestoes.invalidez > solteiro.sugestoes.morte)) {
+    registrar('inv', 'sem dependentes a invalidez precisa continuar maior que a morte')
+  }
+}
+
 console.log('\n── RESULTADO (motor) ──')
 if (problemas.length === 0) {
   console.log('Problemas: nenhum 🎉')

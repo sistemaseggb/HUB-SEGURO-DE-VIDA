@@ -248,11 +248,39 @@ function PainelSplit() {
 
   if (!cfg) return <Card className="p-5"><Spinner /></Card>
 
+  // A soma dos três precisa dar 100. Comparar com `!== 100` na unha erra
+  // sozinho: 33,33 + 33,33 + 33,34 soma 100.00000000000001 em ponto flutuante
+  // e o aviso apareceria num rateio que está certo. Um centavo de tolerância
+  // resolve, e é menos do que o arredondamento da própria cascata.
   const soma = Number(cfg.split_natalia_pct) + Number(cfg.split_assessor_pct) + Number(cfg.split_escritorio_pct)
+  const somaOk = Number.isFinite(soma) && Math.abs(soma - 100) < 0.005
+  const impostoPct = Number(cfg.imposto_pct)
+  const impostoOk = cfg.imposto_pct === undefined
+    || (Number.isFinite(impostoPct) && impostoPct >= 0 && impostoPct <= 100)
 
   async function salvar(e) {
     e.preventDefault()
     setMsg(null)
+    // ── O AVISO QUE NÃO IMPEDIA NADA ──────────────────────────────────────
+    // A tela já dizia "a soma precisa dar 100%" — e salvava do mesmo jeito.
+    // Uma divisão de 40/30/40 gravada por engano não quebra tela nenhuma: ela
+    // paga 110% do líquido em TODA venda seguinte, no fechamento do mês e no
+    // Controle da Natália, até alguém conferir a conta na mão. É o tipo de
+    // erro que se descobre pelo extrato, meses depois. Aviso de regra que a
+    // gravação ignora não é validação, é decoração.
+    if (!somaOk) {
+      const msgErro = `A divisão soma ${String(Math.round(soma * 100) / 100).replace('.', ',')}% `
+        + '— precisa dar exatamente 100%. Nada foi salvo: com outra soma, toda venda seguinte '
+        + 'pagaria a mais ou a menos que a comissão recebida.'
+      setMsg(msgErro)
+      toast.erro('A divisão precisa somar 100%.')
+      return
+    }
+    if (!impostoOk) {
+      setMsg('O imposto do escritório precisa ficar entre 0% e 100%. Nada foi salvo.')
+      toast.erro('Imposto fora da faixa de 0% a 100%.')
+      return
+    }
     const { error } = await supabase.from('configuracoes').update({
       split_natalia_pct: cfg.split_natalia_pct,
       split_assessor_pct: cfg.split_assessor_pct,
@@ -295,8 +323,12 @@ function PainelSplit() {
             <Input type="number" step="0.01" value={cfg.split_escritorio_pct} onChange={set('split_escritorio_pct')} />
           </Campo>
         </div>
-        {soma !== 100 && (
-          <p className="text-sm text-amber-600">A soma precisa dar 100% (atual: {soma}%).</p>
+        {!somaOk && (
+          <p className="text-sm text-rose-600">
+            A soma precisa dar 100% (atual: {String(Math.round(soma * 100) / 100).replace('.', ',')}%).
+            Enquanto não fechar, o salvar fica bloqueado — uma divisão que não soma 100 paga a mais
+            ou a menos em toda venda seguinte.
+          </p>
         )}
         {cfg.imposto_pct !== undefined && (
           <div className="grid grid-cols-3 gap-3">
@@ -336,7 +368,7 @@ function PainelSplit() {
           )}
         </div>
         <div className="flex items-center gap-3">
-          <Button type="submit" disabled={soma !== 100}><Save size={15} /> Salvar configurações</Button>
+          <Button type="submit" disabled={!somaOk || !impostoOk}><Save size={15} /> Salvar configurações</Button>
           {msg && <span className="text-sm text-slate-500">{msg}</span>}
         </div>
       </form>

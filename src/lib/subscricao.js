@@ -112,7 +112,39 @@ const CLASSES_PROFISSAO = [
     id: 'alto',
     rotulo: 'Risco ocupacional alto',
     agravo: 1.6,
-    re: /motoboy|motociclista|mototax|entregador|piloto|aeronaut|comiss[áa]rio de bordo|seguran[çc]a|vigilante|policial|bombeiro|militar|soldado|mergulhador|eletricista de rede|linha viva|torre|andaime|constru[çc][ãa]o civil|pedreiro|minera[çc][ãa]o|petr[óo]leo|plataforma|caminhoneiro|motorista de carga|taxista|aplicativo/i,
+    // ── PALAVRA SOLTA CLASSIFICA GENTE ERRADA ────────────────────────────
+    // Esta lista existe para achar quem sobe em andaime e quem entrega de
+    // moto. Escrita com termos soltos, ela pegava também quem nunca saiu de
+    // uma cadeira: "desenvolvedor de aplicativos" batia em `aplicativo` (que
+    // mirava o motorista de app) e "gerente de segurança da informação" batia
+    // em `segurança` (que mirava o vigilante). Os dois saíam como risco
+    // ocupacional ALTO, com agravo de 1,6, aviso de possível recusa e o caso
+    // marcado como não automático — numa carteira cheia de profissionais
+    // liberais e sócios de empresa de tecnologia, que é justamente quem mais
+    // aparece aqui.
+    //
+    // Um falso positivo custa caro dos dois lados: a consultora combina prazo
+    // e preço errados com um cliente de risco baixo, e o aviso perde crédito
+    // quando aparece onde não devia. Então os termos ambíguos passam a exigir
+    // o contexto que os torna arriscados de verdade; o resto continua solto.
+    re: new RegExp([
+      'motoboy', 'motociclista', 'mototax', 'entregador',
+      // "aplicativo" sozinho é a profissão de quem PROGRAMA. O risco está em
+      // quem roda a cidade por ele.
+      '(motorista|motoqueiro|entrega|entregador|corrida)[^,;]{0,20}aplicativo',
+      // "segurança" sozinho é cargo de escritório em metade dos casos
+      // (informação, trabalho, patrimonial no sentido de auditoria).
+      'seguran[\u00e7c]a\\s+(patrimonial|pessoal|armad|privad|p[\u00fau]blica)',
+      'agente de seguran[\u00e7c]a', 'guarda(-| )(civil|municipal|noturno)',
+      // "piloto" vale para quem voa ou compete; `aeronauta` já cobre a
+      // aviação comercial e "projeto piloto" não é profissão de ninguém.
+      'piloto de (avi[\u00e3a]o|aeronave|helic[\u00f3o]ptero|ca[\u00e7c]a|prova|teste|corrida|f[\u00f3o]rmula)',
+      'aeronaut', 'comiss[\u00e1a]rio de bordo',
+      'vigilante', 'policial', 'bombeiro', 'militar', 'soldado', 'mergulhador',
+      'eletricista de rede', 'linha viva', 'torre', 'andaime',
+      'constru[\u00e7c][\u00e3a]o civil', 'pedreiro', 'minera[\u00e7c][\u00e3a]o',
+      'petr[\u00f3o]leo', 'plataforma', 'caminhoneiro', 'motorista de carga', 'taxista',
+    ].join('|'), 'i'),
     nota: 'Classe de risco elevada: o prêmio sai agravado e a cobertura de acidente pode vir '
       + 'com restrição. Algumas seguradoras simplesmente não aceitam a profissão — vale cotar '
       + 'em mais de uma antes de apresentar.',
