@@ -902,13 +902,14 @@ export function criarSupabaseDemo() {
       }
       if (fn === 'fn_form_salvar') {
         const f = db.formularios_onboarding.find((x) => x.token === args.p_token)
+        if (!f || f.status === 'concluido') return { data: { erro: 'formulario_nao_encontrado_ou_concluido' }, error: null }
         if (f) {
           f.respostas = args.p_respostas; f.etapa_atual = args.p_etapa
           f.status = args.p_concluido ? 'concluido' : 'em_andamento'
           f.iniciado_em ??= iso(hoje())
           if (args.p_concluido) f.concluido_em = iso(hoje())
         }
-        return { data: true, error: null }
+        return { data: { ok: true }, error: null }
       }
       // ── Planejamento por link (migração 029) ─────────────────────────────
       // Mesmo contrato das RPCs do banco. A aplicação das respostas no

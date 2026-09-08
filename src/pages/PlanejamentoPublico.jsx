@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   ShieldCheck, ArrowRight, ArrowLeft, PartyPopper, Trash2, Plus, CloudUpload,
@@ -60,6 +60,7 @@ export default function PlanejamentoPublico() {
   // Uma gravação que falhou no metrô não pode continuar dizendo "salvo ✓": o
   // cliente fecharia a aba confiando num recado falso.
   const [semGravar, setSemGravar] = useState(false)
+  const filaGravacao = useRef(Promise.resolve())
 
   const visiveis = useMemo(() => etapasVisiveis(respostas), [respostas])
   // A lista de etapas encolhe quando o cliente muda de ideia (tirou a empresa
@@ -72,6 +73,7 @@ export default function PlanejamentoPublico() {
 
   useEffect(() => {
     let vivo = true
+    setEstado('carregando')
     supabase.rpc('fn_plan_carregar', { p_token: token }).then(({ data, error }) => {
       if (!vivo) return
       if (error || !data || data.erro) return setEstado('erro')
@@ -83,22 +85,32 @@ export default function PlanejamentoPublico() {
       const retomar = Number(data.etapa_atual) || 0
       setEtapa(retomar > 0 ? Math.min(retomar, max) : -1)
       setEstado('ativo')
-    })
+    }).catch(() => { if (vivo) setEstado('erro') })
     return () => { vivo = false }
   }, [token])
 
-  const gravar = useCallback(async (novasRespostas, novaEtapa, { concluir = false } = {}) => {
+  const gravar = useCallback((novasRespostas, novaEtapa, { concluir = false } = {}) => {
     const corpo = concluir ? normalizarRespostas(novasRespostas) : novasRespostas
-    const { data, error } = await supabase.rpc('fn_plan_salvar', {
-      p_token: token,
-      p_respostas: corpo,
-      p_etapa: Math.max(novaEtapa, 0),
-      p_concluido: concluir,
+    // Serializa os pedidos: um autosave lento não pode sobrescrever o envio final.
+    const pedido = filaGravacao.current.then(async () => {
+      try {
+        const { data, error } = await supabase.rpc('fn_plan_salvar', {
+          p_token: token,
+          p_respostas: corpo,
+          p_etapa: Math.max(novaEtapa, 0),
+          p_concluido: concluir,
+        })
+        // A RPC devolve `{erro}` em vez de estourar quando o token já foi usado.
+        if (error) return { ok: false, motivo: error.message }
+        if (data?.erro) return { ok: false, motivo: data.erro }
+        if (!data?.ok) return { ok: false, motivo: 'resposta_invalida' }
+        return { ok: true }
+      } catch {
+        return { ok: false, motivo: 'falha_de_conexao' }
+      }
     })
-    // A RPC devolve `{erro}` em vez de estourar quando o token já foi usado.
-    if (error) return { ok: false, motivo: error.message }
-    if (data?.erro) return { ok: false, motivo: data.erro }
-    return { ok: true }
+    filaGravacao.current = pedido
+    return pedido
   }, [token])
 
   // ── Salva sozinho pouco depois que ele para de digitar ────────────────────
@@ -177,7 +189,7 @@ export default function PlanejamentoPublico() {
     setEnviando(false)
     if (!r.ok) {
       setFalhaEnvio('Não conseguimos enviar agora. Confira sua conexão e tente de novo — '
-        + 'suas respostas estão salvas.')
+        + 'suas respostas continuam nesta tela.')
       return
     }
     setSemGravar(false)

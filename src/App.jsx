@@ -39,9 +39,16 @@ export default function App() {
   const [sessao, setSessao] = useState(undefined) // undefined = ainda verificando
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSessao(data.session))
-    const { data: sub } = supabase.auth.onAuthStateChange((_evento, s) => setSessao(s))
-    return () => sub.subscription.unsubscribe()
+    let ativo = true
+    let eventoRecebido = false
+    const { data: sub } = supabase.auth.onAuthStateChange((_evento, s) => {
+      eventoRecebido = true
+      if (ativo) setSessao(s)
+    })
+    supabase.auth.getSession().then(({ data }) => {
+      if (ativo && !eventoRecebido) setSessao(data?.session ?? null)
+    }).catch(() => { if (ativo && !eventoRecebido) setSessao(null) })
+    return () => { ativo = false; sub.subscription.unsubscribe() }
   }, [])
 
   return (

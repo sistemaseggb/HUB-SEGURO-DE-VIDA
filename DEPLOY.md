@@ -23,7 +23,7 @@ Vercel e (C) o teste final. Reserve ~30 minutos na primeira vez.
 **Jeito fácil (recomendado, 1 minuto):** No Supabase, abra **SQL Editor** →
 **New query**. Abra o arquivo **`supabase/setup_completo.sql`** deste
 repositório, copie **tudo**, cole no editor e clique em **Run**. Esse arquivo já
-junta as 29 migrações na ordem certa — pronto. *(Use este caminho num projeto
+junta as 31 migrações na ordem certa — pronto. *(Use este caminho num projeto
 Supabase novo/vazio.)*
 
 **Jeito manual (se preferir, ou se o de cima der erro):** rode um arquivo de
@@ -59,6 +59,14 @@ cada vez, na **ordem**, copiando o conteúdo de cada um da pasta
 27. `027_cirurgias.sql`
 28. `028_proposta_publica_idade.sql`
 29. `029_planejamento_por_link.sql` *(o link do planejamento para o cliente)*
+30. `030_formularios_concorrencia.sql` *(impede reenvios e autosaves de reabrirem formulários concluídos)*
+31. `031_permissoes_rpc_internas.sql` *(remove execução anônima das funções internas)*
+
+**Atualização de um banco que já recebeu a 029:** aplique somente a 030 e a 031,
+nessa ordem. Publique também as funções `sync-outlook` e `analisar-reuniao`
+atualizadas e o frontend. O agendador do Outlook continua usando a service role;
+o botão do sistema usa a sessão autenticada da consultora. Valide primeiro em
+staging o login, a sincronização e o preenchimento de um formulário de teste.
 
 > **Como saber se deu certo?** Cada Run deve terminar com "Success". Em
 > **Table Editor** você verá as tabelas (clientes, apólices, planejamentos…).

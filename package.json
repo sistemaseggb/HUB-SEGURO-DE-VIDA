@@ -8,9 +8,9 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test:e2e": "mkdir -p e2e-shots && node scripts/e2e-demo.mjs && node scripts/e2e-erros.mjs && node scripts/e2e-navegacao.mjs && node scripts/e2e-planejamento.mjs && node scripts/e2e-planejamento-publico.mjs && node scripts/e2e-apresentacao.mjs && node scripts/e2e-varredura.mjs",
+    "test:e2e": "node scripts/preparar-e2e.mjs && node scripts/e2e-demo.mjs && node scripts/e2e-erros.mjs && node scripts/e2e-navegacao.mjs && node scripts/e2e-planejamento.mjs && node scripts/e2e-planejamento-publico.mjs && node scripts/e2e-apresentacao.mjs && node scripts/e2e-varredura.mjs",
     "test:motor": "node scripts/teste-motor.mjs",
-    "test": "npm run lint && npm run test:motor && npm run test:planejamento && npm run test:plano-publico && npm run test:premio && npm run test:premiacao && npm run test:planilha && npm run test:conhecimento && npm run test:transcricao && npm run test:comparador && npm run test:apresentacao && npm run test:e2e",
+    "test": "npm run lint && npm run test:motor && npm run test:planejamento && npm run test:plano-publico && npm run test:premio && npm run test:premiacao && npm run test:planilha && npm run test:conhecimento && npm run test:transcricao && npm run test:comparador && npm run test:apresentacao && npm run test:rpc && npm run test:edge && npm run test:e2e && npm run test:persistencia",
     "test:planejamento": "node scripts/auditoria-planejamento.mjs --travar",
     "auditoria": "node scripts/auditoria-planejamento.mjs",
     "test:plano-publico": "node scripts/teste-planejamento-publico.mjs",
@@ -20,7 +20,10 @@
     "test:conhecimento": "node scripts/teste-conhecimento.mjs",
     "test:transcricao": "node scripts/teste-transcricao.mjs",
     "test:comparador": "node scripts/teste-comparador.mjs",
-    "test:apresentacao": "node scripts/teste-apresentacao.mjs"
+    "test:apresentacao": "node scripts/teste-apresentacao.mjs",
+    "test:rpc": "node scripts/teste-rpc.mjs",
+    "test:edge": "node scripts/teste-edge-auth.mjs",
+    "test:persistencia": "node scripts/e2e-persistencia.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
@@ -32,9 +35,10 @@
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",
     "tailwindcss": "^4.3.2",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",

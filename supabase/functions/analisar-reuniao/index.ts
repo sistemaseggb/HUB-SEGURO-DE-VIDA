@@ -18,6 +18,7 @@
 // ============================================================================
 
 import Anthropic from 'npm:@anthropic-ai/sdk@0.70.0'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 // Transcrição de uma reunião de 1h costuma ter ~60 mil caracteres. O teto
 // protege contra colagens acidentais gigantes (a janela do modelo aguenta bem
@@ -190,6 +191,14 @@ Como trabalhar:
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ erro: 'use POST' }, 405)
+
+  // A chave pública do site não é uma sessão de usuário. Valida no Auth
+  // antes de enviar transcrições ou consumir créditos do provedor.
+  const bearer = req.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
+  if (!bearer) return json({ erro: 'nao_autorizado' }, 401)
+  const auth = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!)
+  const { data: usuario, error: erroAuth } = await auth.auth.getUser(bearer)
+  if (erroAuth || !usuario.user) return json({ erro: 'nao_autorizado' }, 401)
 
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
   if (!apiKey) {

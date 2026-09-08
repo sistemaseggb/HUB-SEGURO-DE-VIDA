@@ -1,7 +1,8 @@
 // Gera o seed do histórico de comissões 2023–2024 a partir da aba
 // "Comissão Mês" da planilha geral (matriz cliente × mês), enriquecida com
 // produção (Nati/Bruno) e seguradora vindas da aba "Propostas fechadas".
-import * as XLSX from '/home/user/HUB-SEGURO-DE-VIDA/node_modules/xlsx/xlsx.mjs'
+import { createRequire } from 'node:module'
+const XLSX = createRequire(import.meta.url)('xlsx')
 import * as fs from 'fs'
 XLSX.set_fs(fs)
 
