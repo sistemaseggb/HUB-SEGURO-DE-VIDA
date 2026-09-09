@@ -1,4 +1,5 @@
-import * as XLSX from '/home/user/HUB-SEGURO-DE-VIDA/node_modules/xlsx/xlsx.mjs'
+import { createRequire } from 'node:module'
+const XLSX = createRequire(import.meta.url)('xlsx')
 import * as fs from 'fs'
 XLSX.set_fs(fs)
 

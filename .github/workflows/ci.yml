@@ -30,6 +30,12 @@ jobs:
       - name: Instalar as dependências
         run: npm ci
 
+      - name: RPCs, permissões e autenticação das funções
+        run: |
+          npm run test:rpc
+          npm run test:edge
+          npm run test:plano-publico
+
       - name: Lint (oxlint)
         run: npm run lint
 
@@ -95,6 +101,7 @@ jobs:
             sleep 1
           done
           npm run test:e2e
+          npm run test:persistencia
 
       - name: Guardar as capturas de tela (só se algo falhar)
         if: failure()

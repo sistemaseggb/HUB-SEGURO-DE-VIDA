@@ -18,6 +18,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const GRAPH = 'https://graph.microsoft.com/v1.0'
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
 
 // Pega um token de aplicativo no Microsoft (client credentials)
 async function obterToken(): Promise<string> {
@@ -38,7 +43,18 @@ async function obterToken(): Promise<string> {
   return json.access_token
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  if (req.method !== 'POST') return json({ erro: 'use POST' }, 405)
+  const segredo = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const bearer = req.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
+  if (!bearer) return json({ erro: 'nao_autorizado' }, 401)
+  // O agendador usa service_role; o botão na tela usa a sessão da consultora.
+  if (!segredo || bearer !== segredo) {
+    const auth = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!)
+    const { data, error } = await auth.auth.getUser(bearer)
+    if (error || !data.user) return json({ erro: 'nao_autorizado' }, 401)
+  }
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -115,6 +131,6 @@ Deno.serve(async () => {
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...CORS, 'Content-Type': 'application/json' },
   })
 }

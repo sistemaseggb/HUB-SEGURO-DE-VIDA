@@ -5,8 +5,7 @@ import { supabase } from '../lib/supabase'
 import { ETAPAS_FORM } from '../lib/formularioConfig'
 
 // Formulário público de onboarding — o cliente acessa pelo link /f/<token>.
-// Uma etapa curta por vez, progresso visível e salvamento automático:
-// se fechar o navegador, continua exatamente de onde parou.
+// Uma etapa curta por vez; confirma a gravação antes de avançar.
 export default function FormularioPublico() {
   const { token } = useParams()
   const [estado, setEstado] = useState('carregando') // carregando | ativo | concluido | erro
@@ -15,38 +14,60 @@ export default function FormularioPublico() {
   const [respostas, setRespostas] = useState({})
   const [salvando, setSalvando] = useState(false)
   const [erroCampo, setErroCampo] = useState(null)
+  const [erroSalvar, setErroSalvar] = useState('')
+  const [pendente, setPendente] = useState(false)
 
   useEffect(() => {
+    let ativo = true
+    setEstado('carregando')
     supabase.rpc('fn_form_carregar', { p_token: token }).then(({ data, error }) => {
-      if (error || data?.erro) return setEstado('erro')
+      if (!ativo) return
+      if (error || !data || data.erro) return setEstado('erro')
       setNome(data.primeiro_nome ?? '')
       setRespostas(data.respostas ?? {})
       if (data.status === 'concluido') return setEstado('concluido')
       setEtapa(data.etapa_atual > 0 ? Math.min(data.etapa_atual, ETAPAS_FORM.length - 1) : -1)
       setEstado('ativo')
-    })
+    }).catch(() => { if (ativo) setEstado('erro') })
+    return () => { ativo = false }
   }, [token])
 
   const definicao = etapa >= 0 ? ETAPAS_FORM[etapa] : null
+  useEffect(() => {
+    if (!pendente || estado !== 'ativo') return undefined
+    const aviso = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', aviso)
+    return () => window.removeEventListener('beforeunload', aviso)
+  }, [pendente, estado])
   const progresso = useMemo(
     () => Math.round(((etapa + 1) / (ETAPAS_FORM.length + 1)) * 100),
     [etapa]
   )
 
   async function salvar(novaEtapa, concluido = false) {
+    if (salvando) return
     setSalvando(true)
-    await supabase.rpc('fn_form_salvar', {
-      p_token: token, p_respostas: respostas, p_etapa: Math.max(novaEtapa, 0), p_concluido: concluido,
-    })
-    setSalvando(false)
-    if (concluido) setEstado('concluido')
-    else setEtapa(novaEtapa)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    setErroSalvar('')
+    try {
+      const { data, error } = await supabase.rpc('fn_form_salvar', {
+        p_token: token, p_respostas: respostas, p_etapa: Math.max(novaEtapa, 0), p_concluido: concluido,
+      })
+      if (error || data?.erro || !data?.ok) throw new Error('Falha ao gravar')
+      setPendente(false)
+      if (concluido) setEstado('concluido')
+      else setEtapa(novaEtapa)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } catch {
+      setErroSalvar('Não foi possível salvar. Suas respostas continuam nesta tela. Verifique a conexão e tente novamente.')
+    } finally {
+      setSalvando(false)
+    }
   }
 
   function validarEtapa() {
     for (const campo of definicao.campos) {
       if (!campo.obrigatorio) continue
+      if (campo.dependeDe && respostas[campo.dependeDe] !== 'sim') continue
       const v = respostas[campo.id]
       if (v === undefined || v === null || v === '') {
         setErroCampo(campo.id)
@@ -108,16 +129,17 @@ export default function FormularioPublico() {
         </h1>
         <p className="mt-4 max-w-md text-lg text-slate-600">
           Falta pouco para sua proteção estar ativa. São <strong>{ETAPAS_FORM.length} etapas rápidas</strong> —
-          cerca de 5 minutos — e tudo é salvo automaticamente: pode parar e voltar quando quiser.
+          cerca de 5 minutos. As respostas são salvas ao continuar para a próxima etapa.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
-          {[['🔒', 'Confidencial'], ['⏱️', '~5 minutos'], ['💾', 'Salva sozinho']].map(([e, t]) => (
+          {[['🔒', 'Confidencial'], ['⏱️', '~5 minutos'], ['💾', 'Salva ao continuar']].map(([e, t]) => (
             <span key={t} className="rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-card ring-1 ring-slate-200/70">
               {e} {t}
             </span>
           ))}
         </div>
-        <button onClick={() => salvar(0)}
+        {erroSalvar && <p role="alert" className="mt-4 text-sm text-red-600">{erroSalvar}</p>}
+        <button onClick={() => salvar(0)} disabled={salvando}
           className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-8 py-4 text-lg font-semibold text-white shadow-lg shadow-brand-200 transition hover:bg-brand-700 active:scale-[0.98]">
           Começar <ArrowRight size={20} />
         </button>
@@ -143,7 +165,7 @@ export default function FormularioPublico() {
         <div className="mx-auto flex max-w-xl items-center justify-between px-4 py-2 text-xs text-slate-400">
           <span>Etapa {etapa + 1} de {ETAPAS_FORM.length}</span>
           <span className="flex items-center gap-1">
-            {salvando ? <><CloudUpload size={13} className="animate-pulse" /> salvando...</> : 'progresso salvo ✓'}
+            {salvando ? <><CloudUpload size={13} className="animate-pulse" /> salvando...</> : erroSalvar ? 'falha ao salvar' : pendente ? 'alterações ainda não salvas' : 'progresso salvo ✓'}
           </span>
         </div>
       </div>
@@ -152,13 +174,13 @@ export default function FormularioPublico() {
         <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">{definicao.titulo}</h1>
         <p className="mt-1 text-slate-500">{definicao.descricao}</p>
 
-        <div className="mt-6 space-y-5">
+        <fieldset disabled={salvando} className="mt-6 space-y-5">
           {definicao.campos.map((campo) => (
             <CampoWizard key={campo.id} campo={campo} respostas={respostas}
               erro={erroCampo === campo.id}
-              onChange={(v) => setRespostas({ ...respostas, [campo.id]: v })} />
+              onChange={(v) => { setPendente(true); setRespostas((atual) => ({ ...atual, [campo.id]: v })) }} />
           ))}
-        </div>
+        </fieldset>
 
         <div className="mt-8 flex items-center justify-between">
           <button onClick={() => salvar(etapa - 1)} disabled={etapa === 0 || salvando}
@@ -171,6 +193,7 @@ export default function FormularioPublico() {
           </button>
         </div>
         {erroCampo && <p className="mt-3 text-right text-sm text-red-600">Preencha os campos destacados para continuar.</p>}
+        {erroSalvar && <p role="alert" className="mt-3 text-sm text-red-600">{erroSalvar}</p>}
       </div>
     </div>
   )

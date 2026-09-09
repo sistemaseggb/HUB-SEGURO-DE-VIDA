@@ -8,6 +8,7 @@
 // derruba no fim.
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 export const BASE = process.env.E2E_BASE ?? 'http://localhost:4173'
 
@@ -32,7 +33,8 @@ export async function garantirServidor() {
 
   console.log('· preview não estava no ar; subindo um para os testes')
   const porta = new URL(BASE).port || '4173'
-  const filho = spawn('npx', ['vite', 'preview', '--port', porta], {
+  const vite = fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url))
+  const filho = spawn(process.execPath, [vite, 'preview', '--port', porta, '--strictPort'], {
     stdio: 'ignore', detached: false,
   })
   filho.on('error', (e) => {
