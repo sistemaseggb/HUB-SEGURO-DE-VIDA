@@ -1,3 +1,4 @@
+import ErroCarga from '../components/ErroCarga'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -39,8 +40,8 @@ async function buscarTudo(tabela, colunas, colunasReserva = null) {
     const { data, error } = await supabase.from(tabela).select(colunas).order('id').range(de, de + 999)
     if (error) {
       // coluna que só existe depois de uma migração: tenta o conjunto antigo
-      if (colunasReserva && de === 0) return buscarTudo(tabela, colunasReserva)
-      break
+      if (colunasReserva && de === 0 && ['42703','PGRST204'].includes(error.code)) return buscarTudo(tabela, colunasReserva)
+      throw new Error('O ranking está incompleto. ' + error.message)
     }
     if (!data?.length) break
     todas.push(...data)
@@ -155,6 +156,7 @@ function Corrida({ titulo, icone: Icone, lista, valorDe, formato, cor, posicaoDe
 }
 
 export default function Premiacao() {
+  const [erroCarga,setErroCarga]=useState(null)
   const [dados, setDados] = useState(null)
   const [ano, setAno] = useState(() => Number(hojeLocal().slice(0, 4)))
   const [mesFechamento, setMesFechamento] = useState(MES_FECHAMENTO_PADRAO)
@@ -174,7 +176,7 @@ export default function Premiacao() {
       buscarTudo('seguradoras', 'id, nome'),
     ]).then(([apolices, clientes, assessores, seguradoras]) => {
       if (vivo) setDados({ apolices, clientes, assessores, seguradoras })
-    })
+    }).catch(e=>{if(vivo)setErroCarga(e)})
     return () => { vivo = false }
   }, [])
 
@@ -228,6 +230,7 @@ export default function Premiacao() {
     window.open(`https://wa.me/?text=${encodeURIComponent(linhas.join('\n'))}`, '_blank', 'noreferrer')
   }
 
+  if (erroCarga) return <ErroCarga erro={erroCarga} tentar={()=>window.location.reload()} />
   if (!dados) return <Spinner />
 
   const maxMes = Math.max(...r.porMes.map((m) => m.apolices), 1)

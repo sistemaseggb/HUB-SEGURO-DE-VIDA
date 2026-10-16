@@ -1,3 +1,5 @@
+import ErroCarga from '../components/ErroCarga'
+import { conferir, mensagemErro } from '../lib/operacoes'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Percent, Save, MessageSquareText, Pencil, Trash2, CalendarSync, RefreshCw } from 'lucide-react'
@@ -38,6 +40,7 @@ export default function Cadastros() {
 const ASSESSOR_VAZIO = { nome: '', codigo: '', telefone: '', email: '' }
 
 function PainelAssessores() {
+  const [erroCarga,setErroCarga]=useState(null)
   const toast = useToast()
   const [lista, setLista] = useState(null)
   const [modal, setModal] = useState(false)
@@ -46,7 +49,7 @@ function PainelAssessores() {
   const [erro, setErro] = useState(null)
 
   const carregar = () =>
-    supabase.from('assessores').select('*').order('nome').then(({ data }) => setLista(data ?? []))
+    supabase.from('assessores').select('*').order('nome').then(r=>{conferir(r);setLista(r.data??[]);setErroCarga(null)}).catch(e=>setErroCarga(mensagemErro(e)))
 
   useEffect(() => { carregar() }, [])
 
@@ -62,7 +65,7 @@ function PainelAssessores() {
     setErro(null)
     const payload = { ...form, codigo: form.codigo || null, telefone: form.telefone || null, email: form.email || null }
     const { error } = editando
-      ? await supabase.from('assessores').update(payload).eq('id', editando)
+      ? await supabase.from('assessores').update(payload).eq('id', editando).select('id').single()
       : await supabase.from('assessores').insert(payload)
     if (error) return setErro(error.message)
     setModal(false)
@@ -71,18 +74,20 @@ function PainelAssessores() {
   }
 
   async function alternarAtivo(a) {
-    await supabase.from('assessores').update({ ativo: !a.ativo }).eq('id', a.id)
+    const {error}=await supabase.from('assessores').update({ ativo: !a.ativo }).eq('id', a.id).select('id').single()
+    if(error)return toast.erro('Não foi possível alterar o assessor: '+error.message)
     carregar()
   }
 
   async function excluir(a) {
     if (!window.confirm(`Excluir o assessor "${a.nome}"? (Só é possível se ele não tiver clientes vinculados.)`)) return
-    const { error } = await supabase.from('assessores').delete().eq('id', a.id)
+    const { error } = await supabase.from('assessores').delete().eq('id', a.id).select('id').single()
     if (error) toast.erro('Não foi possível excluir: este assessor tem clientes vinculados. Marque como inativo.')
     else toast.ok('Assessor excluído.')
     carregar()
   }
 
+  if (erroCarga) return <ErroCarga erro={erroCarga} tentar={carregar} />
   if (!lista) return <Card className="p-5"><Spinner /></Card>
 
   return (
@@ -148,6 +153,7 @@ function PainelAssessores() {
 const SEGURADORA_VAZIA = { nome: '', comissao_padrao_percentual: '' }
 
 function PainelSeguradoras() {
+  const [erroCarga,setErroCarga]=useState(null)
   const toast = useToast()
   const [lista, setLista] = useState(null)
   const [modal, setModal] = useState(false)
@@ -156,7 +162,7 @@ function PainelSeguradoras() {
   const [erro, setErro] = useState(null)
 
   const carregar = () =>
-    supabase.from('seguradoras').select('*').order('nome').then(({ data }) => setLista(data ?? []))
+    supabase.from('seguradoras').select('*').order('nome').then(r=>{conferir(r);setLista(r.data??[]);setErroCarga(null)}).catch(e=>setErroCarga(mensagemErro(e)))
 
   useEffect(() => { carregar() }, [])
 
@@ -171,7 +177,7 @@ function PainelSeguradoras() {
     e.preventDefault()
     setErro(null)
     const { error } = editando
-      ? await supabase.from('seguradoras').update(form).eq('id', editando)
+      ? await supabase.from('seguradoras').update(form).eq('id', editando).select('id').single()
       : await supabase.from('seguradoras').insert(form)
     if (error) return setErro(error.message)
     setModal(false)
@@ -181,12 +187,13 @@ function PainelSeguradoras() {
 
   async function excluir(s) {
     if (!window.confirm(`Excluir a seguradora "${s.nome}"? (Só é possível se não houver apólices dela.)`)) return
-    const { error } = await supabase.from('seguradoras').delete().eq('id', s.id)
+    const { error } = await supabase.from('seguradoras').delete().eq('id', s.id).select('id').single()
     if (error) toast.erro('Não foi possível excluir: existem apólices desta seguradora.')
     else toast.ok('Seguradora excluída.')
     carregar()
   }
 
+  if (erroCarga) return <ErroCarga erro={erroCarga} tentar={carregar} />
   if (!lista) return <Card className="p-5"><Spinner /></Card>
 
   return (
@@ -238,14 +245,16 @@ function PainelSeguradoras() {
 }
 
 function PainelSplit() {
+  const [erroCarga,setErroCarga]=useState(null)
   const toast = useToast()
   const [cfg, setCfg] = useState(null)
   const [msg, setMsg] = useState(null)
 
   useEffect(() => {
-    supabase.from('configuracoes').select('*').single().then(({ data }) => setCfg(data))
+    supabase.from('configuracoes').select('*').single().then(r=>{conferir(r);setCfg(r.data)}).catch(e=>setErroCarga(mensagemErro(e)))
   }, [])
 
+  if (erroCarga) return <ErroCarga erro={erroCarga} tentar={()=>window.location.reload()} />
   if (!cfg) return <Card className="p-5"><Spinner /></Card>
 
   const soma = Number(cfg.split_natalia_pct) + Number(cfg.split_assessor_pct) + Number(cfg.split_escritorio_pct)
@@ -268,7 +277,7 @@ function PainelSplit() {
       ...(cfg.imposto_pct !== undefined && { imposto_pct: cfg.imposto_pct || 0 }),
       ...(cfg.codigo_natalia !== undefined && { codigo_natalia: (cfg.codigo_natalia || '').trim().toUpperCase() }),
       dias_sem_contato_alerta: cfg.dias_sem_contato_alerta || 90,
-    }).eq('id', 1)
+    }).eq('id', 1).select('id').single()
     if (error) { setMsg(`Erro: ${error.message}`); toast.erro('Erro ao salvar configurações.') }
     else { setMsg(null); toast.ok('Configurações salvas! Valem para as próximas vendas.') }
   }
@@ -345,6 +354,7 @@ function PainelSplit() {
 }
 
 function PainelOutlook() {
+  const [erroCarga,setErroCarga]=useState(null)
   const toast = useToast()
   const [cfg, setCfg] = useState(null)
   const [sincronizando, setSincronizando] = useState(false)
@@ -352,9 +362,10 @@ function PainelOutlook() {
   useEffect(() => {
     supabase.from('configuracoes')
       .select('outlook_email, outlook_sync_ativo, outlook_ultima_sync')
-      .single().then(({ data }) => setCfg(data))
+      .single().then(r=>{conferir(r);setCfg(r.data)}).catch(e=>setErroCarga(mensagemErro(e)))
   }, [])
 
+  if (erroCarga) return <ErroCarga erro={erroCarga} tentar={()=>window.location.reload()} />
   if (!cfg) return <Card className="p-5"><Spinner /></Card>
   const set = (k, v) => setCfg({ ...cfg, [k]: v })
 
@@ -363,7 +374,7 @@ function PainelOutlook() {
     const { error } = await supabase.from('configuracoes').update({
       outlook_email: cfg.outlook_email || null,
       outlook_sync_ativo: cfg.outlook_sync_ativo,
-    }).eq('id', 1)
+    }).eq('id', 1).select('id').single()
     toast[error ? 'erro' : 'ok'](error ? 'Erro ao salvar.' : 'Integração salva.')
   }
 
@@ -409,6 +420,7 @@ function PainelOutlook() {
 }
 
 function PainelMensagens() {
+  const [erroCarga,setErroCarga]=useState(null)
   const toast = useToast()
   const [cfg, setCfg] = useState(null)
   const [msg, setMsg] = useState(null)
@@ -416,16 +428,17 @@ function PainelMensagens() {
   useEffect(() => {
     supabase.from('configuracoes')
       .select('msg_aniversario, msg_aniversario_apolice, msg_lead_parado, msg_reuniao')
-      .single().then(({ data }) => setCfg(data))
+      .single().then(r=>{conferir(r);setCfg(r.data)}).catch(e=>setErroCarga(mensagemErro(e)))
   }, [])
 
+  if (erroCarga) return <ErroCarga erro={erroCarga} tentar={()=>window.location.reload()} />
   if (!cfg) return <Card className="p-5"><Spinner /></Card>
   const set = (k) => (e) => setCfg({ ...cfg, [k]: e.target.value })
 
   async function salvar(e) {
     e.preventDefault()
     setMsg(null)
-    const { error } = await supabase.from('configuracoes').update(cfg).eq('id', 1)
+    const { error } = await supabase.from('configuracoes').update(cfg).eq('id', 1).select('id').single()
     if (error) { setMsg(`Erro: ${error.message}`); toast.erro('Erro ao salvar mensagens.') }
     else { setMsg(null); toast.ok('Mensagens salvas!') }
   }

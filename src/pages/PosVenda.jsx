@@ -1,3 +1,5 @@
+import ErroCarga from '../components/ErroCarga'
+import { conferir, mensagemErro } from '../lib/operacoes'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Cake, MessageCircle, ShieldCheck, Wallet, TrendingUp, AlertCircle, Search } from 'lucide-react'
@@ -7,6 +9,8 @@ import { PageHeader, Card, Badge, Spinner, EmptyState, StatTile, ComoFunciona, S
 import { CHART } from '../lib/constants'
 
 export default function PosVenda() {
+  const [erroCarga, setErroCarga] = useState(null)
+  const [tentativa, setTentativa] = useState(0)
   const [apolices, setApolices] = useState(null)
   const [regua, setRegua] = useState([])
   const [carteira, setCarteira] = useState({})
@@ -26,13 +30,14 @@ export default function PosVenda() {
       supabase.from('vw_carteira_seguradora').select('*'),
       supabase.from('vw_clientes_sem_contato').select('*').limit(10),
     ]).then(([a, r, c, s, sc]) => {
+      conferir(a, r, c, s, sc)
       setApolices(a.data ?? [])
       setRegua(r.data ?? [])
       setCarteira(c.data ?? {})
       setPorSeg(s.data ?? [])
       setSemContato(sc.data ?? [])
-    })
-  }, [])
+    }).catch(e => setErroCarga(mensagemErro(e)))
+  }, [tentativa])
 
   // Filtro da carteira: busca por cliente/seguradora + filtro por seguradora.
   // Essencial quando a carteira tem centenas de apólices.
@@ -52,6 +57,7 @@ export default function PosVenda() {
     [apolices],
   )
 
+  if (erroCarga) return <ErroCarga erro={erroCarga} tentar={() => { setErroCarga(null); setTentativa(t => t + 1) }} />
   if (!apolices) return <Spinner />
 
   const maxSeg = Math.max(...porSeg.map((s) => Number(s.premio_mensal)), 1)
@@ -70,9 +76,9 @@ export default function PosVenda() {
 
       {/* Saúde da carteira */}
       <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatTile rotulo="Receita mensal recorrente" valor={brl(carteira.receita_mensal_recorrente ?? 0)}
+        <StatTile rotulo="Prêmio mensal da carteira" valor={brl(carteira.receita_mensal_recorrente ?? 0)}
           detalhe={`${carteira.apolices_ativas ?? 0} apólices ativas`} icone={Wallet} corIcone="text-emerald-600 bg-emerald-50" />
-        <StatTile rotulo="Receita anualizada" valor={brlCompacto(carteira.receita_anualizada ?? 0)}
+        <StatTile rotulo="Prêmio anualizado" valor={brlCompacto(carteira.receita_anualizada ?? 0)}
           icone={TrendingUp} corIcone="text-blue-600 bg-blue-50" />
         <StatTile rotulo="Capital total protegido" valor={brlCompacto(carteira.capital_total ?? 0)}
           icone={ShieldCheck} corIcone="text-laranja-600 bg-laranja-50" />

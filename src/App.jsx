@@ -1,3 +1,5 @@
+import { apagarRascunhos } from './lib/rascunhos'
+import EstadoConexao from './components/EstadoConexao'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
@@ -19,6 +21,8 @@ import { ToastProvider } from './components/Toast'
 //
 // `Layout` também fica: é a moldura de todas as rotas internas, então
 // adiá-lo só adicionaria um piscar de tela a cada navegação.
+const Operacao = lazy(() => import('./pages/Operacao'))
+const RecuperarAcesso = lazy(() => import('./pages/RecuperarAcesso'))
 const Pipeline = lazy(() => import('./pages/Pipeline'))
 const Clientes = lazy(() => import('./pages/Clientes'))
 const ClienteDetalhe = lazy(() => import('./pages/ClienteDetalhe'))
@@ -42,6 +46,7 @@ export default function App() {
     let ativo = true
     let eventoRecebido = false
     const { data: sub } = supabase.auth.onAuthStateChange((_evento, s) => {
+      if (_evento === 'SIGNED_OUT') { try { apagarRascunhos() } catch { /* navegador restrito */ } }
       eventoRecebido = true
       if (ativo) setSessao(s)
     })
@@ -53,11 +58,13 @@ export default function App() {
 
   return (
     <ToastProvider>
+    <EstadoConexao />
     <BrowserRouter>
       {/* Um Suspense só, na raiz: a tela de espera é a mesma do carregamento
           da sessão, então a troca de rota não muda de aparência. */}
       <Suspense fallback={<Spinner />}>
       <Routes>
+        <Route path="/recuperar-acesso" element={<RecuperarAcesso />} />
         {/* Rotas PÚBLICAS: formulário, planejamento e proposta do cliente, sem login */}
         <Route path="/f/:token" element={<FormularioPublico />} />
         {/* O cliente que não quer reunião preenche o próprio planejamento aqui */}
@@ -89,6 +96,7 @@ export default function App() {
               <Route path="/importar" element={<Importar />} />
               <Route path="/guia" element={<Guia />} />
               <Route path="/assessores/:id" element={<AssessorDetalhe />} />
+              <Route path="/operacao" element={<Operacao />} />
               <Route path="/cadastros" element={<Cadastros />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

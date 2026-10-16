@@ -1,3 +1,5 @@
+import ErroCarga from '../components/ErroCarga'
+import { conferir, mensagemErro } from '../lib/operacoes'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { MessageCircle, RefreshCw, X, Check, Inbox } from 'lucide-react'
@@ -16,6 +18,7 @@ const ROTULO_TIPO = {
 // Central de Mensagens: o banco escreve as mensagens sozinho (pg_cron às 8h);
 // aqui a Natália dispara cada uma com 1 clique — o envio marca como enviada.
 export default function Mensagens() {
+  const [erroCarga, setErroCarga] = useState(null)
   const toast = useToast()
   const [pendentes, setPendentes] = useState(null)
   const [historico, setHistorico] = useState([])
@@ -23,30 +26,36 @@ export default function Mensagens() {
   const [aviso, setAviso] = useState(null)
 
   const carregar = useCallback(async () => {
+    setErroCarga(null)
+    try {
     const [p, h] = await Promise.all([
       supabase.from('fila_mensagens').select('*, clientes(nome)')
         .eq('status', 'pendente').order('created_at'),
       supabase.from('fila_mensagens').select('*, clientes(nome)')
         .neq('status', 'pendente').order('enviada_em', { ascending: false }).limit(15),
     ])
+    conferir(p, h)
     setPendentes(p.data ?? [])
     setHistorico(h.data ?? [])
+    } catch (e) { setErroCarga(mensagemErro(e)) }
   }, [])
 
   useEffect(() => { carregar() }, [carregar])
 
   async function gerarAgora() {
     setGerando(true)
+    try {
     const { data, error } = await supabase.rpc('fn_gerar_fila_diaria')
     setGerando(false)
     setAviso(error ? `Erro: ${error.message}` : `${data ?? 0} mensagem(ns) nova(s) na fila.`)
     carregar()
+    } catch (e) { toast.erro(mensagemErro(e)) } finally { setGerando(false) }
   }
 
   async function marcar(m, status) {
     const { error } = await supabase.from('fila_mensagens').update({
       status, enviada_em: status === 'enviada' ? new Date().toISOString() : null,
-    }).eq('id', m.id)
+    }).eq('id', m.id).select('id').single()
     if (error) return toast.erro(`Não foi possível atualizar: ${error.message}`)
     if (status === 'enviada') toast.ok('Marcada como enviada.')
     else if (status === 'descartada') toast.info('Mensagem descartada.')
@@ -55,10 +64,14 @@ export default function Mensagens() {
 
   function enviar(m) {
     const url = whatsapp(m.telefone, m.mensagem)
-    if (url) window.open(url, '_blank')
-    marcar(m, 'enviada')
+    if (!url) return toast.erro('Cadastre um telefone válido.')
+    const janela = window.open(url, '_blank', 'noopener,noreferrer')
+    // Alguns navegadores retornam null com noopener; nunca inferimos envio por esse retorno.
+    void janela
+    toast.info('Conversa aberta. Confirme em “Já enviei” somente após enviar a mensagem.')
   }
 
+  if (erroCarga) return <ErroCarga erro={erroCarga} tentar={carregar} />
   if (!pendentes) return <Spinner />
 
   return (

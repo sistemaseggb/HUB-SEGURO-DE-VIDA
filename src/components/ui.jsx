@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { X, Lightbulb } from 'lucide-react'
 
 // Faixa didática "Como funciona" — explica o módulo e pode ser dispensada
@@ -156,16 +156,36 @@ export function Textarea(props) {
 }
 
 export function Modal({ aberto, titulo, onFechar, children, largura = 'max-w-lg' }) {
+  const painel = useRef(null)
+  const fechar = useRef(onFechar)
+  fechar.current = onFechar
+  const tituloId = useId()
+  useEffect(() => {
+    if (!aberto) return
+    const anterior = document.activeElement
+    const focaveis = () => [...painel.current.querySelectorAll('button, input, select, textarea, a[href], [tabindex="0"]')].filter(e => !e.disabled && e.getClientRects().length)
+    const timer = setTimeout(() => (painel.current.querySelector('[autofocus]') || focaveis()[0] || painel.current)?.focus(), 0)
+    const teclado = e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fechar.current() }
+      if (e.key !== 'Tab') return
+      const itens = focaveis(), primeiro = itens[0], ultimo = itens.at(-1)
+      if (!itens.length) { e.preventDefault(); painel.current.focus() }
+      else if (e.shiftKey && (document.activeElement === primeiro || !painel.current.contains(document.activeElement))) { e.preventDefault(); ultimo.focus() }
+      else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primeiro.focus() }
+    }
+    document.addEventListener('keydown', teclado, true)
+    return () => { clearTimeout(timer); document.removeEventListener('keydown', teclado, true); anterior?.focus?.() }
+  }, [aberto])
   if (!aberto) return null
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-brand-900/55 p-4 pt-16 backdrop-blur-sm"
       onMouseDown={(e) => e.target === e.currentTarget && onFechar()}
     >
-      <div className={`animar-surgir w-full ${largura} rounded-2xl bg-white shadow-pop`}>
+      <div ref={painel} role="dialog" aria-modal="true" aria-labelledby={tituloId} tabIndex={-1} className={`animar-surgir w-full ${largura} rounded-2xl bg-white shadow-pop`}>
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-          <h2 className="text-lg font-semibold text-slate-900">{titulo}</h2>
-          <button onClick={onFechar} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700">
+          <h2 id={tituloId} className="text-lg font-semibold text-slate-900">{titulo}</h2>
+          <button type="button" aria-label="Fechar janela" onClick={onFechar} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700">
             <X size={18} />
           </button>
         </div>

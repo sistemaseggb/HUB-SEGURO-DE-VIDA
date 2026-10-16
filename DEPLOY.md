@@ -1,4 +1,4 @@
-# Como colocar o Hub 100% no ar — passo a passo
+# Como publicar e verificar o Hub — passo a passo
 
 Este guia leva o sistema do zero ao ar, pronto para a consultora trabalhar.
 São **3 partes**: (A) o banco de dados no Supabase, (B) publicar o site na
@@ -10,7 +10,22 @@ Vercel e (C) o teste final. Reserve ~30 minutos na primeira vez.
 
 ---
 
-## Parte A — Banco de dados (Supabase)
+## Atualizar a instalação existente
+
+O site atual usa o projeto `athyubovaihjqlwepdky`. Não crie outro projeto nem
+execute `setup_completo.sql` nessa base. Antes do frontend, confira as migrações
+001–031, faça backup do banco e Storage e valide a recuperação em ambiente separado.
+Teste em staging e aplique **todo** o arquivo
+[`supabase/atualizacao_consultoria.sql`](supabase/atualizacao_consultoria.sql),
+que reúne 032–036 em uma transação. Se falhar, investigue antes de publicar.
+
+Revise `hub_perfis`: a atualização atribui admin à conta existente mais antiga
+e consultora às demais contas existentes. Confirme a administração correta.
+Novas contas precisam de atribuição pela administração. A nova interface exige
+essas migrações. O roteiro completo está em
+[Evolução da consultoria](docs/EVOLUCAO-CONSULTORIA.md).
+
+## Parte A — Banco de dados (somente projeto novo/vazio)
 
 ### A1. Crie o projeto no Supabase
 1. Acesse **supabase.com** → **Start your project** → entre com o GitHub.
@@ -23,7 +38,7 @@ Vercel e (C) o teste final. Reserve ~30 minutos na primeira vez.
 **Jeito fácil (recomendado, 1 minuto):** No Supabase, abra **SQL Editor** →
 **New query**. Abra o arquivo **`supabase/setup_completo.sql`** deste
 repositório, copie **tudo**, cole no editor e clique em **Run**. Esse arquivo já
-junta as 31 migrações na ordem certa — pronto. *(Use este caminho num projeto
+junta as 36 migrações na ordem certa. *(Use este caminho num projeto
 Supabase novo/vazio.)*
 
 **Jeito manual (se preferir, ou se o de cima der erro):** rode um arquivo de
@@ -61,17 +76,20 @@ cada vez, na **ordem**, copiando o conteúdo de cada um da pasta
 29. `029_planejamento_por_link.sql` *(o link do planejamento para o cliente)*
 30. `030_formularios_concorrencia.sql` *(impede reenvios e autosaves de reabrirem formulários concluídos)*
 31. `031_permissoes_rpc_internas.sql` *(remove execução anônima das funções internas)*
+32. `032_jornada_e_propostas.sql`
+33. `033_perfis_auditoria.sql`
+34. `034_consistencia_e_operacao.sql`
+35. `035_conciliacao_e_cadastros.sql`
+36. `036_links_e_vendas.sql`
 
-**Atualização de um banco que já recebeu a 029:** aplique somente a 030 e a 031,
-nessa ordem. Publique também as funções `sync-outlook` e `analisar-reuniao`
-atualizadas e o frontend. O agendador do Outlook continua usando a service role;
-o botão do sistema usa a sessão autenticada da consultora. Valide primeiro em
-staging o login, a sincronização e o preenchimento de um formulário de teste.
+**Base antiga:** confira primeiro se 030 e 031 foram instaladas. Depois siga a
+atualização transacional 032–036 descrita no início. Outlook e análise de reunião
+também dependem da publicação/configuração de suas Edge Functions; valide-as
+em staging. O frontend não configura essas integrações automaticamente.
 
 > **Como saber se deu certo?** Cada Run deve terminar com "Success". Em
 > **Table Editor** você verá as tabelas (clientes, apólices, planejamentos…).
-> As migrações são seguras de rodar de novo — se repetir uma, ela não duplica
-> nada.
+> Um resultado de sucesso não substitui a conferência dos perfis e os testes.
 
 ### A3. Confirme o bucket de documentos
 Vá em **Storage**. Deve existir um bucket **privado** chamado `documentos`
@@ -87,6 +105,19 @@ Central de Mensagens.*
 ### A5. Crie o usuário de acesso da consultora
 Em **Authentication → Users → Add user → Create new user**: informe o e-mail e
 uma senha para a Natália. É com esse login que ela entra no Hub.
+
+Confira também `hub_perfis`. Se a conta foi criada depois da migração 033,
+ela ainda não tem acesso. Para o primeiro admin de uma instalação nova,
+execute no SQL Editor administrativo, usando o UUID da conta correta:
+
+```sql
+insert into public.hub_perfis (user_id, papel)
+values ('UUID_DA_CONTA_ADMINISTRADORA'::uuid, 'admin')
+on conflict (user_id) do update set papel = excluded.papel;
+```
+
+Depois, atribua consultora/leitura pela tela Operação e qualidade. Confira a
+configuração de cadastro público conforme a política da equipe.
 
 ### A6. Pegue as chaves de conexão
 Em **Project Settings → API**, copie dois valores (vai usar na Parte B):
@@ -107,7 +138,7 @@ internas funcionarem).
 4. Em **Branch**, escolha a branch que você quer publicar
    (a de produção do repositório).
 
-### B2. Configure as variáveis de ambiente (sem isso o site abre em branco)
+### B2. Configure as variáveis de ambiente
 Ainda antes do deploy, abra **Environment Variables** e adicione as duas, com
 os valores que você copiou no passo **A6**:
 
@@ -120,6 +151,10 @@ os valores que você copiou no passo **A6**:
 > demonstração** (dados fictícios que não são salvos). Ou seja: para valer,
 > preencha as duas.
 
+Nunca coloque service role, senha do banco ou token administrativo em `VITE_*`.
+Remova `VITE_DEMO=1` do ambiente Production. Use `npm ci`, `npm run build` e
+saída `dist`, com as variáveis públicas do projeto real.
+
 ### B3. Deploy
 Clique em **Deploy** e aguarde ~2 minutos. No fim, a Vercel te dá um endereço
 tipo `https://hub-seguro-de-vida.vercel.app` — esse é o link do sistema. 🎉
@@ -127,7 +162,10 @@ tipo `https://hub-seguro-de-vida.vercel.app` — esse é o link do sistema. 🎉
 ### B4. "Apresente" o site ao Supabase (login e links)
 No Supabase → **Authentication → URL Configuration**:
 - **Site URL**: cole o endereço da Vercel.
-- **Redirect URLs**: adicione também o endereço da Vercel.
+- **Redirect URLs**: adicione `https://hub-seguro-de-vida.vercel.app/recuperar-acesso`
+  (ajuste o domínio para staging ou domínio próprio).
+
+Confira SMTP e teste a entrega da recuperação de senha com uma conta controlada.
 
 Isso faz o login e os links públicos funcionarem no domínio publicado:
 `/f/...` (formulário de DPS), `/pl/...` (planejamento preenchido pelo cliente)
@@ -151,13 +189,14 @@ Abra o link da Vercel e confirme, na ordem:
 7. **Documentos** → envie um PDF de teste (valida o Storage).
 8. Abra o **Guia passo a passo** (menu Ajuda) — é o manual da consultora.
 
-Passou nos 8? Está **100% no ar**. 🚀
+Confira ainda publicação/revogação de proposta, recuperação de senha, conciliação
+e permissões: leitura não escreve e conta sem perfil não acessa a carteira.
+Esses testes não comprovam recuperação de backup nem funcionamento das integrações.
 
 ### C1. Limpar seus testes antes de entregar (visão de ADM)
-Depois de testar à vontade, deixe o banco limpo para a Natália começar do zero:
-no **SQL Editor**, rode o arquivo **`supabase/limpar_dados_teste.sql`**. Ele
-apaga os clientes/apólices de teste e mantém seus cadastros (seguradoras,
-assessores, metas). Tem uma opção B no arquivo para zerar tudo.
+Teste em staging com registros identificados. **Não execute
+`supabase/limpar_dados_teste.sql` na produção:** ele apaga todos os clientes e
+apólices, incluindo dados reais. O arquivamento preserva os registros e a auditoria.
 
 ---
 
@@ -171,18 +210,26 @@ Toda alteração enviada para a branch publicada faz a Vercel **republicar
 sozinha**. Se a mudança incluir uma **nova migração** (arquivo novo em
 `supabase/migrations/`), rode-a no SQL Editor como na Parte A2.
 
-> **Ordem que evita susto:** rode a migração **antes** de publicar o site. Nos
-> dois sentidos nada quebra — o Hub avisa na tela quando falta uma coluna, e
-> uma migração rodada antes do deploy simplesmente fica esperando —, mas
-> migrando primeiro a consultora nunca vê um botão novo que ainda não funciona.
+> Execute e valide as migrações **antes** de publicar o frontend. Esta versão
+> depende das novas funções de permissões; publicar apenas o site bloqueia o acesso.
 
-Migrações já rodadas **não precisam ser rodadas de novo**: rode apenas o
-arquivo novo. E rodar duas vezes por engano não duplica nem apaga nada.
+Migrações já instaladas não precisam ser reaplicadas. Confira a versão real do
+banco; nesta atualização use o pacote transacional indicado no início.
 
 ## Custo
-Os planos **gratuitos** da Vercel e do Supabase atendem tranquilamente o uso de
-uma consultora. Só se pensa em plano pago com volume muito alto (milhares de
-acessos/dia ou muitos GB de documentos).
+Confira limites, consumo e pausa por inatividade do plano contratado. Planos
+gratuitos podem afetar disponibilidade mesmo com pouco uso.
+
+## Acesso administrativo deste ambiente
+
+O Git já permite acessar o código. Para administrar o banco e a publicação,
+forneça `SUPABASE_ACCESS_TOKEN` e `VERCEL_TOKEN` pelas configurações seguras
+do ambiente; nunca no chat, repositório ou frontend. O primeiro usa a API de
+gerenciamento do Supabase, e o segundo precisa acessar a conta/equipe Vercel
+responsável pelo projeto. A autorização para publicar não substitui esses acessos.
+
+Ative o monitor do GitHub Actions conforme
+[`docs/EVOLUCAO-CONSULTORIA.md`](docs/EVOLUCAO-CONSULTORIA.md).
 
 ## Domínio próprio (opcional)
 Para um endereço tipo `hub.nataliaseguros.com.br`, configure em

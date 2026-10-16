@@ -1,3 +1,6 @@
+import ConsolidarClientes from '../components/ConsolidarClientes'
+import ErroCarga from '../components/ErroCarga'
+import { conferir, mensagemErro } from '../lib/operacoes'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Search, Users, AlertTriangle, MessageCircle } from 'lucide-react'
@@ -12,6 +15,7 @@ import { useToast } from '../components/toastContexto'
 const NOVO = { nome: '', codigo: '', telefone: '', email: '', data_nascimento: '', id_assessor: '', perfil_necessidade: '' }
 
 export default function Clientes() {
+  const [erroCarga, setErroCarga] = useState(null)
   const navigate = useNavigate()
   const toast = useToast()
   const [clientes, setClientes] = useState(null)
@@ -26,14 +30,18 @@ export default function Clientes() {
   const [duplicados, setDuplicados] = useState([])
 
   async function carregar() {
+    setErroCarga(null)
+    try {
     const [c, a, d] = await Promise.all([
       supabase.from('clientes').select('*, assessores(nome)').order('created_at', { ascending: false }),
       supabase.from('assessores').select('id, nome').eq('ativo', true).order('nome'),
       supabase.from('vw_possiveis_duplicados').select('*').limit(20),
     ])
+    conferir(c, a, d)
     setClientes(c.data ?? [])
     setAssessores(a.data ?? [])
     setDuplicados(d.data ?? [])
+    } catch (e) { setErroCarga(mensagemErro(e)) }
   }
 
   useEffect(() => { carregar() }, [])
@@ -49,6 +57,8 @@ export default function Clientes() {
       if (!q) return true
       return c.nome.toLowerCase().includes(q)
         || (c.codigo ?? '').toLowerCase().includes(q)
+        || (c.email ?? '').toLowerCase().includes(q)
+        || (c.telefone ?? '').replace(/\D/g,'').includes(q.replace(/\D/g,'') || '__sem_numero__')
         || (c.assessores?.nome ?? '').toLowerCase().includes(q)
     })
   }, [clientes, busca, filtro])
@@ -73,6 +83,7 @@ export default function Clientes() {
     navigate(`/clientes/${data.id}`)
   }
 
+  if (erroCarga) return <ErroCarga erro={erroCarga} tentar={carregar} />
   if (!clientes) return <Spinner />
 
   return (
@@ -180,6 +191,7 @@ export default function Clientes() {
         )}
       </Card>
 
+      <ConsolidarClientes clientes={clientes} aoSalvar={carregar} />
       <Modal aberto={modal} titulo="Novo lead" onFechar={() => setModal(false)}>
         <form onSubmit={salvar} className="space-y-4">
           <div className="grid grid-cols-3 gap-3">

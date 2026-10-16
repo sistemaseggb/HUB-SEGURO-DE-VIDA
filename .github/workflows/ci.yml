@@ -32,6 +32,7 @@ jobs:
 
       - name: RPCs, permissões e autenticação das funções
         run: |
+          npm run test:jornada
           npm run test:rpc
           npm run test:edge
           npm run test:plano-publico
@@ -102,6 +103,7 @@ jobs:
           done
           npm run test:e2e
           npm run test:persistencia
+          npm run test:melhorias
 
       - name: Guardar as capturas de tela (só se algo falhar)
         if: failure()

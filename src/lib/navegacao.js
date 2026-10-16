@@ -85,6 +85,7 @@ export const DESTINOS = [
     descricao: 'Assessores, seguradoras, divisão de comissão e metas',
     termos: ['configuracao', 'ajustes', 'seguradoras', 'assessores', 'metas', 'preferencias'],
   },
+  { secao: 'Gestão', para: '/operacao', atalho: 'o', rotulo: 'Operação e qualidade', icone: RefreshCw, descricao: 'Integrações, premissas e recuperação', termos: ['saude','backup','restaurar','auditoria','perfis','fontes'] },
   {
     secao: 'Ajuda', para: '/guia', rotulo: 'Guia passo a passo', icone: GraduationCap,
     atalho: 'g',

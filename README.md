@@ -1,5 +1,7 @@
 # Hub Seguro de Vida — Natália Maschendorf
 
+A atualização da jornada de consultoria, as migrações e os limites da validação estão em [Evolução da consultoria](docs/EVOLUCAO-CONSULTORIA.md).
+
 ![CI](https://github.com/sistemaseggb/HUB-SEGURO-DE-VIDA/actions/workflows/ci.yml/badge.svg)
 
 Sistema de gestão completa do fluxo de consultoria de seguro de vida — pré-venda,
