@@ -1,3 +1,8 @@
+import RascunhoProtegido from '../components/RascunhoProtegido'
+import JornadaConsultoria from '../components/JornadaConsultoria'
+import { mudarEtapa } from '../lib/etapas'
+import { conferir, mensagemErro } from '../lib/operacoes'
+import ErroCarga from '../components/ErroCarga'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
@@ -47,6 +52,10 @@ import AbaComparador from './AbaComparador'
 export default function ClienteDetalhe() {
   const { id, aba: abaUrl } = useParams()
   const [cliente, setCliente] = useState(null)
+  const [erroCarga, setErroCarga] = useState(null)
+  const [etapaPerda, setEtapaPerda] = useState(false)
+  const [motivoEtapa, setMotivoEtapa] = useState('')
+  const [alterandoEtapa, setAlterandoEtapa] = useState(false)
 
   const navigate = useNavigate()
   // A aba vem da URL, não do estado do componente. Slug desconhecido (link
@@ -73,15 +82,19 @@ export default function ClienteDetalhe() {
   const [preenchidas, setPreenchidas] = useState({})
 
   const carregar = useCallback(async () => {
+    setErroCarga(null)
+    try {
     const [c, pr, ct, ap] = await Promise.all([
-      supabase.from('clientes').select('*, assessores(nome, telefone)').eq('id', id).single(),
+      supabase.from('clientes').select('*, assessores(nome, telefone)').eq('id', id).maybeSingle(),
       supabase.from('vw_prioridades_classificadas').select('proxima_acao, temperatura, score').eq('id', id).maybeSingle(),
       supabase.from('vw_clientes_contato').select('dias_sem_contato, ultimo_contato').eq('id', id).maybeSingle(),
       supabase.from('apolices').select('valor_premio_mensal, capital_segurado, comissao_gerada, status').eq('id_cliente', id),
     ])
     // Cliente que não existe (link antigo, cliente excluído noutra aba) não
     // pode virar carregando eterno: marcamos explicitamente para a tela avisar.
-    setCliente(c.data ?? (c.error ? 'nao-encontrado' : null))
+    if (c.error && c.error.code !== 'PGRST116') conferir(c)
+    conferir(pr, ct, ap)
+    setCliente(c.data ?? 'nao-encontrado')
     setPrioridade(pr.data)
     setContato(ct.data)
     // resumo de valor do cliente para o cabeçalho (só apólices ativas)
@@ -94,6 +107,7 @@ export default function ClienteDetalhe() {
       comissao: (ap.data ?? []).reduce((s, a) => s + Number(a.comissao_gerada || 0), 0),
     })
     if (c.data) registrarVisita(c.data)
+    } catch (e) { setErroCarga(mensagemErro(e)) }
   }, [id])
 
   useEffect(() => { carregar() }, [carregar])
@@ -111,7 +125,7 @@ export default function ClienteDetalhe() {
       supabase.from('planejamentos').select('id, premio_estimado, capital_sugerido').eq('id_cliente', id).maybeSingle(),
       contar('interacoes'), contar('reunioes'), contar('tarefas'),
       contar('apolices'), contar('documentos'), contar('historico_funil'),
-      supabase.from('transcricoes_reuniao').select('id', { count: 'exact', head: true }).eq('id_cliente', id),
+      supabase.from('transcricoes').select('id', { count: 'exact', head: true }).eq('id_cliente', id),
     ]).then(([plano, interacoes, reunioes, tarefas, apolices, documentos, historico, transcricoes]) => {
       if (!vivo) return
       const p = plano.data
@@ -148,7 +162,7 @@ export default function ClienteDetalhe() {
       codigo: formEdit.codigo || null, telefone: formEdit.telefone || null,
       email: formEdit.email || null, data_nascimento: formEdit.data_nascimento || null,
     }
-    const { error } = await supabase.from('clientes').update(payload).eq('id', id)
+    const { error } = await supabase.from('clientes').update(payload).eq('id', id).select('id').single()
     if (error) return setErroEdit(error.message)
     setEditar(false)
     toast.ok('Dados do cliente atualizados.')
@@ -156,12 +170,20 @@ export default function ClienteDetalhe() {
   }
 
   async function excluirCliente() {
-    if (!window.confirm(`Excluir ${cliente.nome} e TODOS os seus dados (reuniões, apólices, documentos, tarefas)? Esta ação não pode ser desfeita.`)) return
-    const { error } = await supabase.from('clientes').delete().eq('id', id)
+    if (!window.confirm(`Arquivar ${cliente.nome}? Os dados serão preservados e a administração poderá restaurar o cadastro.`)) return
+    const { error } = await supabase.rpc('fn_hub_arquivar_cliente', { p_id: id })
     if (error) return window.alert(`Erro ao excluir: ${error.message}`)
     navigate('/clientes')
   }
 
+  async function trocarEtapa(etapa, motivo = '') {
+    if (alterandoEtapa) return
+    setAlterandoEtapa(true)
+    try { await mudarEtapa(id, etapa, motivo); setEtapaPerda(false); await carregar() }
+    catch (e) { toast.erro(mensagemErro(e)) }
+    finally { setAlterandoEtapa(false) }
+  }
+  if (erroCarga) return <ErroCarga erro={erroCarga} tentar={carregar} />
   if (cliente === 'nao-encontrado') {
     return (
       <div>
@@ -189,6 +211,10 @@ export default function ClienteDetalhe() {
         <ArrowLeft size={15} /> Clientes
       </Link>
 
+      <Modal aberto={etapaPerda} titulo="Motivo da perda" onFechar={() => setEtapaPerda(false)}>
+        <Campo label="Por que o cliente não fechou?" obrigatorio><Textarea value={motivoEtapa} onChange={e => setMotivoEtapa(e.target.value)} /></Campo>
+        <Button disabled={!motivoEtapa.trim() || alterandoEtapa} onClick={() => trocarEtapa('perdido', motivoEtapa)}>Confirmar perda</Button>
+      </Modal>
       {/* Cabeçalho do cliente */}
       <Card className="mb-6 p-5">
         <div className="flex flex-wrap items-center gap-4">
@@ -215,10 +241,9 @@ export default function ClienteDetalhe() {
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <Select
               value={cliente.status_funil}
-              onChange={async (e) => {
-                await supabase.from('clientes').update({ status_funil: e.target.value }).eq('id', id)
-                carregar()
-              }}
+              disabled={alterandoEtapa}
+              aria-label="Etapa do cliente"
+              onChange={e => { if (e.target.value === 'perdido') { setEtapaPerda(true); setMotivoEtapa('') } else trocarEtapa(e.target.value) }}
               style={{ width: 'auto' }}
             >
               {ETAPAS.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
@@ -323,7 +348,7 @@ export default function ClienteDetalhe() {
             {erroEdit && <p className="text-sm text-red-600">{erroEdit}</p>}
             <div className="flex items-center justify-between gap-2">
               <Button type="button" variant="danger" onClick={excluirCliente}>
-                <Trash2 size={15} /> Excluir cliente
+                <Trash2 size={15} /> Arquivar cliente
               </Button>
               <div className="flex gap-2">
                 <Button type="button" variant="secondary" onClick={() => setEditar(false)}>Cancelar</Button>
@@ -333,6 +358,8 @@ export default function ClienteDetalhe() {
           </form>
         )}
       </Modal>
+
+      <JornadaConsultoria key={id} idCliente={id} />
 
       {/* ── Abas ──
           Doze abas numa tira que rola de lado escondem o que está fora da
@@ -549,9 +576,15 @@ function AbaPlanejamento({ idCliente, cliente }) {
   const [plano, setPlano] = useState(null)
   const [colunas, setColunas] = useState(null)
   const [estadoSalvar, setEstadoSalvar] = useState('ocioso')
+  const [modoGuiado,setModoGuiado]=useState(false)
+  const [passoReuniao,setPassoReuniao]=useState(0)
   const [salvoEm, setSalvoEm] = useState(null)
   // JSON do último payload gravado — a régua para saber o que ainda falta salvar
   const salvoRef = useRef(null)
+  const versaoBanco = useRef(null)
+  const gravacaoAtiva = useRef(false)
+  const [erroSalvarPlano, setErroSalvarPlano] = useState(null)
+  const [erroCarregarPlano, setErroCarregarPlano] = useState(null)
   // o que está pendente agora, lido pela descarga ao desmontar a aba
   const pendenteRef = useRef(null)
   const sujoRef = useRef(false)
@@ -572,13 +605,16 @@ function AbaPlanejamento({ idCliente, cliente }) {
     setColunas(null)
     ancoraFeitaRef.current = false
     const probe = (coluna) => supabase.from('planejamentos').select(coluna).limit(1)
-      .then(({ error }) => !error)
+      .then(({ error }) => { if(error && !['42703','PGRST204'].includes(error.code)) throw new Error(error.message); return !error })
     Promise.all([
       supabase.from('planejamentos').select('*').eq('id_cliente', idCliente).maybeSingle(),
       probe('capital_invalidez'), probe('premio_estimado'), probe('tipo_planejamento'),
       probe('renda_desejada_aposentadoria'), probe('uf'), probe('beneficiarios'),
       probe('capital_cirurgias'),
-    ]).then(([{ data }, tem014, tem015, tem019, tem021, tem024, tem025, tem027]) => {
+    ]).then(([resultado, tem014, tem015, tem019, tem021, tem024, tem025, tem027]) => {
+      conferir(resultado)
+      const data = resultado.data
+      versaoBanco.current = data?.updated_at ?? null
       setColunas({ tem014, tem015, tem019, tem021, tem024, tem025, tem027 })
       // Rascunho local vence a resposta do banco quando é mais recente que a
       // linha lida — cobre tanto a gravação ainda em voo quanto a volta rápida
@@ -617,7 +653,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
         }),
         ...(tem027 && { capital_cirurgias: '' }),
       })
-    })
+    }).catch(e => setErroCarregarPlano(mensagemErro(e)))
   }, [idCliente])
 
   // Grava sozinho pouco depois que ela para de digitar. Reagimos também ao
@@ -640,9 +676,10 @@ function AbaPlanejamento({ idCliente, cliente }) {
     const payload = pendenteRef.current
     if (!sujoRef.current || !payload) return
     rascunhosPlano.set(String(idCliente), { plano: planoRef.current, em: Date.now() })
-    supabase.from('planejamentos').upsert(payload, { onConflict: 'id_cliente' })
-      .then(() => {}, () => {})
+    if (!gravacaoAtiva.current) supabase.rpc('fn_planejamento_salvar', { p_cliente:idCliente,p_payload:payload,p_versao:versaoBanco.current }).then(() => {}, () => {})
   }, [idCliente])
+
+  useEffect(()=>{const revelar=()=>setModoGuiado(false);window.addEventListener('hashchange',revelar);return()=>window.removeEventListener('hashchange',revelar)},[])
 
   // Fechar o navegador com algo pendente pede confirmação.
   useEffect(() => {
@@ -676,6 +713,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
     return () => clearTimeout(t)
   }, [plano])
 
+  if (erroCarregarPlano) return <ErroCarga erro={erroCarregarPlano} tentar={() => window.location.reload()} />
   if (!plano || !colunas) return <Spinner />
 
   const { tem014, tem015, tem019, tem021, tem024, tem025, tem027 } = colunas
@@ -852,17 +890,24 @@ function AbaPlanejamento({ idCliente, cliente }) {
   sujoRef.current = sujo
 
   async function gravar(payload, { silencioso } = {}) {
+    if (gravacaoAtiva.current) return false
+    gravacaoAtiva.current = true
     const json = JSON.stringify(payload)
-    setEstadoSalvar('salvando')
-    const { data, error } = await supabase.from('planejamentos')
-      .upsert(payload, { onConflict: 'id_cliente' }).select().single()
+    setEstadoSalvar('salvando'); setErroSalvarPlano(null)
+    let resultado
+    try { resultado = await supabase.rpc('fn_planejamento_salvar', { p_cliente:idCliente,p_payload:payload,p_versao:versaoBanco.current }) }
+    catch (e) { resultado = { error: { message: mensagemErro(e) } } }
+    finally { gravacaoAtiva.current = false }
+    const { data, error } = resultado
     if (error) {
       erroRef.current = json
+      setErroSalvarPlano(error.message)
       setEstadoSalvar('erro')
       if (!silencioso) toast.erro(`Erro ao salvar: ${error.message}`)
       return false
     }
     erroRef.current = null
+    versaoBanco.current = data?.updated_at ?? versaoBanco.current
     rascunhosPlano.delete(String(idCliente))
     salvoRef.current = json
     sujoRef.current = pendenteRef.current !== payload
@@ -969,7 +1014,7 @@ function AbaPlanejamento({ idCliente, cliente }) {
     tem015 && { id: 'sec-investimento', rotulo: 'Investimento', icone: Coins, ok: !!estudo.investimento,
       resumo: estudo.investimento ? `${brl(estudo.investimento.mensal)}/mês` : 'prêmio cotado' },
   ].filter(Boolean)
-  const irPara = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const irPara = (id) => { setModoGuiado(false); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }),0) }
 
   return (
     <Card className="p-5">
@@ -1095,7 +1140,14 @@ function AbaPlanejamento({ idCliente, cliente }) {
         })}
       </div>
 
+      <RascunhoProtegido key={idCliente} cliente={idCliente} valor={plano} sujo={sujo} restaurar={setPlano} />
+      {erroSalvarPlano && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{erroSalvarPlano} Seus campos foram preservados. Antes de recarregar, guarde o rascunho neste dispositivo privado.</p>}
+      <div className="mb-3 rounded-lg border bg-white p-3">
+        <label className="flex gap-2 text-sm"><input type="checkbox" checked={modoGuiado} onChange={e=>{setModoGuiado(e.target.checked);setPassoReuniao(0)}} />Modo reunião: preencher um bloco por vez</label>
+        {modoGuiado && <div className="mt-3 flex flex-wrap gap-2">{['1. Objetivo e família','2. Finanças e patrimônio','3. Proteção e decisão'].map((l,i)=><Button key={l} type="button" variant={i===passoReuniao?'primary':'secondary'} onClick={()=>setPassoReuniao(i)}>{l}</Button>)}</div>}
+      </div>
       <form onSubmit={salvar}>
+        <section hidden={modoGuiado && passoReuniao!==0} aria-label="Objetivo e família">
         {/* ── Tipo de planejamento e focos ─────────────────────────────────── */}
         {tem019 && (
           <>
@@ -1248,6 +1300,8 @@ function AbaPlanejamento({ idCliente, cliente }) {
           )}
         </div>
 
+        </section>
+        <section hidden={modoGuiado && passoReuniao!==1} aria-label="Finanças e patrimônio">
         {/* ── Vida financeira ──────────────────────────────────────────────── */}
         <p id="sec-financeira" className={SECAO}><Wallet size={13} /> Vida financeira</p>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -1638,6 +1692,8 @@ function AbaPlanejamento({ idCliente, cliente }) {
           </>
         )}
 
+        </section>
+        <section hidden={modoGuiado && passoReuniao!==2} aria-label="Proteção e decisão">
         {/* ── Coberturas da apólice ────────────────────────────────────────── */}
         <p id="sec-coberturas" className={SECAO}><Shield size={13} /> As coberturas da apólice</p>
         {!tem014 && (
@@ -2030,13 +2086,15 @@ function AbaPlanejamento({ idCliente, cliente }) {
             )}
           </>
         )}
+        </section>
+        {modoGuiado && <div className="my-4 flex flex-wrap gap-3"><Button type="button" variant="secondary" disabled={passoReuniao===0} onClick={()=>setPassoReuniao(p=>p-1)}>Bloco anterior</Button><Button type="button" disabled={passoReuniao===2} onClick={()=>setPassoReuniao(p=>p+1)}>Próximo bloco da reunião</Button></div>}
         {/* Barra de ação fixa: o formulário é longo e é preenchido durante a
             reunião — salvar e gerar a proposta ficam sempre ao alcance, sem
             precisar rolar até o fim. */}
         <div className="sticky bottom-0 z-20 -mx-5 mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white/95 px-5 py-3 backdrop-blur">
           <EstadoSalvamento estado={estadoSalvar} sujo={sujo} em={salvoEm} />
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="submit">Salvar planejamento</Button>
+            <Button type="submit" disabled={estadoSalvar === 'salvando'}>Salvar planejamento</Button>
             <Link to={`/proposta/${idCliente}`}>
               <Button type="button" variant="secondary"><Presentation size={16} /> Proposta</Button>
             </Link>
@@ -2104,7 +2162,8 @@ function LinkPlanejamento({ idCliente, cliente }) {
     )
   }
 
-  const url = form ? `${window.location.origin}/pl/${form.token}` : null
+  const linkAtivo = form && !form.revogada_em && (!form.validade || new Date(form.validade)>new Date())
+  const url = linkAtivo ? `${window.location.origin}/pl/${form.token}` : null
   const concluido = form && form.status === 'concluido'
   const blocos = concluido ? resumoRespostas(form.respostas ?? {}) : []
   const tom = { pendente: 'slate', em_andamento: 'yellow', concluido: 'green' }
@@ -2115,6 +2174,7 @@ function LinkPlanejamento({ idCliente, cliente }) {
 
   return (
     <div className="mb-5 rounded-2xl border border-slate-200/70 bg-white p-4">
+      {form && <div className="mb-2 flex flex-wrap gap-2 text-xs"><span>{linkAtivo ? `Link válido até ${form.validade ? dataBR(form.validade) : 'confirmar prazo'}` : 'Link revogado ou expirado'}</span>{linkAtivo && <Button type="button" variant="ghost" onClick={async()=>{if(!window.confirm('Revogar este link de planejamento?'))return;try{conferir(await supabase.rpc('fn_form_revogar',{p_id:form.id,p_planejamento:true}));setVersao(v=>v+1)}catch(e){toast.erro(mensagemErro(e))}}}>Revogar link de planejamento</Button>}{!linkAtivo && <Button type="button" variant="secondary" onClick={gerar} disabled={gerando}>Gerar link atualizado</Button>}</div>}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <span className="mt-0.5 rounded-xl bg-laranja-50 p-2 text-laranja-600"><Link2 size={16} /></span>
@@ -2479,7 +2539,7 @@ function AbaInteracoes({ idCliente, onMudanca }) {
 
   async function excluir(i) {
     if (!window.confirm('Excluir este registro de contato?')) return
-    const { error } = await supabase.from('interacoes').delete().eq('id', i.id)
+    const { error } = await supabase.from('interacoes').delete().eq('id', i.id).select('id').single()
     if (error) return toast.erro(`Não foi possível excluir: ${error.message}`)
     carregar()
     onMudanca?.()
@@ -2557,14 +2617,14 @@ function AbaReunioes({ idCliente, onMudanca }) {
   }
 
   async function mudarStatus(r, status) {
-    const { error } = await supabase.from('reunioes').update({ status }).eq('id', r.id)
+    const { error } = await supabase.from('reunioes').update({ status }).eq('id', r.id).select('id').single()
     if (error) return toast.erro(`Não foi possível atualizar: ${error.message}`)
     carregar(); onMudanca()
   }
 
   async function excluir(r) {
     if (!window.confirm('Excluir esta reunião?')) return
-    const { error } = await supabase.from('reunioes').delete().eq('id', r.id)
+    const { error } = await supabase.from('reunioes').delete().eq('id', r.id).select('id').single()
     if (error) return toast.erro(`Não foi possível excluir: ${error.message}`)
     carregar(); onMudanca()
   }
@@ -2695,15 +2755,20 @@ function TabelaApolices({ apolices, preSistema = false, onEditar, onExcluir }) {
 function AbaApolices({ idCliente, onMudanca }) {
   const toast = useToast()
   const [apolices, setApolices] = useState(null)
+  const [erroLista,setErroLista]=useState(null)
   const [seguradoras, setSeguradoras] = useState([])
   const [modal, setModal] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const trava = useRef(false)
+  const operacaoVenda = useRef(crypto.randomUUID())
+  const [erro, setErro] = useState(null)
   const [editando, setEditando] = useState(null)
   const [form, setForm] = useState(APOLICE_VAZIA)
 
   const carregar = useCallback(() =>
     supabase.from('apolices').select('*, seguradoras(nome)').eq('id_cliente', idCliente)
       .order('created_at', { ascending: false })
-      .then(({ data }) => setApolices(data ?? [])), [idCliente])
+      .then(r => { conferir(r); setApolices(r.data ?? []); setErroLista(null) }).catch(e => setErroLista(mensagemErro(e))), [idCliente])
 
   useEffect(() => {
     carregar()
@@ -2711,7 +2776,7 @@ function AbaApolices({ idCliente, onMudanca }) {
       .then(({ data }) => setSeguradoras(data ?? []))
   }, [carregar])
 
-  function abrirNova() { setEditando(null); setForm(APOLICE_VAZIA); setModal(true) }
+  function abrirNova() { operacaoVenda.current = crypto.randomUUID(); setErro(null); setEditando(null); setForm(APOLICE_VAZIA); setModal(true) }
   function abrirEdicao(a) {
     setEditando(a.id)
     setForm({
@@ -2725,12 +2790,16 @@ function AbaApolices({ idCliente, onMudanca }) {
 
   async function salvar(e) {
     e.preventDefault()
+    if (trava.current) return
+    trava.current = true
+    setSalvando(true); setErro(null)
+    try {
     const payload = {
       id_seguradora: form.id_seguradora,
       numero_apolice: form.numero_apolice || null,
       valor_premio_mensal: form.valor_premio_mensal,
       capital_segurado: form.capital_segurado,
-      percentual_comissao: form.percentual_comissao || null,
+      percentual_comissao: form.percentual_comissao === '' ? null : form.percentual_comissao,
       data_vigencia: form.data_vigencia,
       status: form.status,
       // coluna da migração 012 — só envia quando ela já existe no banco
@@ -2740,23 +2809,28 @@ function AbaApolices({ idCliente, onMudanca }) {
     }
     // Na edição NÃO reenviamos id_cliente (evita re-disparar a esteira de pós-venda)
     if (editando) {
-      await supabase.from('apolices').update(payload).eq('id', editando)
+      conferir(await supabase.from('apolices').update(payload).eq('id', editando).select('id').single())
       toast.ok('Apólice atualizada. Comissão recalculada.')
     } else {
-      await supabase.from('apolices').insert({ ...payload, id_cliente: idCliente })
+      conferir(await supabase.rpc('fn_apolice_criar', { p_operacao: operacaoVenda.current, p_cliente: idCliente, p_dados: payload }))
       toast.ok('Venda registrada! 🎉 Cliente fechado e pós-venda agendado.')
     }
     setModal(false)
     carregar(); onMudanca()
+    } catch (e) { setErro(mensagemErro(e)); toast.erro(mensagemErro(e)) }
+    finally { trava.current = false; setSalvando(false) }
   }
 
   async function excluir(a) {
     if (!window.confirm(`Excluir a apólice de ${a.seguradoras?.nome ?? 'seguradora'} (${brl(a.valor_premio_mensal)}/mês)?`)) return
-    await supabase.from('apolices').delete().eq('id', a.id)
+    try {
+    conferir(await supabase.from('apolices').delete().eq('id', a.id).select('id').single())
     toast.ok('Apólice excluída.')
     carregar(); onMudanca()
+    } catch (e) { toast.erro(mensagemErro(e)) }
   }
 
+  if (erroLista) return <ErroCarga erro={erroLista} tentar={carregar} />
   if (!apolices) return <Spinner />
 
   return (
@@ -2804,6 +2878,7 @@ function AbaApolices({ idCliente, onMudanca }) {
 
       <Modal aberto={modal} titulo={editando ? 'Editar apólice' : 'Registrar venda 🎉'} onFechar={() => setModal(false)}>
         <form onSubmit={salvar} className="space-y-4">
+          {erro && <p role="alert" className="text-sm text-red-700">{erro}</p>}
           <Campo label="Seguradora" obrigatorio>
             <Select value={form.id_seguradora} required
               onChange={(e) => setForm({ ...form, id_seguradora: e.target.value })}>
@@ -2849,7 +2924,7 @@ function AbaApolices({ idCliente, onMudanca }) {
           )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
-            <Button type="submit" variant="success">{editando ? 'Salvar alterações' : 'Confirmar venda'}</Button>
+            <Button type="submit" variant="success" disabled={salvando}>{salvando ? 'Salvando...' : editando ? 'Salvar alterações' : 'Confirmar venda'}</Button>
           </div>
         </form>
       </Modal>
@@ -2867,6 +2942,7 @@ const CATEGORIAS_DOC = [
 
 function AbaDocumentos({ idCliente }) {
   const [docs, setDocs] = useState(null)
+  const [erroLista,setErroLista]=useState(null)
   const [categoria, setCategoria] = useState('apolice')
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState(null)
@@ -2874,7 +2950,7 @@ function AbaDocumentos({ idCliente }) {
   const carregar = useCallback(() =>
     supabase.from('documentos').select('*').eq('id_cliente', idCliente)
       .order('created_at', { ascending: false })
-      .then(({ data }) => setDocs(data ?? [])), [idCliente])
+      .then(r => { conferir(r); setDocs(r.data ?? []); setErroLista(null) }).catch(e=>setErroLista(mensagemErro(e))), [idCliente])
 
   useEffect(() => { carregar() }, [carregar])
 
@@ -2884,6 +2960,9 @@ function AbaDocumentos({ idCliente }) {
     if (!arquivo) return
     setErro(null)
     setEnviando(true)
+    try {
+    if (arquivo.size > 20 * 1024 * 1024) throw new Error('O limite é 20 MB por arquivo.')
+    if (!/^(application\/pdf|image\/(jpeg|png|webp))$/.test(arquivo.type)) throw new Error('Envie PDF, JPG, PNG ou WebP.')
     const caminho = `${idCliente}/${Date.now()}-${arquivo.name}`
     const up = await supabase.storage.from('documentos').upload(caminho, arquivo)
     if (up.error) {
@@ -2891,24 +2970,33 @@ function AbaDocumentos({ idCliente }) {
       setEnviando(false)
       return
     }
-    await supabase.from('documentos').insert({
+    const meta = await supabase.from('documentos').insert({
       id_cliente: idCliente, nome: arquivo.name, categoria,
       caminho, tamanho_bytes: arquivo.size, tipo_mime: arquivo.type,
     })
-    setEnviando(false)
+    if (meta.error) {
+      const compensacao = await supabase.storage.from('documentos').remove([caminho])
+      throw new Error(compensacao.error ? 'O arquivo foi enviado, mas não foi vinculado. Avise o administrador para recuperar o arquivo.' : 'O vínculo falhou; o upload foi desfeito. Tente novamente.')
+    }
     carregar()
+    } catch (e) { setErro(mensagemErro(e)) } finally { setEnviando(false) }
   }
 
   async function baixar(doc) {
     const { data, error } = await supabase.storage.from('documentos').createSignedUrl(doc.caminho, 120)
-    if (!error && data?.signedUrl) window.open(data.signedUrl, '_blank')
+    if (error || !data?.signedUrl) return setErro('Não foi possível abrir o documento. Tente novamente.')
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
   }
 
   async function excluir(doc) {
     if (!window.confirm(`Excluir "${doc.nome}"?`)) return
-    await supabase.storage.from('documentos').remove([doc.caminho])
-    await supabase.from('documentos').delete().eq('id', doc.id)
-    carregar()
+    try {
+      const preparacao = await supabase.rpc('fn_documento_preparar_exclusao', { p_id: doc.id }); conferir(preparacao)
+      const remocao = await supabase.storage.from('documentos').remove([preparacao.data])
+      if (remocao.error) { await supabase.from('documentos').update({exclusao_pendente:false}).eq('id',doc.id); conferir(remocao) }
+      conferir(await supabase.from('documentos').delete().eq('id', doc.id).select('id').single())
+      carregar()
+    } catch (e) { setErro('Exclusão incompleta: ' + mensagemErro(e)) }
   }
 
   const tamanho = (b) => {
@@ -2919,6 +3007,7 @@ function AbaDocumentos({ idCliente }) {
   }
   const tomCat = { apolice: 'blue', documento: 'slate', proposta: 'green', geral: 'yellow' }
 
+  if (erroLista) return <ErroCarga erro={erroLista} tentar={carregar} />
   if (!docs) return <Spinner />
 
   return (
@@ -3134,6 +3223,7 @@ function imprimirDPS(cliente, respostas) {
 }
 
 function AbaFormulario({ idCliente, cliente }) {
+  const toast = useToast()
   const [forms, setForms] = useState(null)
   const [copiado, setCopiado] = useState(null)
 
@@ -3145,8 +3235,7 @@ function AbaFormulario({ idCliente, cliente }) {
   useEffect(() => { carregar() }, [carregar])
 
   async function gerar() {
-    await supabase.from('formularios_onboarding').insert({ id_cliente: idCliente })
-    carregar()
+    try { conferir(await supabase.from('formularios_onboarding').insert({ id_cliente: idCliente })); carregar() } catch(e) { toast.erro(mensagemErro(e)) }
   }
 
   function copiar(f) {
@@ -3182,7 +3271,9 @@ function AbaFormulario({ idCliente, cliente }) {
               <code className="min-w-0 flex-1 truncate rounded bg-slate-50 px-2 py-1 text-xs text-slate-500">
                 {window.location.origin}/f/{f.token}
               </code>
-              <Button variant="secondary" onClick={() => copiar(f)}>
+              <span className="text-xs text-slate-500">{f.revogada_em?'Link revogado':f.validade?`Válido até ${dataBR(f.validade)}`:'Prazo a confirmar'}</span>
+              {!f.revogada_em && <Button variant="ghost" onClick={async()=>{if(!window.confirm('Revogar este link?'))return;try{conferir(await supabase.rpc('fn_form_revogar',{p_id:f.id,p_planejamento:false}));carregar()}catch(e){toast.erro(mensagemErro(e))}}}>Revogar formulário</Button>}
+              <Button variant="secondary" disabled={!!f.revogada_em} onClick={() => copiar(f)}>
                 {copiado === f.id ? <><Check size={15} /> Copiado!</> : <><Copy size={15} /> Copiar link</>}
               </Button>
               {whatsapp(cliente.telefone) && (
@@ -3257,14 +3348,14 @@ function AbaTarefas({ idCliente }) {
     const { error } = await supabase.from('tarefas').update({
       concluida: !t.concluida,
       concluida_em: t.concluida ? null : new Date().toISOString(),
-    }).eq('id', t.id)
+    }).eq('id', t.id).select('id').single()
     if (error) return toast.erro(`Erro: ${error.message}`)
     carregar()
   }
 
   async function excluir(t) {
     if (!window.confirm(`Excluir a tarefa "${t.titulo}"?`)) return
-    const { error } = await supabase.from('tarefas').delete().eq('id', t.id)
+    const { error } = await supabase.from('tarefas').delete().eq('id', t.id).select('id').single()
     if (error) return toast.erro(`Erro: ${error.message}`)
     carregar()
   }

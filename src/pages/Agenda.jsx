@@ -1,3 +1,5 @@
+import ErroCarga from '../components/ErroCarga'
+import { conferir, mensagemErro } from '../lib/operacoes'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CalendarPlus, MessageCircle, CalendarClock, Mail, X } from 'lucide-react'
@@ -11,6 +13,7 @@ import { useToast } from '../components/toastContexto'
 
 // Agenda: tudo que está marcado, agrupado por dia, com ação rápida de status.
 export default function Agenda() {
+  const [erroCarga, setErroCarga] = useState(null)
   const toast = useToast()
   const [reunioes, setReunioes] = useState(null)
   const [clientes, setClientes] = useState([])
@@ -19,15 +22,19 @@ export default function Agenda() {
   const [form, setForm] = useState({ id_cliente: '', data_hora: '', notas: '' })
 
   const carregar = useCallback(async () => {
+    setErroCarga(null)
+    try {
     const desde = new Date(Date.now() - 30 * 86400000).toISOString()
     const [r, c, p] = await Promise.all([
       supabase.from('vw_agenda_reunioes').select('*').gte('data_hora', desde).order('data_hora'),
       supabase.from('clientes').select('id, nome').order('nome'),
       supabase.from('vw_agenda_externa_pendentes').select('*'),
     ])
+    conferir(r, c, p)
     setReunioes(r.data ?? [])
     setClientes(c.data ?? [])
     setPendentes(p.data ?? [])
+    } catch (e) { setErroCarga(mensagemErro(e)) }
   }, [])
 
   useEffect(() => { carregar() }, [carregar])
@@ -45,7 +52,7 @@ export default function Agenda() {
   }
 
   async function mudarStatus(r, status) {
-    const { error } = await supabase.from('reunioes').update({ status }).eq('id', r.id)
+    const { error } = await supabase.from('reunioes').update({ status }).eq('id', r.id).select('id').single()
     if (error) return toast.erro(`Não foi possível atualizar: ${error.message}`)
     carregar()
   }
@@ -59,7 +66,7 @@ export default function Agenda() {
   }
 
   async function ignorarEvento(evento) {
-    const { error } = await supabase.from('agenda_externa').update({ status: 'ignorada' }).eq('id', evento.id)
+    const { error } = await supabase.from('agenda_externa').update({ status: 'ignorada' }).eq('id', evento.id).select('id').single()
     if (error) return toast.erro(`Não foi possível ignorar: ${error.message}`)
     setPendentes((ps) => ps.filter((p) => p.id !== evento.id))
   }
@@ -79,6 +86,7 @@ export default function Agenda() {
       a === 'ATRASADAS' ? -1 : b === 'ATRASADAS' ? 1 : a.localeCompare(b))
   }, [reunioes])
 
+  if (erroCarga) return <ErroCarga erro={erroCarga} tentar={carregar} />
   if (!reunioes) return <Spinner />
 
   const rotuloDia = (chave) => {

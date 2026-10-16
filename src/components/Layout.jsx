@@ -1,3 +1,4 @@
+import PortaPerfil from './PortaPerfil'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { LogOut, Menu, X, LifeBuoy, Search, Keyboard, ChevronRight } from 'lucide-react'
@@ -154,6 +155,7 @@ export default function Layout() {
   }, [])
 
   return (
+    <PortaPerfil>
     <div className="min-h-screen">
       <PaletaComandos aberta={paleta} onFechar={() => setPaleta(false)} />
       <AjudaAtalhos aberta={ajuda} onFechar={() => setAjuda(false)} />
@@ -330,5 +332,6 @@ export default function Layout() {
         </button>
       </nav>
     </div>
+    </PortaPerfil>
   )
 }

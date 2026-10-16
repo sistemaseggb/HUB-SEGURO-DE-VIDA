@@ -1,3 +1,4 @@
+import { planoPublico } from './propostaPublica.js'
 // ─────────────────────────────────────────────────────────────────────────────
 // MODO DEMONSTRAÇÃO — banco simulado em memória, com dados FICTÍCIOS.
 //
@@ -624,7 +625,7 @@ function criarViews(db) {
         premio_mensal_total: aps.reduce((s, x) => s + Number(x.valor_premio_mensal), 0),
         comissao_total: aps.reduce((s, x) => s + Number(x.comissao_gerada ?? 0), 0),
         total_leads: cls.length,
-        taxa_conversao_pct: cls.length ? Math.round(aps.length / cls.length * 1000) / 10 : 0,
+        taxa_conversao_pct: cls.filter(c => ['fechado', 'perdido'].includes(c.status_funil)).length ? Math.round(cls.filter(c => c.status_funil === 'fechado').length / cls.filter(c => ['fechado', 'perdido'].includes(c.status_funil)).length * 1000) / 10 : 0,
       }
     }).sort((a, b) => b.total_vendas - a.total_vendas),
     vw_assessor_resumo: () => db.assessores.map((a) => {
@@ -774,7 +775,7 @@ class ConsultaDemo {
       const inseridos = []
       for (const p of lista) {
         if (this._op === 'upsert' && this._onConflict) {
-          const existente = this.db[this.nome]?.find((r) => String(r[this._onConflict]) === String(p[this._onConflict]))
+          const existente = this.db[this.nome]?.find((r) => this._onConflict.split(',').every(k => String(r[k]) === String(p[k])))
           if (existente) { Object.assign(existente, p, { updated_at: iso(hoje()) }); inseridos.push(existente); continue }
         }
         const novo = { id: uuid(), created_at: iso(hoje()), ...p }
@@ -793,9 +794,10 @@ class ConsultaDemo {
       return { data, error: null }
     }
     if (this._op === 'delete') {
+      const removidos = this.db[this.nome]?.filter(r => this.filtros.every(f => f(r))) ?? []
       const restam = this.db[this.nome]?.filter((r) => !this.filtros.every((f) => f(r))) ?? []
       this.db[this.nome] = restam
-      return { data: null, error: null }
+      return { data: this._single ? removidos[0] ?? null : removidos, error: null }
     }
 
     // leitura
@@ -831,6 +833,13 @@ class ConsultaDemo {
 // ─── Cliente demo completo (from/auth/storage/rpc) ──────────────────────────
 export function criarSupabaseDemo() {
   const db = semear()
+  Object.assign(db, { cotacoes: [], acompanhamentos: [], propostas_versoes: [], eventos_auditoria: [], hub_perfis: [], atendimentos_registros: [] })
+  const arquivados = []
+  db.importacoes_lotes=[];db.premissas_revisoes=['Taxas e limites de emissão','Premissas tributárias e sucessórias','Condições e exclusões dos produtos'].map(assunto=>({assunto}));db.conciliacoes_mensais=[]
+  for (const p of db.planejamentos) {
+    const c = db.clientes.find(c => c.id === p.id_cliente)
+    db.propostas_versoes.push({ id: uuid(),id_cliente:p.id_cliente,versao:1,token:p.token_proposta,cliente_nome:c?.nome,cliente_idade:c?.data_nascimento ? Math.floor((Date.now()-new Date(c.data_nascimento).getTime())/31557600000) : null,plano:planoPublico(p),validade:iso(diasFrente(30)),created_at:iso(hoje()) })
+  }
   const views = criarViews(db)
   const ouvintes = new Set()
   let sessao = null
@@ -841,6 +850,7 @@ export function criarSupabaseDemo() {
   // recalcula comissão tripartida ao registrar venda (imita o trigger do banco)
   const hooks = {
     aoInserir(tabela, r) {
+      if(['formularios_onboarding','formularios_planejamento'].includes(tabela))Object.assign(r,{token:r.token||uuid(),validade:r.validade||iso(diasFrente(90)),status:r.status||'pendente',respostas:r.respostas||{},etapa_atual:r.etapa_atual||0,enviado_em:iso(hoje())})
       // imita o default gen_random_uuid() da migração 017
       if (tabela === 'planejamentos' && !r.token_proposta) r.token_proposta = uuid()
       if (tabela !== 'apolices') return
@@ -891,7 +901,7 @@ export function criarSupabaseDemo() {
     async rpc(fn, args = {}) {
       if (fn === 'fn_form_carregar') {
         const f = db.formularios_onboarding.find((x) => x.token === args.p_token)
-        if (!f) return { data: { erro: 'nao_encontrado' }, error: null }
+        if (!f || f.revogada_em) return { data: { erro: 'nao_encontrado' }, error: null }
         const c = db.clientes.find((x) => x.id === f.id_cliente)
         return {
           data: {
@@ -918,7 +928,7 @@ export function criarSupabaseDemo() {
       // exatamente o que acontece em produção.
       if (fn === 'fn_plan_carregar') {
         const f = db.formularios_planejamento.find((x) => x.token === args.p_token)
-        if (!f) return { data: { erro: 'planejamento_nao_encontrado' }, error: null }
+        if (!f || f.revogada_em) return { data: { erro: 'planejamento_nao_encontrado' }, error: null }
         const c = db.clientes.find((x) => x.id === f.id_cliente)
         if (f.status === 'pendente') { f.status = 'em_andamento'; f.iniciado_em = iso(hoje()) }
         return {
@@ -956,20 +966,106 @@ export function criarSupabaseDemo() {
         })
         return { data: { ok: true, aplicado: true }, error: null }
       }
-      if (fn === 'fn_proposta_carregar') {
-        const p = db.planejamentos.find((x) => x.token_proposta === args.p_token)
-        if (!p) return { data: { erro: 'proposta_nao_encontrada' }, error: null }
-        const c = db.clientes.find((x) => x.id === p.id_cliente)
-        const plano = { ...p }
-        delete plano.id; delete plano.id_cliente; delete plano.token_proposta
-        // migração 028: a idade vai junto. Sem ela a proposta do cliente perde
-        // as três formas de fazer, o custo da espera e a aposentadoria — os
-        // três capítulos dependem de idade, e a tela sempre leu este campo.
-        const nasc = c?.data_nascimento ? new Date(c.data_nascimento) : null
-        const idade = nasc
-          ? Math.floor((Date.now() - nasc.getTime()) / (365.2425 * 24 * 3600 * 1000))
-          : null
-        return { data: { cliente_nome: c?.nome ?? '', cliente_idade: idade, plano }, error: null }
+      if(fn==='fn_apolice_criar'){
+        let a=db.apolices.find(x=>x.id_operacao===args.p_operacao)
+        if(!a){a={id:uuid(),id_operacao:args.p_operacao,id_cliente:args.p_cliente,...args.p_dados,created_at:iso(hoje())};hooks.aoInserir('apolices',a);db.apolices.push(a)}
+        return {data:{id:a.id},error:null}
+      }
+      if(fn==='fn_form_revogar'){
+        const f=db[args.p_planejamento?'formularios_planejamento':'formularios_onboarding'].find(f=>f.id===args.p_id)
+        if(f)f.revogada_em=iso(hoje());return {data:null,error:null}
+      }
+      if(fn==='fn_planejamento_salvar'){
+        let p=db.planejamentos.find(p=>p.id_cliente===args.p_cliente)
+        if(p&&(p.updated_at||null)!==(args.p_versao||null))return {data:null,error:{message:'Este estudo foi alterado em outra sessão. Recarregue antes de salvar.'}}
+        if(!p){p={id:uuid(),id_cliente:args.p_cliente,token_proposta:uuid()};db.planejamentos.push(p)}
+        if(args.p_payload.premio_estimado!==undefined&&Number(args.p_payload.premio_estimado)!==Number(p.premio_estimado))p.cotacao_referencia=null
+        Object.assign(p,args.p_payload,{updated_at:iso(hoje())});return {data:{...p},error:null}
+      }
+      if(fn==='fn_importar_comissoes'){
+        const pares=new Set(args.p_linhas.map(r=>[r.competencia,r.seguradora,r.segmento||'individual'].join('|')))
+        const antes=db.comissoes_importadas.length
+        db.comissoes_importadas=db.comissoes_importadas.filter(r=>!pares.has([r.competencia,r.seguradora,r.segmento||'individual'].join('|')))
+        const substituidos=antes-db.comissoes_importadas.length
+        db.comissoes_importadas.push(...args.p_linhas.map(r=>({...r,id:uuid(),id_lote:args.p_id})))
+        db.importacoes_lotes.push({id:args.p_id,created_at:iso(hoje()),quantidade:args.p_linhas.length,substituidos,fontes:[...new Set(args.p_linhas.map(r=>r.origem))]})
+        return {data:{ok:args.p_linhas.length,substituidos,erros:[]},error:null}
+      }
+      if(fn==='fn_hub_status_operacao')return {data:{verificado_em:iso(hoje()),outlook:{ativo:false},mensagens:{pendentes:db.fila_mensagens.filter(x=>x.status==='pendente').length},rotina_diaria:null},error:null}
+      if(fn==='fn_documento_preparar_exclusao'){
+        const d=db.documentos.find(d=>d.id===args.p_id)
+        if(!d||db.cotacoes.some(c=>c.id_documento===d.id))return {data:null,error:{message:'Documento indisponível ou vinculado a uma cotação'}}
+        d.exclusao_pendente=true;return {data:d.caminho,error:null}
+      }
+      if(fn==='fn_hub_mesclar_clientes'){
+        if(args.p_origem===args.p_destino)return {data:null,error:{message:'Escolha clientes diferentes'}}
+        for(const t of ['planejamentos','acompanhamentos'])if(db[t].some(x=>x.id_cliente===args.p_origem)&&db[t].some(x=>x.id_cliente===args.p_destino))return {data:null,error:{message:'Compare os estudos antes de consolidar'}}
+        const de=db.clientes.find(c=>c.id===args.p_origem),para=db.clientes.find(c=>c.id===args.p_destino)
+        if(!de||!para)return {data:null,error:{message:'Cliente não encontrado'}}
+        for(const t of Object.keys(db))if(Array.isArray(db[t]))for(const x of db[t])if(x.id_cliente===de.id)x.id_cliente=para.id
+        db.clientes=db.clientes.filter(c=>c!==de);de.arquivado_em=iso(hoje());de.mesclado_em=para.id;arquivados.push(de)
+        return {data:null,error:null}
+      }
+      if(fn==='fn_hub_atribuir_perfil')return {data:null,error:null}
+      if (fn === 'fn_hub_papel') return { data:'admin',error:null }
+      if (fn === 'fn_hub_arquivados') return { data:arquivados.map(c => ({id:c.id,nome:c.nome,arquivado_em:c.arquivado_em})),error:null }
+      if (fn === 'fn_hub_arquivar_cliente') {
+        const c=db.clientes.find(c => c.id===args.p_id)
+        if(!c) return {data:null,error:{message:'Cliente não encontrado'}}
+        c.arquivado_em=iso(hoje());arquivados.push(c);db.clientes=db.clientes.filter(x=>x!==c)
+        for(const v of db.propostas_versoes.filter(v=>v.id_cliente===c.id))v.revogada_em=iso(hoje())
+        return {data:null,error:null}
+      }
+      if(fn === 'fn_hub_restaurar_cliente') {
+        const i=arquivados.findIndex(c=>c.id===args.p_id)
+        if(i<0)return {data:null,error:{message:'Não encontrado'}}
+        const [c]=arquivados.splice(i,1);c.arquivado_em=null;db.clientes.push(c);return {data:null,error:null}
+      }
+      if(fn === 'fn_registrar_atendimento') {
+        if(db.atendimentos_registros.some(x=>x.id===args.p_id))return {data:null,error:null}
+        db.atendimentos_registros.push({id:args.p_id,id_cliente:args.p_cliente})
+        db.interacoes.push({id:uuid(),id_cliente:args.p_cliente,tipo:args.p_tipo,descricao:args.p_resultado,data:iso(hoje()),created_at:iso(hoje())})
+        db.tarefas.push({id:uuid(),id_cliente:args.p_cliente,titulo:args.p_acao,tipo:'contato',data_vencimento:args.p_data,concluida:false,created_at:iso(hoje())})
+        return {data:null,error:null}
+      }
+      if(fn === 'fn_hub_salvar_acompanhamento') {
+        const a=args.p_dados
+        if(a.emissao==='vigente' && (!a.pagamento_confirmado||!a.id_apolice))return {data:null,error:{message:'Vincule a apólice e confirme o pagamento'}}
+        const anterior=db.acompanhamentos.find(x=>x.id_cliente===a.id_cliente)
+        if(anterior)Object.assign(anterior,a);else db.acompanhamentos.push({...a})
+        for(const [campo,prefixo,titulo] of [['revisao_em','revisao:','Revisar proteção'],['prazo','emissao:','Retorno da emissão']]){
+          const key=prefixo+a.id_cliente,task=db.tarefas.find(t=>t.origem_chave===key)
+          if(a[campo]){const row={id_cliente:a.id_cliente,titulo,data_vencimento:a[campo],concluida:false,origem_chave:key,tipo:'contato',automatica:true};if(task)Object.assign(task,row);else db.tarefas.push({id:uuid(),created_at:iso(hoje()),...row})}
+        }
+        return {data:null,error:null}
+      }
+      if(fn === 'fn_cotacao_aplicar') {
+        const c=db.cotacoes.find(x=>x.id===args.p_id),p=db.planejamentos.find(x=>x.id_cliente===c?.id_cliente)
+        if(!c||!p||c.validade<dia(hoje()))return {data:null,error:{message:'Confira cotação e planejamento'}}
+        Object.assign(p,{premio_estimado:Number(c.premio),premio_anual:Number(c.premio)*12,cotacao_referencia:c.id,updated_at:iso(hoje())});return {data:null,error:null}
+      }
+      if(fn === 'fn_proposta_publicar') {
+        const p=db.planejamentos.find(x=>x.id_cliente===args.p_cliente),c=db.clientes.find(x=>x.id===args.p_cliente)
+        if(!p||!c)return {data:null,error:{message:'Salve o planejamento antes de publicar'}}
+        if(args.p_versao && args.p_versao!==p.updated_at)return {data:null,error:{message:'O estudo mudou. Reabra e confira antes de publicar'}}
+        const v={id:uuid(),id_cliente:c.id,token:uuid(),versao:1+Math.max(0,...db.propostas_versoes.filter(v=>v.id_cliente===c.id).map(v=>v.versao)),cliente_nome:c.nome,cliente_idade:c.data_nascimento?Math.floor((Date.now()-new Date(c.data_nascimento).getTime())/31557600000):null,plano:planoPublico(p),validade:iso(diasFrente(args.p_dias||30)),created_at:iso(hoje())}
+        const q=db.cotacoes.find(q=>q.id===p.cotacao_referencia)
+        if(q){if(q.validade<dia(hoje()))return {data:null,error:{message:'Cotação vencida'}};v.plano.cotacao_publica=Object.fromEntries(['seguradora','produto','validade','premio','capital','coberturas','exclusoes','carencias','franquias','reajuste'].map(k=>[k,q[k]]));v.plano.cotacao_publica.data=q.data_cotacao}
+        db.propostas_versoes.push(v);return {data:v,error:null}
+      }
+      if(fn === 'fn_proposta_revogar') {
+        const v=db.propostas_versoes.find(x=>x.id===args.p_id)
+        if(!v)return {data:null,error:{message:'Versão não encontrada'}}
+        v.revogada_em=iso(hoje());return {data:null,error:null}
+      }
+      if(fn === 'fn_proposta_carregar' || fn === 'fn_proposta_responder') {
+        const v=db.propostas_versoes.find(v=>v.token===args.p_token&&!v.revogada_em&&new Date(v.validade)>new Date())
+        if(!v)return {data:{erro:'proposta_nao_encontrada'},error:null}
+        if(fn==='fn_proposta_responder'){
+          if(v.decisao)return {data:null,error:{message:'Resposta já registrada'}}
+          v.decisao=args.p_decisao;v.decisao_em=iso(hoje());return {data:null,error:null}
+        }
+        return {data:{cliente_nome:v.cliente_nome,cliente_idade:v.cliente_idade,plano:v.plano,versao:v.versao,validade:v.validade,decisao:v.decisao},error:null}
       }
       if (fn === 'fn_gerar_fila_diaria') return { data: 0, error: null }
       if (fn === 'fn_vincular_evento') return { data: true, error: null }

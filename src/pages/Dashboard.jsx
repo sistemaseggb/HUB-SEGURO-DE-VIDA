@@ -1,3 +1,7 @@
+import { AtendimentoRapido } from '../components/JornadaConsultoria'
+import { Modal, Button } from '../components/ui'
+import ErroCarga from '../components/ErroCarga'
+import { conferir, mensagemErro } from '../lib/operacoes'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -296,6 +300,8 @@ function PrimeirosPassos() {
 }
 
 export default function Dashboard() {
+  const [atendimento, setAtendimento] = useState(null)
+  const [erroCarga, setErroCarga] = useState(null)
   const [carregando, setCarregando] = useState(true)
   const [comissoes, setComissoes] = useState([])
   const [dashboard, setDashboard] = useState([])
@@ -311,6 +317,8 @@ export default function Dashboard() {
   const [periodo, setPeriodo] = useState(6) // meses exibidos nos gráficos
 
   async function carregar() {
+    setErroCarga(null)
+    try {
     const [c, d, r, ce, f, k, cfg, pr, cv, ri, rg] = await Promise.all([
       supabase.from('vw_comissoes_mensal').select('*').limit(periodo),
       supabase.from('vw_dashboard_mensal').select('*').limit(periodo),
@@ -324,6 +332,7 @@ export default function Dashboard() {
       supabase.from('vw_comissoes_importadas_resumo').select('*'),
       supabase.from('vw_regua_relacionamento').select('*').lte('dias_restantes', 30),
     ])
+    conferir(c, d, r, ce, f, k, cfg, pr, cv, ri, rg)
     setComissoes(c.data ?? [])
     setDashboard(d.data ?? [])
     setRanking(r.data ?? [])
@@ -336,12 +345,14 @@ export default function Dashboard() {
     setRecebidas(ri.data ?? [])
     setRegua(rg.data ?? [])
     setCarregando(false)
+    } catch (e) { setErroCarga(mensagemErro(e)) }
   }
 
   useEffect(() => { carregar() }, [periodo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function concluirTarefa(id) {
-    await supabase.from('tarefas').update({ concluida: true, concluida_em: new Date().toISOString() }).eq('id', id)
+    const resultado = await supabase.from('tarefas').update({ concluida: true, concluida_em: new Date().toISOString() }).eq('id', id).select('id').single()
+    if (resultado.error) { setErroCarga(mensagemErro(resultado.error)); return }
     setCentral((c) => c.filter((i) => !(i.tipo === 'tarefa' && i.id_item === id)))
   }
 
@@ -388,6 +399,7 @@ export default function Dashboard() {
     }
   }, [recebidas, periodo])
 
+  if (erroCarga) return <ErroCarga erro={erroCarga} tentar={carregar} />
   if (carregando) {
     return (
       <div>
@@ -420,6 +432,103 @@ export default function Dashboard() {
       </div>
 
       <PrimeirosPassos />
+      <Modal aberto={!!atendimento} titulo={`Registrar contato · ${atendimento?.nome || ''}`} onFechar={() => setAtendimento(null)}>
+        {atendimento && <AtendimentoRapido key={atendimento.id} idCliente={atendimento.id} aoSalvar={() => { setAtendimento(null); carregar() }} />}
+      </Modal>
+        <Card className="mb-5 p-5">
+          <h2 className="mb-4 font-semibold text-slate-900">Central do Dia</h2>
+
+          {central.length === 0 && (
+            <EmptyState icone={CheckCircle2} titulo="Tudo em dia!"
+              texto="Nenhuma tarefa, aniversário ou lead parado exigindo ação." />
+          )}
+
+          {parados.length > 0 && (
+            <div className="mb-4 rounded-lg border border-red-100 bg-red-50 p-3">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-red-700">
+                <AlertTriangle size={14} /> Leads parados há muito tempo
+              </p>
+              {parados.map((i) => (
+                <Link key={i.id_item} to={`/clientes/${i.id_cliente}`}
+                  className="block truncate py-0.5 text-sm text-red-800 hover:underline">
+                  {i.titulo}
+                </Link>
+              ))}
+            </div>
+          )}
+
+          <ul className="space-y-2">
+            {tarefas.map((t) => (
+              <li key={t.id_item} className="flex items-start gap-2 rounded-lg border border-slate-100 p-2.5">
+                <button onClick={() => concluirTarefa(t.id_item)} title="Concluir"
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-slate-800">{t.titulo}</p>
+                  <p className="text-xs text-slate-400">
+                    {t.nome_cliente && <Link to={`/clientes/${t.id_cliente}`} className="hover:underline">{t.nome_cliente}</Link>}
+                    {' · '}{dataBR(t.data_ref)}
+                    {t.atrasado && <Badge tom="red">atrasada</Badge>}
+                  </p>
+                </div>
+              </li>
+            ))}
+            {aniversarios.map((a) => (
+              <li key={`${a.id_item}-${a.titulo}`} className="flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50/60 p-2.5">
+                <Cake size={16} className="mt-0.5 shrink-0 text-amber-500" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-slate-800">{a.titulo}</p>
+                  <p className="text-xs text-slate-400">{dataBR(a.data_ref)}</p>
+                </div>
+                {whatsapp(a.telefone) && (
+                  <a href={whatsapp(a.telefone, `Olá ${a.nome_cliente?.split(' ')[0]}! 🎉`)} target="_blank" rel="noreferrer"
+                    className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50" title="Enviar WhatsApp">
+                    <MessageCircle size={16} />
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      {/* Foco de Hoje — priorização inteligente */}
+      {foco.length > 0 && (
+        <Card className="mb-6 p-5">
+          <h2 className="mb-1 flex items-center gap-2 font-semibold text-slate-900">
+            <Flame size={18} className="text-orange-500" /> Foco de Hoje
+          </h2>
+          <p className="mb-4 text-xs text-slate-400">
+            Leads ordenados pela prioridade que o sistema calcula sozinho — com a próxima ação sugerida
+          </p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {foco.map((c) => (
+              <div key={c.id} className="rounded-lg border border-slate-200 p-3">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <Link to={`/clientes/${c.id}`} className="truncate font-medium text-slate-800 hover:text-blue-700 hover:underline">
+                    {c.nome}
+                  </Link>
+                  <Badge tom={c.temperatura === 'quente' ? 'red' : c.temperatura === 'morno' ? 'yellow' : 'slate'}>
+                    {c.temperatura === 'quente' ? <Flame size={11} /> : c.temperatura === 'morno' ? <Sun size={11} /> : <Snowflake size={11} />} {c.score}
+                  </Badge>
+                </div>
+                <p className="mb-2 text-sm text-blue-700">→ {c.proxima_acao}</p>
+                <Button className="mb-2" variant="secondary" onClick={() => setAtendimento(c)}>Registrar contato</Button>
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <span>{etapaLabel(c.status_funil)}</span>
+                  {c.dias_na_etapa > 0 && <span>· {c.dias_na_etapa}d parado</span>}
+                  {whatsapp(c.telefone) && (
+                    <a href={whatsapp(c.telefone)} target="_blank" rel="noreferrer"
+                      className="ml-auto rounded p-1 text-emerald-600 hover:bg-emerald-50" title="WhatsApp">
+                      <MessageCircle size={15} />
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+
+
       <ResumoSemana />
 
 
@@ -475,43 +584,6 @@ export default function Dashboard() {
                 atual={recebidasMes.doMesAtual.total}
                 meta={Number(metas.meta_comissao_mensal)} formato={brlCompacto} />
             )}
-          </div>
-        </Card>
-      )}
-
-      {/* Foco de Hoje — priorização inteligente */}
-      {foco.length > 0 && (
-        <Card className="mb-6 p-5">
-          <h2 className="mb-1 flex items-center gap-2 font-semibold text-slate-900">
-            <Flame size={18} className="text-orange-500" /> Foco de Hoje
-          </h2>
-          <p className="mb-4 text-xs text-slate-400">
-            Leads ordenados pela prioridade que o sistema calcula sozinho — com a próxima ação sugerida
-          </p>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {foco.map((c) => (
-              <div key={c.id} className="rounded-lg border border-slate-200 p-3">
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <Link to={`/clientes/${c.id}`} className="truncate font-medium text-slate-800 hover:text-blue-700 hover:underline">
-                    {c.nome}
-                  </Link>
-                  <Badge tom={c.temperatura === 'quente' ? 'red' : c.temperatura === 'morno' ? 'yellow' : 'slate'}>
-                    {c.temperatura === 'quente' ? <Flame size={11} /> : c.temperatura === 'morno' ? <Sun size={11} /> : <Snowflake size={11} />} {c.score}
-                  </Badge>
-                </div>
-                <p className="mb-2 text-sm text-blue-700">→ {c.proxima_acao}</p>
-                <div className="flex items-center gap-2 text-xs text-slate-400">
-                  <span>{etapaLabel(c.status_funil)}</span>
-                  {c.dias_na_etapa > 0 && <span>· {c.dias_na_etapa}d parado</span>}
-                  {whatsapp(c.telefone) && (
-                    <a href={whatsapp(c.telefone)} target="_blank" rel="noreferrer"
-                      className="ml-auto rounded p-1 text-emerald-600 hover:bg-emerald-50" title="WhatsApp">
-                      <MessageCircle size={15} />
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
           </div>
         </Card>
       )}
@@ -582,60 +654,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         {/* Central do dia */}
-        <Card className="p-5 xl:row-span-2">
-          <h2 className="mb-4 font-semibold text-slate-900">Central do Dia</h2>
 
-          {central.length === 0 && (
-            <EmptyState icone={CheckCircle2} titulo="Tudo em dia!"
-              texto="Nenhuma tarefa, aniversário ou lead parado exigindo ação." />
-          )}
-
-          {parados.length > 0 && (
-            <div className="mb-4 rounded-lg border border-red-100 bg-red-50 p-3">
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-red-700">
-                <AlertTriangle size={14} /> Leads parados há muito tempo
-              </p>
-              {parados.map((i) => (
-                <Link key={i.id_item} to={`/clientes/${i.id_cliente}`}
-                  className="block truncate py-0.5 text-sm text-red-800 hover:underline">
-                  {i.titulo}
-                </Link>
-              ))}
-            </div>
-          )}
-
-          <ul className="space-y-2">
-            {tarefas.map((t) => (
-              <li key={t.id_item} className="flex items-start gap-2 rounded-lg border border-slate-100 p-2.5">
-                <button onClick={() => concluirTarefa(t.id_item)} title="Concluir"
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-slate-800">{t.titulo}</p>
-                  <p className="text-xs text-slate-400">
-                    {t.nome_cliente && <Link to={`/clientes/${t.id_cliente}`} className="hover:underline">{t.nome_cliente}</Link>}
-                    {' · '}{dataBR(t.data_ref)}
-                    {t.atrasado && <Badge tom="red">atrasada</Badge>}
-                  </p>
-                </div>
-              </li>
-            ))}
-            {aniversarios.map((a) => (
-              <li key={`${a.id_item}-${a.titulo}`} className="flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50/60 p-2.5">
-                <Cake size={16} className="mt-0.5 shrink-0 text-amber-500" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-slate-800">{a.titulo}</p>
-                  <p className="text-xs text-slate-400">{dataBR(a.data_ref)}</p>
-                </div>
-                {whatsapp(a.telefone) && (
-                  <a href={whatsapp(a.telefone, `Olá ${a.nome_cliente?.split(' ')[0]}! 🎉`)} target="_blank" rel="noreferrer"
-                    className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50" title="Enviar WhatsApp">
-                    <MessageCircle size={16} />
-                  </a>
-                )}
-              </li>
-            ))}
-          </ul>
-        </Card>
 
         {/* Evolução de vendas */}
         <Card className="p-5 xl:col-span-2">

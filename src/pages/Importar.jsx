@@ -1,3 +1,4 @@
+import { conferir, mensagemErro } from '../lib/operacoes'
 import { useState } from 'react'
 import { Upload, CheckCircle2, AlertTriangle, Download, FileSpreadsheet, X, Table2, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -809,7 +810,7 @@ function ImportarComissoes({ onVoltar }) {
     }
   })
   const prontos = analises.filter((x) => x.pronto)
-  const registrosTotais = prontos.flatMap((x) => x.registros)
+  const registrosTotais = prontos.flatMap((x) => x.registros.map(r => ({ ...r, origem: x.nome })))
   const totalGeral = registrosTotais.reduce((s, r) => s + r.valor, 0)
 
   async function importarTudo() {
@@ -992,47 +993,34 @@ function ImportarComissoes({ onVoltar }) {
 }
 
 async function importarComissoes(registros) {
-  const erros = []
-
-  // vincula assessor (por código) e cliente (por código ou nome) quando existem
-  const [{ data: assessores }, { data: clientes }] = await Promise.all([
-    supabase.from('assessores').select('id, codigo'),
-    supabase.from('clientes').select('id, nome, codigo'),
-  ])
-  const assessorPorCod = new Map((assessores ?? []).filter((a) => a.codigo).map((a) => [normalizar(a.codigo), a.id]))
-  const clientePorCod = new Map((clientes ?? []).filter((c) => c.codigo).map((c) => [normalizar(c.codigo), c.id]))
-  const clientePorNome = new Map((clientes ?? []).map((c) => [normalizar(c.nome), c.id]))
-
-  const linhas = registros.map((r) => ({
-    ...r,
-    id_assessor: (r.codigo_assessor && assessorPorCod.get(normalizar(r.codigo_assessor))) ?? null,
-    id_cliente: (r.codigo_cliente && clientePorCod.get(normalizar(r.codigo_cliente)))
-      ?? clientePorNome.get(normalizar(r.cliente_nome)) ?? null,
-    origem: 'importador',
-  }))
-
-  // Substitui o que já existia para as mesmas competência+seguradora+segmento.
-  // O segmento PRECISA fazer parte da chave: comissões e campanhas da Azos (ou
-  // Icatu individual e empresarial) do mesmo mês convivem — importar um não
-  // pode apagar o outro.
-  const pares = [...new Set(linhas.map((l) => `${l.competencia}|${l.seguradora}|${l.segmento}`))]
-  let substituidos = 0
-  for (const par of pares) {
-    const [comp, seg, segmento] = par.split('|')
-    const { count, error } = await supabase.from('comissoes_importadas')
-      .delete({ count: 'exact' }).eq('competencia', comp).eq('seguradora', seg).eq('segmento', segmento)
-    if (error) return { ok: 0, substituidos: 0, erros: [`Falha ao limpar dados antigos: ${error.message}`] }
-    substituidos += count ?? 0
-  }
-
-  let ok = 0
-  for (let i = 0; i < linhas.length; i += 200) {
-    const lote = linhas.slice(i, i + 200)
-    const { error, data } = await supabase.from('comissoes_importadas').insert(lote).select('id')
-    if (error) erros.push(`Lote ${i / 200 + 1}: ${error.message}`)
-    else ok += data.length
-  }
-  return { ok, substituidos, erros }
+  try {
+    const resultados = await Promise.all([
+      supabase.from('assessores').select('id,codigo'),
+      supabase.from('clientes').select('id,nome,codigo'),
+    ])
+    conferir(...resultados)
+    // Um nome/código ambíguo permanece pendente; nunca escolher o último por acidente.
+    const unico = (lista, campo) => {
+      const mapa = new Map(), repetidos = new Set()
+      for (const x of lista) {
+        if (!x[campo]) continue
+        const k = normalizar(x[campo])
+        if (mapa.has(k)) repetidos.add(k)
+        mapa.set(k,x.id)
+      }
+      for (const k of repetidos) mapa.delete(k)
+      return mapa
+    }
+    const assessores=unico(resultados[0].data ?? [],'codigo'),clientes=resultados[1].data ?? []
+    const codigos=unico(clientes,'codigo'),nomes=unico(clientes,'nome')
+    const linhas=registros.map(r=>({...r,id_assessor:assessores.get(normalizar(r.codigo_assessor||''))||null,
+      id_cliente:r.codigo_cliente ? codigos.get(normalizar(r.codigo_cliente))||null : nomes.get(normalizar(r.cliente_nome))||null,
+      origem:r.origem||'importador'}))
+    const r=await supabase.rpc('fn_importar_comissoes',{p_linhas:linhas,p_id:crypto.randomUUID()})
+    conferir(r)
+    if(!r.data)throw new Error('Importação não confirmada.')
+    return r.data
+  }catch(e){return {ok:0,substituidos:0,erros:[mensagemErro(e)]}}
 }
 
 // ─── Importação de ASSESSORES (lista oficial do escritório) ─────────────────

@@ -1,3 +1,6 @@
+import { conferir, paginasCompletas } from '../lib/operacoes'
+import ConciliacaoFinanceira from '../components/ConciliacaoFinanceira'
+import ErroCarga from '../components/ErroCarga'
 import { useEffect, useMemo, useState } from 'react'
 import {
   Download, TrendingDown, TrendingUp, Timer, Wallet, Database, Landmark, HandCoins,
@@ -73,7 +76,8 @@ async function buscarComissoesPaginado(colunas, filtro = (q) => q) {
     const { data, error } = await filtro(
       supabase.from('comissoes_importadas').select(colunas).order('id')
     ).range(de, de + 999)
-    if (error || !data?.length) break
+    if (error) throw new Error('As comissões estão incompletas. ' + error.message)
+    if (!data?.length) break
     todas.push(...data)
     if (data.length < 1000) break
   }
@@ -83,6 +87,7 @@ async function buscarComissoesPaginado(colunas, filtro = (q) => q) {
 // Relatórios gerenciais: fechamento de comissões (quanto pagar a cada assessor),
 // análise de perdas e velocidade do funil. Tudo exportável em CSV.
 export default function Relatorios() {
+  const [erroCarga, setErroCarga] = useState(null)
   const [mes, setMes] = useState(mesLocal)
   const [comissoes, setComissoes] = useState(null)
   const [splitMensal, setSplitMensal] = useState([])
@@ -103,11 +108,12 @@ export default function Relatorios() {
       supabase.from('vw_motivos_perda').select('*'),
       supabase.from('vw_tempo_medio_etapa').select('*'),
     ]).then(([c, s, m, t]) => {
+      conferir(c,s,m,t)
       setComissoes(c.data ?? [])
       setSplitMensal(s.data ?? [])
       setMotivos(m.data ?? [])
       setTempos(t.data ?? [])
-    })
+    }).catch(setErroCarga)
   }, [])
 
   const [resumoImportadas, setResumoImportadas] = useState([])
@@ -118,7 +124,7 @@ export default function Relatorios() {
     buscarComissoesPaginado(
       'seguradora, segmento, tipo_receita, cliente_nome, codigo_cliente, codigo_assessor, producao, parcela, valor, assessores(nome), clientes(codigo)',
       (q) => q.eq('competencia', `${mes}-01`)
-    ).then(setImportadas)
+    ).then(setImportadas).catch(setErroCarga)
   }
   useEffect(carregarComissoesDoMes, [mes]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -126,7 +132,7 @@ export default function Relatorios() {
   // quanto ela ganha em cada mês, incluindo as vendas indicadas por ela.
   function carregarTodasComissoes() {
     buscarComissoesPaginado('competencia, producao, tipo_receita, codigo_assessor, valor')
-      .then(setTodasComissoes)
+      .then(setTodasComissoes).catch(setErroCarga)
   }
   useEffect(carregarTodasComissoes, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -134,15 +140,15 @@ export default function Relatorios() {
     supabase.from('assessores').select('id, nome, codigo').order('nome')
       .then(({ data }) => setAssessoresLista(data ?? []))
     supabase.from('configuracoes').select('*').single()
-      .then(({ data }) => setCfgBanco(data))
+      .then(r => { conferir(r); setCfgBanco(r.data) }).catch(setErroCarga)
   }, [])
 
   // Pendências de classificação do mês: produção (Nati/Bruno) e assessor.
   // Corrigir aqui atualiza TODAS as competências daquele cliente que ainda
   // estejam pendentes — classifica uma vez, vale para sempre.
   async function classificarProducao(cliente, producao) {
-    await supabase.from('comissoes_importadas').update({ producao })
-      .eq('cliente_nome', cliente).is('producao', null)
+    const r=await supabase.from('comissoes_importadas').update({ producao }).eq('cliente_nome', cliente).is('producao', null).select('id')
+    if(r.error || !r.data?.length){setErroCarga(r.error||new Error('Nenhum lançamento foi alterado. Confira as permissões.'));return}
     carregarComissoesDoMes()
     carregarTodasComissoes()
     supabase.from('vw_comissoes_importadas_resumo').select('*')
@@ -151,9 +157,8 @@ export default function Relatorios() {
   async function vincularAssessor(cliente, idAssessor) {
     const a = assessoresLista.find((x) => x.id === idAssessor)
     if (!a) return
-    await supabase.from('comissoes_importadas')
-      .update({ id_assessor: a.id, codigo_assessor: a.codigo ?? null })
-      .eq('cliente_nome', cliente).is('codigo_assessor', null)
+    const r=await supabase.from('comissoes_importadas').update({ id_assessor:a.id,codigo_assessor:a.codigo??null }).eq('cliente_nome',cliente).is('codigo_assessor',null).select('id')
+    if(r.error || !r.data?.length){setErroCarga(r.error||new Error('Nenhum lançamento foi alterado.'));return}
     carregarComissoesDoMes()
     carregarTodasComissoes()
   }
@@ -607,29 +612,28 @@ export default function Relatorios() {
   }
 
   async function exportarClientes() {
-    const { data } = await supabase
-      .from('clientes')
-      .select('codigo, nome, telefone, email, data_nascimento, status_funil, perfil_necessidade, assessores(nome)')
-      .order('nome')
+    try {
+    const data=await paginasCompletas((de,ate)=>supabase.from('clientes').select('codigo, nome, telefone, email, data_nascimento, status_funil, perfil_necessidade, assessores(nome)').order('id').range(de,ate))
     baixarCSV('clientes.csv',
       ['Código', 'Nome', 'Telefone', 'Email', 'Nascimento', 'Etapa', 'Assessor', 'Perfil'],
       (data ?? []).map((c) => [c.codigo, c.nome, c.telefone, c.email,
         c.data_nascimento ? dataBR(c.data_nascimento) : '', etapaLabel(c.status_funil),
         c.assessores?.nome ?? '', c.perfil_necessidade]))
+    }catch(e){setErroCarga(e)}
   }
 
   async function exportarApolices() {
-    const { data } = await supabase
-      .from('apolices')
-      .select('numero_apolice, valor_premio_mensal, capital_segurado, comissao_gerada, data_vigencia, status, clientes(nome, codigo), seguradoras(nome)')
-      .order('data_vigencia', { ascending: false })
+    try {
+    const data=await paginasCompletas((de,ate)=>supabase.from('apolices').select('numero_apolice, valor_premio_mensal, capital_segurado, comissao_gerada, data_vigencia, status, clientes(nome, codigo), seguradoras(nome)').order('id').range(de,ate))
     baixarCSV('apolices.csv',
       ['Nº Apólice', 'Cliente', 'Cód. Cliente', 'Seguradora', 'Prêmio mensal', 'Capital', 'Comissão', 'Vigência', 'Status'],
       (data ?? []).map((a) => [a.numero_apolice, a.clientes?.nome ?? '', a.clientes?.codigo ?? '',
         a.seguradoras?.nome ?? '', a.valor_premio_mensal, a.capital_segurado, a.comissao_gerada,
         a.data_vigencia ? dataBR(a.data_vigencia) : '', a.status]))
+    }catch(e){setErroCarga(e)}
   }
 
+  if (erroCarga) return <ErroCarga erro={erroCarga} tentar={() => window.location.reload()} />
   if (!comissoes) return <Spinner />
 
   return (
@@ -643,6 +647,7 @@ export default function Relatorios() {
         </div>
       </PageHeader>
 
+      <ConciliacaoFinanceira mes={mes} />
       <ComoFunciona id="relatorios">
         Escolha o <strong>mês</strong> no canto superior para ver quanto pagar a cada assessor no fechamento
         (com botão de exportar para Excel). Mais abaixo, o sistema mostra <strong>por que você perde clientes</strong> e

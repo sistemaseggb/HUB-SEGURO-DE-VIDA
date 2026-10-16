@@ -1,3 +1,5 @@
+import { conferir, mensagemErro } from '../lib/operacoes'
+import { Modal, Campo, Input } from '../components/ui'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
@@ -190,6 +192,15 @@ export default function Proposta({ publica = false }) {
   const [slideAtual, setSlideAtual] = useState(0)
   const [capitulos, setCapitulos] = useState([])
   const [copiado, setCopiado] = useState(false)
+  const [publicando, setPublicando] = useState(false)
+  const [confirmarPublicacao, setConfirmarPublicacao] = useState(false)
+  const [aprovada, setAprovada] = useState(false)
+  const [validadeDias, setValidadeDias] = useState(30)
+  const [versaoPublicada, setVersaoPublicada] = useState(null)
+  const [erroPublicacao, setErroPublicacao] = useState(null)
+  const [respondendo, setRespondendo] = useState(false)
+  const [respostaCliente, setRespostaCliente] = useState(null)
+  const publicarTrava = useRef(false)
 
   // ── Estado da apresentação ────────────────────────────────────────────────
   const [apresentando, setApresentando] = useState(false)
@@ -413,7 +424,7 @@ export default function Proposta({ publica = false }) {
       // security definer (migração 017) devolve só o plano e o nome dele
       supabase.rpc('fn_proposta_carregar', { p_token: token }).then(({ data, error }) => {
         if (error || !data || data.erro) setDados({ naoEncontrada: true })
-        else setDados({ cliente: { nome: data.cliente_nome, idade: data.cliente_idade }, plano: data.plano })
+        else setDados({ cliente: { nome: data.cliente_nome, idade: data.cliente_idade }, plano: data.plano, versao: data.versao, validade: data.validade, decisao: data.decisao })
       })
     } else {
       Promise.all([
@@ -451,7 +462,7 @@ export default function Proposta({ publica = false }) {
     )
   }
 
-  const linkPublico = plano.token_proposta ? `${window.location.origin}/p/${plano.token_proposta}` : null
+  const linkPublico = versaoPublicada?.token ? `${window.location.origin}/p/${versaoPublicada.token}` : null
 
   // ── A apresentação ────────────────────────────────────────────────────────
   const slideAtivo = capitulos[slideAtual]?.slide ?? ''
@@ -533,10 +544,30 @@ export default function Proposta({ publica = false }) {
     })
   }
 
-  function copiarLink() {
-    navigator.clipboard.writeText(linkPublico)
-    setCopiado(true)
-    setTimeout(() => setCopiado(false), 2000)
+  async function copiarLink() {
+    if (linkPublico) {
+      try { await navigator.clipboard.writeText(linkPublico); setCopiado(true) }
+      catch { setErroPublicacao('Não foi possível copiar. Selecione o link publicado abaixo.') }
+    } else { setAprovada(false); setConfirmarPublicacao(true) }
+  }
+  async function publicar() {
+    if (!aprovada || publicarTrava.current) return
+    publicarTrava.current = true; setPublicando(true); setErroPublicacao(null)
+    try {
+      const resultado = await supabase.rpc('fn_proposta_publicar', { p_cliente: id, p_dias: Number(validadeDias), p_versao: plano.updated_at || null })
+      conferir(resultado)
+      if (!resultado.data?.token) throw new Error('A publicação não foi confirmada.')
+      setVersaoPublicada(resultado.data); setConfirmarPublicacao(false)
+      try { await navigator.clipboard.writeText(`${window.location.origin}/p/${resultado.data.token}`); setCopiado(true) } catch { /* Link fica visível para cópia manual. */ }
+    } catch (e) { setErroPublicacao(mensagemErro(e)) }
+    finally { publicarTrava.current = false; setPublicando(false) }
+  }
+  async function responder(decisao) {
+    if (respondendo) return
+    setRespondendo(true); setErroPublicacao(null)
+    try { conferir(await supabase.rpc('fn_proposta_responder', { p_token: token, p_decisao: decisao })); setRespostaCliente(decisao) }
+    catch (e) { setErroPublicacao(mensagemErro(e)) }
+    finally { setRespondendo(false) }
   }
 
   // O plano que a tela mostra é o do banco, com as alavancas da simulação por
@@ -645,6 +676,25 @@ export default function Proposta({ publica = false }) {
       }}>
     <div className="proposta">
       {/* barra de ações — some na impressão e durante a apresentação */}
+      {!publica && <Modal aberto={confirmarPublicacao} titulo="Aprovar e publicar proposta" onFechar={() => !publicando && setConfirmarPublicacao(false)}>
+        <p className="mb-3 text-sm">O cliente receberá uma versão fixa do estudo, incluindo valores financeiros e coberturas. Notas internas e condições médicas declaradas não são compartilhadas.</p>
+        <Campo label="Validade do link (dias)"><Input type="number" min="1" max="90" value={validadeDias} onChange={e => setValidadeDias(e.target.value)} /></Campo>
+        <label className="my-3 flex gap-2 text-sm"><input type="checkbox" checked={aprovada} onChange={e => setAprovada(e.target.checked)} />Conferi dados, premissas e valores desta proposta e aprovo o compartilhamento.</label>
+        {erroPublicacao && <p role="alert" className="my-2 text-red-700">{erroPublicacao}</p>}
+        <Button disabled={!aprovada || publicando || Number(validadeDias)<1 || Number(validadeDias)>90} onClick={publicar}>Aprovar e publicar versão</Button>
+      </Modal>}
+      {linkPublico && <div className="mt-20 break-all bg-blue-50 p-3 text-sm print:hidden">Versão {versaoPublicada.versao} publicada. Link: <a href={linkPublico} target="_blank" rel="noreferrer">{linkPublico}</a></div>}
+      {plano.cotacao_publica && <div className="my-4 rounded-lg border bg-white p-4 text-sm">
+        <p className="font-semibold">Cotação de referência: {plano.cotacao_publica.seguradora} · {plano.cotacao_publica.produto}</p>
+        <p>Data: {plano.cotacao_publica.data} · validade: {plano.cotacao_publica.validade}</p>
+        <details><summary>Conferir condições da cotação</summary>{['coberturas','exclusoes','carencias','franquias','reajuste'].map(k => <p key={k}>{k}: {plano.cotacao_publica[k]}</p>)}</details>
+      </div>}
+      {publica && <div className="mt-20 bg-blue-50 p-4 text-sm print:hidden">
+        <p>Versão {dados.versao} · válida até {dados.validade ? new Date(dados.validade).toLocaleDateString('pt-BR') : 'consultar a consultora'}.</p>
+        <p className="my-2">Sua resposta orienta a próxima conversa; não contrata seguro nem confirma cobertura.</p>
+        {dados.decisao || respostaCliente ? <p role="status">Resposta registrada. Sua consultora acompanhará o próximo passo.</p> : <div className="flex flex-wrap gap-2">{[['quero_conversar','Quero conversar'],['revisar','Quero revisar o plano'],['seguir','Quero seguir com a análise']].map(([v,l]) => <Button key={v} variant="secondary" disabled={respondendo} onClick={() => responder(v)}>{l}</Button>)}</div>}
+        {erroPublicacao && <p role="alert" className="text-red-700">{erroPublicacao}</p>}
+      </div>}
       <div className={`fixed left-0 right-0 top-0 z-20 flex flex-wrap items-center justify-between gap-2 bg-slate-900/95 px-4 py-2.5 backdrop-blur print:hidden ${apresentando ? 'hidden' : ''}`}>
         {publica ? (
           <span className="text-sm text-slate-300">
@@ -667,13 +717,13 @@ export default function Proposta({ publica = false }) {
               <Presentation size={15} /> Apresentar
             </Button>
           )}
-          {!publica && linkPublico && (
+          {!publica && (
             <>
               <Button variant="secondary" onClick={copiarLink}
                 title="O cliente abre a proposta no celular, sem login — só quem tem o link acessa">
                 {copiado ? <><Check size={15} /> Link copiado!</> : <><Link2 size={15} /> Copiar link do cliente</>}
               </Button>
-              {whatsapp(cliente.telefone) && (
+              {linkPublico && whatsapp(cliente.telefone) && (
                 <a target="_blank" rel="noreferrer"
                   href={whatsapp(cliente.telefone,
                     `Olá ${primeiroNome}! Preparei o seu estudo de proteção personalizado. `

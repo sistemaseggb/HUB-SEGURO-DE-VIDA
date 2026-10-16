@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { TrendingUp, HeartHandshake, Sparkles } from 'lucide-react'
 import { supabase, MODO_DEMO } from '../lib/supabase'
@@ -73,10 +74,10 @@ export default function Login() {
 
           <form onSubmit={entrar} className="space-y-4">
             <Campo label="E-mail" obrigatorio>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus placeholder="voce@email.com" />
+              <Input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus placeholder="voce@email.com" />
             </Campo>
             <Campo label="Senha" obrigatorio>
-              <Input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} required placeholder="••••••••" />
+              <Input type="password" autoComplete="current-password" value={senha} onChange={(e) => setSenha(e.target.value)} required placeholder="••••••••" />
             </Campo>
             {erro && (
               <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 ring-1 ring-inset ring-red-100">{erro}</p>
@@ -85,6 +86,8 @@ export default function Login() {
               {carregando ? 'Entrando...' : 'Entrar'}
             </Button>
           </form>
+
+          <Link to="/recuperar-acesso" className="mt-4 block text-center text-sm font-medium text-blue-700 underline">Esqueci minha senha</Link>
 
           <p className="mt-6 text-center text-xs text-slate-400">
             Acesso restrito. Usuários são criados pelo administrador no painel do Supabase.

@@ -1,3 +1,5 @@
+import ErroCarga from '../components/ErroCarga'
+import { conferir, mensagemErro, paginasCompletas } from '../lib/operacoes'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, MessageCircle, Users, Trophy, Wallet, FileSignature } from 'lucide-react'
@@ -10,29 +12,34 @@ import { Card, StatTile, Spinner, Badge, EmptyState, Button } from '../component
 // apólices geradas e comissão a receber.
 export default function AssessorDetalhe() {
   const { id } = useParams()
+  const [erroCarga,setErroCarga]=useState(null)
   const [resumo, setResumo] = useState(null)
   const [clientes, setClientes] = useState([])
   const [comissoes, setComissoes] = useState([])
 
   const carregar = useCallback(async () => {
+    setErroCarga(null)
+    try {
     const [r, c] = await Promise.all([
-      supabase.from('vw_assessor_resumo').select('*').eq('id', id).single(),
+      supabase.from('vw_assessor_resumo').select('*').eq('id', id).maybeSingle(),
       supabase.from('clientes').select('id, nome, codigo, status_funil, telefone').eq('id_assessor', id).order('created_at', { ascending: false }),
     ])
     // assessor inexistente não pode virar carregando eterno
-    setResumo(r.data ?? (r.error ? 'nao-encontrado' : null))
+    conferir(r,c)
+    setResumo(r.data ?? 'nao-encontrado')
     setClientes(c.data ?? [])
     // extrato importado das seguradoras: pelo vínculo direto e pelo código
     const filtro = r.data?.codigo
       ? `id_assessor.eq.${id},codigo_assessor.eq.${r.data.codigo}`
       : `id_assessor.eq.${id}`
-    const { data: ext } = await supabase.from('comissoes_importadas')
-      .select('competencia, seguradora, cliente_nome, producao, valor').or(filtro)
-    setComissoes(ext ?? [])
+    const ext = await paginasCompletas((de,ate)=>supabase.from('comissoes_importadas').select('competencia, seguradora, cliente_nome, producao, valor').or(filtro).order('id').range(de,ate))
+    setComissoes(ext)
+    } catch(e) { setErroCarga(mensagemErro(e)) }
   }, [id])
 
   useEffect(() => { carregar() }, [carregar])
 
+  if (erroCarga) return <ErroCarga erro={erroCarga} tentar={carregar} />
   if (resumo === 'nao-encontrado') {
     return (
       <div>
